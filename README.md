@@ -1,5 +1,12 @@
 # 🏯 AI 3D 皇宫项目（Imperial Palace 3D）多 Agent 横向评测与交付档案
 
+[![CI Automated Test & Build](https://github.com/Casper015/AI_Test/actions/workflows/ci.yml/badge.svg)](https://github.com/Casper015/AI_Test/actions/workflows/ci.yml)
+[![Deploy Showcase to GitHub Pages](https://github.com/Casper015/AI_Test/actions/workflows/pages.yml/badge.svg)](https://github.com/Casper015/AI_Test/actions/workflows/pages.yml)
+[![Live Demo Portal](https://img.shields.io/badge/Live%20Demo-Online%20Showcase-gold?style=flat&logo=safari)](https://casper015.github.io/AI_Test/)
+
+> 🌐 **在线免安装体验大厅**：[https://casper015.github.io/AI_Test/](https://casper015.github.io/AI_Test/)  
+> 任意设备浏览器点开即玩，无需配置本地服务器，一键畅游 4 款 AI 独立生成的 3D 紫禁城！
+
 本项目记录了同一份高级复杂工程需求——**《紫禁天朝 · 东方皇家宫殿 3D 沉浸式交互项目》（`imperial-palace-plan.md`）**，在不同 AI Coding Agent（**OpenCode CLI**、**Command Code**、**DeepSeek Harness (DSH)**）环境下独立全自主执行的横向评测结果、执行对话记录与交付成果。
 
 所有版本均严格遵循：**Three.js r169 内置零 npm 依赖、全城程序化构建、无第三方 3D 模型、支持全景鸟瞰与第一人称御前漫步**。
@@ -8,12 +15,12 @@
 
 ## 一、 4 个版本横向评测总览表
 
-| 目录与 Git 仓库 | 所用 AI 工具 / 框架 | 驱动模型 | 消耗 Token 统计 | 交付建筑 / 院落规模 | 核心工程特色与交付评级 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **`imperial-palace-opencode-516k`** | **OpenCode CLI** (v1) | `deepseek-v4.1-flash` (via OpenCode Go) | **516,452** tokens | 68 栋建筑<br>18 处院落 | • 自动将计划扩展为多角度视角与第一人称规范<br>• 三层内核架构（core/kit/zones）标准模块化<br>• 单元测试体系完备 |
-| **`imperial-palace-opencode-424k`** | **OpenCode CLI** (v2) | `deepseek-v4.1-flash` (via OpenCode Go) | **424,497** tokens | **110 栋建筑**<br>24 处院落 | • **超高密度还原**：182段宫墙、54处台阶、9座桥、182株树<br>• Token 利用效率极高，完整实现了金銮殿与寝殿内景 |
-| **`imperial-palace-commandcode-36m`** | **Command Code** (v1.66.0) | `deepseek-v4.1-flash` (High Effort · Taste-1) | **35,900,000** tokens<br>(35.9M) | 74 栋建筑<br>18 处院落 | • **主-子 Agent 协同与根因修复**（耗时 36m 32s）<br>• 主动修复 4 大图形学底层 Bug（NaN屋面、变换丢失等）<br>• 重构 CDP 无头浏览器截图管线，版本规范升至 v1.0 |
-| **`imperial-palace-dsh-1.1b`** | **DeepSeek Harness** (DSH) | `deepseek-v4.1-flash` (Deep-Agent 架构) | **1,111,473,426** tokens<br>(1.11B) | 67 栋建筑<br>18 处院落 | • **超大规模纵深研发**：耗费 11 亿 Tokens<br>• 23 组严格的契约测试与真机环境探针<br>• 具有最严苛的工程交付回执与证据链 |
+| 目录与 Git 仓库 | 在线试玩 (GitHub Pages) | 所用 AI 工具 / 框架 | 驱动模型 | 消耗 Token 统计 | 交付建筑 / 院落规模 | 核心工程特色与交付评级 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`imperial-palace-opencode-516k`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/opencode-516k/) | **OpenCode CLI** (v1) | `deepseek-v4.1-flash` (via OpenCode Go) | **516,452** tokens | 68 栋建筑<br>18 处院落 | • 自动将计划扩展为多角度视角与第一人称规范<br>• 三层内核架构（core/kit/zones）标准模块化<br>• 单元测试体系完备 |
+| **`imperial-palace-opencode-424k`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/opencode-424k/) | **OpenCode CLI** (v2) | `deepseek-v4.1-flash` (via OpenCode Go) | **424,497** tokens | **110 栋建筑**<br>24 处院落 | • **超高密度还原**：182段宫墙、54处台阶、9座桥、182株树<br>• Token 利用效率极高，完整实现了金銮殿与寝殿内景 |
+| **`imperial-palace-commandcode-36m`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/commandcode-36m/) | **Command Code** (v1.66.0) | `deepseek-v4.1-flash` (High Effort · Taste-1) | **35,900,000** tokens<br>(35.9M) | 74 栋建筑<br>18 处院落 | • **主-子 Agent 协同与根因修复**（耗时 36m 32s）<br>• 主动修复 4 大图形学底层 Bug（NaN屋面、变换丢失等）<br>• 重构 CDP 无头浏览器截图管线，版本规范升至 v1.0 |
+| **`imperial-palace-dsh-1.1b`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/dsh-1.1b/) | **DeepSeek Harness** (DSH) | `deepseek-v4.1-flash` (Deep-Agent 架构) | **1,111,473,426** tokens<br>(1.11B) | 67 栋建筑<br>18 处院落 | • **超大规模纵深研发**：耗费 11 亿 Tokens<br>• 23 组严格的契约测试与真机环境探针<br>• 具有最严苛的工程交付回执与证据链 |
 
 ---
 
