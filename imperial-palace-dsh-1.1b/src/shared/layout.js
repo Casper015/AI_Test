@@ -1,0 +1,1352 @@
+/**
+ * 紫禁天朝 · 全城唯一布局注册表（single source of truth for the city）
+ * =============================================================================
+ * 对应计划：§2.2 布局示意、§2.3 坐标/区域边界/连接规则、§5 各区域要求、§6.1 建筑与碰撞注册、§6.4 视角登记。
+ *
+ * 纪律：
+ *   1. 建筑槽位（SLOTS）、院落（COURTYARDS）、跨区通道（CONNECTORS）、道路（ROADS）、
+ *      可行走面（WALKABLE）、障碍（OBSTACLES）、视角（VIEWPOINTS）只在本文件定义。
+ *      区域代码（t6/t7/t8/t10/t11）按 id 消费，不得自行扩张边界或新增建筑。
+ *   2. 全部坐标为世界坐标，单位米；Y 向上，X 向东，Z 向北；建筑默认正面朝南（-Z）。
+ *   3. 数值只从 config.js 取值（模数/材质/标高/预算），本文件不重复定义风格数值。
+ *   4. 本文件是纯 ESM，只 import './config.js'，可被 Node 直接 import（无 three、无 DOM）。
+ *   5. 全部导出深冻结。
+ */
+
+import {
+  LAYOUT_CONSTRAINTS,
+  MODULES,
+  GRADES,
+  ROOF_TYPES,
+  TERRAIN,
+  ORIENTATION,
+  SCENE_SEED,
+  deriveSeed,
+  deepFreeze,
+} from './config.js';
+
+export const LAYOUT_VERSION = '1.0.0';
+
+/* =============================================================================
+ * 一、包络、区域边界与外墙（§2.3）
+ * ========================================================================== */
+
+/** 宫墙内表面 = 计划 §2.3 初始设计包络：X∈[-300,300]、Z∈[-450,450]。 */
+export const ENVELOPE = Object.freeze({ ...LAYOUT_CONSTRAINTS.envelope });
+
+/** 中央区 X∈[-100,100]。 */
+export const CENTRAL_X = Object.freeze({ ...LAYOUT_CONSTRAINTS.central });
+/** 前朝 Z∈[-400,80]。 */
+export const FORECOURT_Z = Object.freeze({ ...LAYOUT_CONSTRAINTS.forecourtZ });
+/** 后宫 Z∈[80,300]。 */
+export const INNER_PALACE_Z = Object.freeze({ ...LAYOUT_CONSTRAINTS.innerPalaceZ });
+/** 花园 Z∈[300,420]。 */
+export const GARDEN_Z = Object.freeze({ ...LAYOUT_CONSTRAINTS.gardenZ });
+
+/**
+ * 仅 F（边界区）的城墙附着构件允许向包络外突出：墙厚 8m + 角楼半径 10m = 18m。
+ * 这是 §2.3 "护城河、桥梁和外侧地形在包络外留出空间" 的落地方式；
+ * 其余区域（B/C/D/E）的槽位必须严格落在包络内。
+ */
+export const WALL_OUTER_OVERHANG = LAYOUT_CONSTRAINTS.wallOuterOverhang;
+
+/** F 区实际覆盖范围 = 包络 ± 18m。 */
+export const OUTER_BOUNDS = Object.freeze({
+  minX: ENVELOPE.minX - WALL_OUTER_OVERHANG,
+  maxX: ENVELOPE.maxX + WALL_OUTER_OVERHANG,
+  minZ: ENVELOPE.minZ - WALL_OUTER_OVERHANG,
+  maxZ: ENVELOPE.maxZ + WALL_OUTER_OVERHANG,
+});
+
+/** 外墙外侧地形范围（护城河之外）。 */
+export const TERRAIN_EXTENT = Object.freeze({ minX: -420, maxX: 420, minZ: -560, maxZ: 560 });
+
+/** 宫墙：内表面贴包络，墙体向外；四段墙 + 四角角楼 + 四面外城门。 */
+export const CITY_WALL = Object.freeze({
+  id: 'WALL-CITY',
+  owner: 'F',
+  thickness: MODULES.wallThickness,
+  height: MODULES.wallHeight,
+  battlementHeight: MODULES.wallBattlementHeight,
+  innerFace: ENVELOPE,
+  centerline: Object.freeze({ x: ENVELOPE.maxX + MODULES.wallThickness / 2, z: ENVELOPE.maxZ + MODULES.wallThickness / 2 }),
+  outerFace: Object.freeze({ x: ENVELOPE.maxX + MODULES.wallThickness, z: ENVELOPE.maxZ + MODULES.wallThickness }),
+  closed: true,
+  cornerTowerSlots: Object.freeze([
+    'F-tower-corner-nw',
+    'F-tower-corner-ne',
+    'F-tower-corner-sw',
+    'F-tower-corner-se',
+  ]),
+  cityGateSlots: Object.freeze(['F-gate-south', 'F-gate-north', 'F-gate-west', 'F-gate-east']),
+});
+
+/** 护城河：四段矩形拼成闭合环，常水位取 config.TERRAIN.moatWaterY。 */
+export const MOAT = Object.freeze({
+  id: 'MOAT-CITY',
+  owner: 'F',
+  width: MODULES.moatWidth,
+  waterY: TERRAIN.moatWaterY,
+  depth: MODULES.moatDepth,
+  rects: Object.freeze([
+    Object.freeze({ id: 'MOAT-south', bounds: Object.freeze({ minX: -332, maxX: 332, minZ: -506, maxZ: -472 }) }),
+    Object.freeze({ id: 'MOAT-north', bounds: Object.freeze({ minX: -332, maxX: 332, minZ: 472, maxZ: 506 }) }),
+    Object.freeze({ id: 'MOAT-west', bounds: Object.freeze({ minX: -366, maxX: -332, minZ: -506, maxZ: 506 }) }),
+    Object.freeze({ id: 'MOAT-east', bounds: Object.freeze({ minX: 332, maxX: 366, minZ: -506, maxZ: 506 }) }),
+  ]),
+});
+
+/** 四座入城桥（南为主入口桥，§5.5 入口桥）。 */
+export const BRIDGES = Object.freeze([
+  Object.freeze({
+    id: 'BRIDGE-south',
+    owner: 'F',
+    connectorId: 'CXN-bridge-south',
+    deckY: TERRAIN.bridgeDeckY,
+    width: MODULES.bridgeDeckWidth,
+    bounds: Object.freeze({ minX: -8, maxX: 8, minZ: -506, maxZ: -472 }),
+  }),
+  Object.freeze({
+    id: 'BRIDGE-north',
+    owner: 'F',
+    connectorId: 'CXN-bridge-north',
+    deckY: TERRAIN.bridgeDeckY,
+    width: MODULES.bridgeDeckWidth,
+    bounds: Object.freeze({ minX: -8, maxX: 8, minZ: 472, maxZ: 506 }),
+  }),
+  Object.freeze({
+    id: 'BRIDGE-west',
+    owner: 'F',
+    connectorId: 'CXN-bridge-west',
+    deckY: TERRAIN.bridgeDeckY,
+    width: 12,
+    bounds: Object.freeze({ minX: -366, maxX: -332, minZ: -6, maxZ: 6 }),
+  }),
+  Object.freeze({
+    id: 'BRIDGE-east',
+    owner: 'F',
+    connectorId: 'CXN-bridge-east',
+    deckY: TERRAIN.bridgeDeckY,
+    width: 12,
+    bounds: Object.freeze({ minX: 332, maxX: 366, minZ: -6, maxZ: 6 }),
+  }),
+]);
+
+/* =============================================================================
+ * 二、ZONES 与 tiles（不重叠地铺满包络，墙环在包络之外）
+ * ========================================================================== */
+
+const b = (minX, maxX, minZ, maxZ) => ({ minX, maxX, minZ, maxZ });
+
+/**
+ * 区域与子区。`bounds` = 该区域拥有的矩形范围（用于机器校验槽位归属）；
+ * `tiles` = 实际建造/归属的子矩形（B/C/D/E 与 F 的 belt/garden/wall 条带不重叠铺满包络，墙环在包络外）。
+ * `groundY` = 该区域主地坪标高（各区自带标高，不统一抬高，§2.3）。
+ */
+export const ZONES = deepFreeze([
+  {
+    id: 'B',
+    name: '中轴前朝',
+    area: 'forecourt',
+    owner: 't6 zone-forecourt',
+    file: 'src/zones/forecourt.js',
+    bounds: b(CENTRAL_X.minX, CENTRAL_X.maxX, FORECOURT_Z.minZ, FORECOURT_Z.maxZ),
+    groundY: TERRAIN.terraceGroundY,
+    drawCallBudget: 70,
+    boundaryZone: false,
+    tiles: [{ id: 'T-B', bounds: b(-100, 100, -400, 80), groundY: TERRAIN.terraceGroundY }],
+    axisOrder: 1,
+  },
+  {
+    id: 'C',
+    name: '后宫',
+    area: 'innerPalace',
+    owner: 't7 zone-inner',
+    file: 'src/zones/inner-palace.js',
+    bounds: b(CENTRAL_X.minX, CENTRAL_X.maxX, INNER_PALACE_Z.minZ, INNER_PALACE_Z.maxZ),
+    groundY: TERRAIN.innerPalaceY,
+    drawCallBudget: 50,
+    boundaryZone: false,
+    tiles: [{ id: 'T-C', bounds: b(-100, 100, 80, 300), groundY: TERRAIN.innerPalaceY }],
+    axisOrder: 2,
+  },
+  {
+    id: 'D',
+    name: '西侧宫苑',
+    area: 'west',
+    owner: 't10 zone-forecourt',
+    file: 'src/zones/west-courts.js',
+    bounds: b(ENVELOPE.minX, CENTRAL_X.minX, FORECOURT_Z.minZ, INNER_PALACE_Z.maxZ),
+    groundY: TERRAIN.sideCourtY,
+    drawCallBudget: 40,
+    boundaryZone: false,
+    tiles: [{ id: 'T-D', bounds: b(-300, -100, -400, 300), groundY: TERRAIN.sideCourtY }],
+    axisOrder: 0,
+  },
+  {
+    id: 'E',
+    name: '东侧宫苑',
+    area: 'east',
+    owner: 't11 zone-inner',
+    file: 'src/zones/east-courts.js',
+    bounds: b(CENTRAL_X.maxX, ENVELOPE.maxX, FORECOURT_Z.minZ, INNER_PALACE_Z.maxZ),
+    groundY: TERRAIN.sideCourtY,
+    drawCallBudget: 40,
+    boundaryZone: false,
+    tiles: [{ id: 'T-E', bounds: b(100, 300, -400, 300), groundY: TERRAIN.sideCourtY }],
+    axisOrder: 0,
+  },
+  {
+    id: 'F',
+    name: '御花园、宫墙与边界',
+    area: 'gardenBoundary',
+    owner: 't8 zone-garden',
+    file: 'src/zones/garden-boundary.js',
+    bounds: b(OUTER_BOUNDS.minX, OUTER_BOUNDS.maxX, OUTER_BOUNDS.minZ, OUTER_BOUNDS.maxZ),
+    innerFace: ENVELOPE,
+    groundY: TERRAIN.cityGroundY,
+    drawCallBudget: 80,
+    boundaryZone: true,
+    tiles: [
+      { id: 'T-F-south-belt', bounds: b(-300, 300, -450, -400), groundY: TERRAIN.beltY },
+      { id: 'T-F-garden', bounds: b(-300, 300, 300, 420), groundY: TERRAIN.gardenPathsY },
+      { id: 'T-F-north-belt', bounds: b(-300, 300, 420, 450), groundY: TERRAIN.beltY },
+      { id: 'T-F-wall-west', bounds: b(-318, -300, -468, 468), groundY: TERRAIN.cityGroundY },
+      { id: 'T-F-wall-east', bounds: b(300, 318, -468, 468), groundY: TERRAIN.cityGroundY },
+      { id: 'T-F-wall-south', bounds: b(-300, 300, -468, -450), groundY: TERRAIN.cityGroundY },
+      { id: 'T-F-wall-north', bounds: b(-300, 300, 450, 468), groundY: TERRAIN.cityGroundY },
+      { id: 'T-F-outer-terrain', bounds: b(-420, 420, -560, 560), groundY: TERRAIN.outerTerrainY },
+    ],
+    axisOrder: 3,
+  },
+]);
+
+/** 由 tiles 求区域 / 地坪标高（F 的 tiles 覆盖墙环与外侧地形）。 */
+export function tileAt(x, z) {
+  for (const zone of ZONES) {
+    for (const tile of zone.tiles) {
+      const t = tile.bounds;
+      if (x >= t.minX && x <= t.maxX && z >= t.minZ && z <= t.maxZ) return { zone: zone.id, tile: tile.id, groundY: tile.groundY };
+    }
+  }
+  return null;
+}
+
+export function zoneAt(x, z) {
+  const hit = tileAt(x, z);
+  return hit ? hit.zone : null;
+}
+
+export function groundYAt(x, z) {
+  const hit = tileAt(x, z);
+  return hit ? hit.groundY : null;
+}
+
+/** 判断点是否在宫墙内（§2.3 包络）。 */
+export function insideEnvelope(x, z) {
+  return x >= ENVELOPE.minX && x <= ENVELOPE.maxX && z >= ENVELOPE.minZ && z <= ENVELOPE.maxZ;
+}
+
+/* =============================================================================
+ * 三、SLOTS：可独立识别的有顶建筑槽位（≥54；B/C/D/E 各 ≥8，F ≥10）
+ * ========================================================================== */
+
+const DIR_VEC = ORIENTATION.facingVectors;
+
+/** 面阔（正立面宽度）：朝南/朝北时取 w，朝东/朝西时取 d。 */
+function facadeWidth(slot) {
+  return slot.facing === 'south' || slot.facing === 'north' ? slot.w : slot.d;
+}
+
+/** 门洞净宽：面阔 × gateOpeningRatio，取偶数值并夹在 [8, 26]m。 */
+function passageWidth(slot) {
+  const raw = facadeWidth(slot) * MODULES.gateOpeningRatio;
+  const even = Math.round(raw / 2) * 2;
+  return Math.max(8, Math.min(26, even));
+}
+
+const DEFAULT_USAGE = Object.freeze({
+  hall: '殿堂',
+  gateHall: '宫门与门洞通道',
+  sideHall: '配殿 / 厢房',
+  pavilion: '亭阁',
+  cornerTower: '角楼',
+  courtyardGate: '院门',
+});
+
+const PASSABLE_KINDS = Object.freeze(['gateHall', 'courtyardGate']);
+
+/**
+ * 构造一个建筑槽位（全部字段一次说清，下游按此注册）。
+ * opts: bays / terraceH / roofType / grade / facing / visitable / usage / onWall
+ */
+function S(id, name, kind, zone, x, z, w, d, opts = {}) {
+  const facing = opts.facing ?? 'south';
+  const grade = opts.grade ?? 2;
+  const g = GRADES[grade];
+  const roofType = opts.roofType ?? 'gableHip';
+  const roof = ROOF_TYPES[roofType];
+  const terraceH = opts.terraceH ?? MODULES.plinthHeightMin;
+  const onWall = opts.onWall === true;
+  const visitable = opts.visitable === true;
+  const spanDepth = facing === 'south' || facing === 'north' ? d : w;
+  const bodyBaseY = (onWall ? CITY_WALL.height : 0) + terraceH;
+  const eave = +(bodyBaseY + MODULES.eaveHeight * g.eaveHeightFactor).toFixed(2);
+  const roofRise = +(spanDepth * roof.riseRatio * 0.5).toFixed(2);
+  const doubleEaveLift = roof.doubleEave ? +(MODULES.eaveHeight * 0.35).toFixed(2) : 0;
+  const totalHeight = +(eave + roofRise + doubleEaveLift).toFixed(2);
+  const vec = DIR_VEC[facing];
+  const hasDoor = PASSABLE_KINDS.includes(kind) || visitable;
+  const doorWidth = hasDoor ? passageWidth({ facing, w, d }) : 0;
+  const entrance = {
+    x: +(x + (vec.x * w) / 2).toFixed(2),
+    z: +(z + (vec.z * d) / 2).toFixed(2),
+    y: +bodyBaseY.toFixed(2),
+  };
+  const baseY = +(onWall ? CITY_WALL.height + terraceH : terraceH).toFixed(2);
+  return {
+    id,
+    name,
+    kind,
+    category: kind,
+    zone,
+    x,
+    z,
+    w,
+    d,
+    bays: opts.bays ?? 3,
+    terraceH,
+    roofType,
+    grade,
+    facing,
+    rotationYDeg: ORIENTATION.rotationYDeg[facing],
+    visitable,
+    onWall,
+    baseY,
+    bodyBaseY: +bodyBaseY.toFixed(2),
+    eaveHeight: eave,
+    totalHeight,
+    hasDoor,
+    doorWidth,
+    door: hasDoor
+      ? { axis: facing === 'south' || facing === 'north' ? 'z' : 'x', center: { x, z }, width: doorWidth, height: Math.min(9, +(MODULES.eaveHeight * 0.7).toFixed(2)), sillY: +baseY.toFixed(2) }
+      : null,
+    bounds: b(+(x - w / 2).toFixed(2), +(x + w / 2).toFixed(2), +(z - d / 2).toFixed(2), +(z + d / 2).toFixed(2)),
+    entrance,
+    usage: opts.usage ?? DEFAULT_USAGE[kind],
+    info: `${name}：${opts.usage ?? DEFAULT_USAGE[kind]}；${visitable ? '可进入内景（已登记 interior 机位）' : '不可进入（已登记为障碍物）'}`,
+    courtyard: opts.courtyard ?? null,
+    lodHint: grade >= 3 ? 'near' : grade === 2 ? 'mid' : 'far',
+  };
+}
+
+export const SLOTS = deepFreeze([
+  /* ---------------- B 中轴前朝（12） ---------------- */
+  S('B-gate-front', '前朝门殿', 'gateHall', 'B', 0, -386, 72, 24, { bays: 5, terraceH: 0.45, roofType: 'hip', grade: 2, usage: '前朝门殿，中轴第一道宫门（门洞可通行）', courtyard: 'CY-B-plaza' }),
+  S('B-hall-main', '金銮殿', 'hall', 'B', 0, -116, 84, 48, { bays: 9, terraceH: MODULES.terraceTotalHeight, roofType: 'doubleEaveHip', grade: 3, visitable: true, usage: '大朝正殿，三层白石台基，内景可进入（金砖地面/宝座/屏风/藻井）', courtyard: 'CY-B-throne' }),
+  S('B-hall-mid', '中殿', 'hall', 'B', 0, -20, 52, 28, { bays: 7, terraceH: 2.0, roofType: 'hip', grade: 2, usage: '前朝中殿（方形过渡殿）', courtyard: 'CY-B-rear' }),
+  S('B-hall-rear', '后殿', 'hall', 'B', 0, 44, 60, 30, { bays: 7, terraceH: 1.8, roofType: 'hip', grade: 2, usage: '前朝后殿，内廷门前最后一进', courtyard: 'CY-B-rear' }),
+  S('B-side-west-south', '广场西配殿', 'sideHall', 'B', -76, -300, 22, 54, { bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 1, facing: 'east', usage: '礼仪广场西侧围合配殿', courtyard: 'CY-B-plaza' }),
+  S('B-side-east-south', '广场东配殿', 'sideHall', 'B', 76, -300, 22, 54, { bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 1, facing: 'west', usage: '礼仪广场东侧围合配殿', courtyard: 'CY-B-plaza' }),
+  S('B-side-west-main', '主殿西配殿', 'sideHall', 'B', -80, -116, 16, 60, { bays: 4, terraceH: 1.5, roofType: 'gableHip', grade: 2, facing: 'east', usage: '主殿院西配殿', courtyard: 'CY-B-throne' }),
+  S('B-side-east-main', '主殿东配殿', 'sideHall', 'B', 80, -116, 16, 60, { bays: 4, terraceH: 1.5, roofType: 'gableHip', grade: 2, facing: 'west', usage: '主殿院东配殿', courtyard: 'CY-B-throne' }),
+  S('B-pavilion-gate-west', '门殿西翼亭', 'pavilion', 'B', -58, -386, 16, 16, { bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 1, usage: '门殿两侧翼亭', courtyard: 'CY-B-plaza' }),
+  S('B-pavilion-gate-east', '门殿东翼亭', 'pavilion', 'B', 58, -386, 16, 16, { bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 1, usage: '门殿两侧翼亭', courtyard: 'CY-B-plaza' }),
+  S('B-side-west-rear', '后殿西庑殿', 'sideHall', 'B', -70, 44, 20, 36, { bays: 3, terraceH: 1.0, roofType: 'gableHip', grade: 1, facing: 'east', usage: '后殿西侧围合庑殿', courtyard: 'CY-B-rear' }),
+  S('B-side-east-rear', '后殿东庑殿', 'sideHall', 'B', 70, 44, 20, 36, { bays: 3, terraceH: 1.0, roofType: 'gableHip', grade: 1, facing: 'west', usage: '后殿东侧围合庑殿', courtyard: 'CY-B-rear' }),
+
+  /* ---------------- C 后宫（12） ---------------- */
+  S('C-gate-inner', '内廷门', 'gateHall', 'C', 0, 94, 56, 24, { bays: 3, terraceH: TERRAIN.innerGateTerraceY, roofType: 'hip', grade: 2, usage: '内廷门，前朝与后宫分界（门洞可通行）', courtyard: 'CY-C-front' }),
+  S('C-hall-bed-main', '寝殿正殿', 'hall', 'C', 0, 168, 64, 38, { bays: 7, terraceH: 1.5, roofType: 'doubleEaveHip', grade: 3, visitable: true, usage: '后宫寝殿正殿，内景可进入（床榻/屏风/金砖地面）', courtyard: 'CY-C-main' }),
+  S('C-hall-bed-rear', '后寝殿', 'hall', 'C', 0, 258, 52, 30, { bays: 5, terraceH: 1.2, roofType: 'hip', grade: 2, usage: '后寝殿（后宫最北一进）', courtyard: 'CY-C-rear' }),
+  S('C-side-west-main', '寝殿西配殿', 'sideHall', 'C', -66, 168, 20, 48, { bays: 5, terraceH: 0.8, roofType: 'gableHip', grade: 2, facing: 'east', usage: '寝殿院西配殿', courtyard: 'CY-C-main' }),
+  S('C-side-east-main', '寝殿东配殿', 'sideHall', 'C', 66, 168, 20, 48, { bays: 5, terraceH: 0.8, roofType: 'gableHip', grade: 2, facing: 'west', usage: '寝殿院东配殿', courtyard: 'CY-C-main' }),
+  S('C-side-west-rear', '西配房', 'sideHall', 'C', -64, 250, 20, 44, { bays: 3, terraceH: 0.6, roofType: 'gableHip', grade: 1, facing: 'east', usage: '后寝院西配房', courtyard: 'CY-C-rear' }),
+  S('C-side-east-rear', '东配房', 'sideHall', 'C', 64, 250, 20, 44, { bays: 3, terraceH: 0.6, roofType: 'gableHip', grade: 1, facing: 'west', usage: '后寝院东配房', courtyard: 'CY-C-rear' }),
+  S('C-gate-west', '内廷门西侧门', 'courtyardGate', 'C', -90, 124, 12, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'west', usage: '通西宫苑的侧门（通道口）', courtyard: 'CY-C-front' }),
+  S('C-gate-east', '内廷门东侧门', 'courtyardGate', 'C', 90, 124, 12, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '通东宫苑的侧门（通道口）', courtyard: 'CY-C-front' }),
+  S('C-annex-west', '西后院值房', 'sideHall', 'C', -70, 288, 18, 20, { bays: 3, terraceH: 0.5, roofType: 'gable', grade: 1, facing: 'east', usage: '后寝院西值房', courtyard: 'CY-C-rear' }),
+  S('C-annex-east', '东后院值房', 'sideHall', 'C', 70, 288, 18, 20, { bays: 3, terraceH: 0.5, roofType: 'gable', grade: 1, facing: 'west', usage: '后寝院东值房', courtyard: 'CY-C-rear' }),
+  S('C-pavilion-rear', '后庭院亭', 'pavilion', 'C', 0, 288, 16, 16, { bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 1, usage: '后庭院中心亭', courtyard: 'CY-C-rear' }),
+
+  /* ---------------- D 西侧宫苑（14） ---------------- */
+  S('D-court1-hall', '礼乐殿', 'hall', 'D', -262, -318, 24, 56, { bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'east', usage: '礼乐院正堂', courtyard: 'CY-D-court1' }),
+  S('D-court1-house', '礼乐院南配房', 'sideHall', 'D', -176, -358, 40, 18, { bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '礼乐院配房', courtyard: 'CY-D-court1' }),
+  S('D-court1-gate', '礼乐院门', 'courtyardGate', 'D', -118, -318, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '礼乐院院门（通道口）', courtyard: 'CY-D-court1' }),
+  S('D-court2-hall', '书院正堂', 'hall', 'D', -262, -158, 24, 56, { bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'east', usage: '书院院正堂', courtyard: 'CY-D-court2' }),
+  S('D-court2-house', '书院南厢', 'sideHall', 'D', -176, -198, 40, 18, { bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '书院院厢房', courtyard: 'CY-D-court2' }),
+  S('D-court2-gate', '书院院门', 'courtyardGate', 'D', -118, -158, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '书院院院门（通道口）', courtyard: 'CY-D-court2' }),
+  S('D-court3-hall', '服务院主屋', 'hall', 'D', -262, 2, 24, 56, { bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'east', usage: '服务院主屋', courtyard: 'CY-D-court3' }),
+  S('D-court3-house', '服务院南房', 'sideHall', 'D', -176, -38, 40, 18, { bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '服务院配房', courtyard: 'CY-D-court3' }),
+  S('D-court3-gate', '服务院院门', 'courtyardGate', 'D', -118, 2, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '服务院院门（通道口）', courtyard: 'CY-D-court3' }),
+  S('D-court3-pavilion', '水池亭', 'pavilion', 'D', -150, 58, 14, 14, { bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '服务院水池上的亭子', courtyard: 'CY-D-court3' }),
+  S('D-court4-hall', '西后殿', 'hall', 'D', -262, 188, 24, 56, { bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'east', usage: '西后院正堂', courtyard: 'CY-D-court4' }),
+  S('D-court4-house', '西后南配房', 'sideHall', 'D', -176, 148, 40, 18, { bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '西后院配房', courtyard: 'CY-D-court4' }),
+  S('D-court4-gate', '西后院院门', 'courtyardGate', 'D', -118, 188, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '西后院院门（通道口）', courtyard: 'CY-D-court4' }),
+  S('D-court4-pavilion', '西后小亭', 'pavilion', 'D', -150, 258, 14, 14, { bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '西后院角亭', courtyard: 'CY-D-court4' }),
+
+  /* ---------------- E 东侧宫苑（15） ---------------- */
+  S('E-court1-hall', '文华殿', 'hall', 'E', 258, -320, 28, 60, { bays: 7, terraceH: 1.0, roofType: 'gableHip', grade: 2, facing: 'west', usage: '文华院正殿', courtyard: 'CY-E-court1' }),
+  S('E-court1-house', '文华院南厢', 'sideHall', 'E', 196, -364, 18, 44, { bays: 3, terraceH: 0.5, roofType: 'gable', grade: 1, facing: 'west', usage: '文华院厢房', courtyard: 'CY-E-court1' }),
+  S('E-court1-gate', '文华院门', 'courtyardGate', 'E', 118, -320, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'west', usage: '文华院院门（通道口）', courtyard: 'CY-E-court1' }),
+  S('E-court2-hall', '陈设正堂', 'hall', 'E', 262, -150, 26, 64, { bays: 7, terraceH: 1.0, roofType: 'gableHip', grade: 2, facing: 'west', usage: '陈设院正堂', courtyard: 'CY-E-court2' }),
+  S('E-court2-house', '陈设北房', 'sideHall', 'E', 180, -96, 44, 18, { bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '陈设院北房', courtyard: 'CY-E-court2' }),
+  S('E-court2-gate', '陈设院门', 'courtyardGate', 'E', 118, -150, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'west', usage: '陈设院院门（通道口）', courtyard: 'CY-E-court2' }),
+  S('E-court3-hall', '生活主屋', 'hall', 'E', 256, 20, 24, 58, { bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'west', usage: '生活院主屋', courtyard: 'CY-E-court3' }),
+  S('E-court3-house', '生活南房', 'sideHall', 'E', 176, -24, 40, 18, { bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '生活院南房', courtyard: 'CY-E-court3' }),
+  S('E-court3-gate', '生活院门', 'courtyardGate', 'E', 118, 20, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'west', usage: '生活院院门（通道口）', courtyard: 'CY-E-court3' }),
+  S('E-court3-annex', '生活院东耳房', 'sideHall', 'E', 280, 20, 16, 40, { bays: 3, terraceH: 0.5, roofType: 'gable', grade: 1, facing: 'west', usage: '生活院东侧耳房', courtyard: 'CY-E-court3' }),
+  S('E-court3-pavilion', '生活院水榭', 'pavilion', 'E', 150, 42, 14, 14, { bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '生活院水池水榭', courtyard: 'CY-E-court3' }),
+  S('E-court4-hall', '东后殿', 'hall', 'E', 260, 200, 26, 56, { bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'west', usage: '东后院正堂', courtyard: 'CY-E-court4' }),
+  S('E-court4-house', '东后南厢', 'sideHall', 'E', 180, 150, 44, 18, { bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '东后院厢房', courtyard: 'CY-E-court4' }),
+  S('E-court4-gate', '东后院院门', 'courtyardGate', 'E', 118, 200, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'west', usage: '东后院院门（通道口）', courtyard: 'CY-E-court4' }),
+  S('E-court4-pavilion', '东后小亭', 'pavilion', 'E', 150, 275, 14, 14, { bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '东后院角亭', courtyard: 'CY-E-court4' }),
+
+  /* ---------------- F 御花园与边界（14） ---------------- */
+  S('F-tower-corner-nw', '西北角楼', 'cornerTower', 'F', -304, 454, 26, 26, { bays: 2, terraceH: 0, roofType: 'gableHip', grade: 2, facing: 'north', onWall: true, usage: '宫城西北角楼（三层重檐）' }),
+  S('F-tower-corner-ne', '东北角楼', 'cornerTower', 'F', 304, 454, 26, 26, { bays: 2, terraceH: 0, roofType: 'gableHip', grade: 2, facing: 'north', onWall: true, usage: '宫城东北角楼' }),
+  S('F-tower-corner-sw', '西南角楼', 'cornerTower', 'F', -304, -454, 26, 26, { bays: 2, terraceH: 0, roofType: 'gableHip', grade: 2, facing: 'south', onWall: true, usage: '宫城西南角楼' }),
+  S('F-tower-corner-se', '东南角楼', 'cornerTower', 'F', 304, -454, 26, 26, { bays: 2, terraceH: 0, roofType: 'gableHip', grade: 2, facing: 'south', onWall: true, usage: '宫城东南角楼' }),
+  S('F-gate-south', '南城门', 'gateHall', 'F', 0, -454, 76, 26, { bays: 5, terraceH: 0.4, roofType: 'doubleEaveHip', grade: 3, facing: 'south', onWall: true, usage: '宫城正南门（城楼 + 门洞），内接前朝，外接南桥' }),
+  S('F-gate-north', '北城门', 'gateHall', 'F', 0, 454, 76, 26, { bays: 5, terraceH: 0.4, roofType: 'doubleEaveHip', grade: 3, facing: 'north', onWall: true, usage: '宫城正北门（城楼 + 门洞），外接北桥' }),
+  S('F-gate-west', '西侧城门', 'gateHall', 'F', -304, 0, 26, 64, { bays: 3, terraceH: 0.4, roofType: 'gableHip', grade: 2, facing: 'west', onWall: true, usage: '宫城西侧门（城楼 + 门洞），通西侧宫苑' }),
+  S('F-gate-east', '东侧城门', 'gateHall', 'F', 304, 0, 26, 64, { bays: 3, terraceH: 0.4, roofType: 'gableHip', grade: 2, facing: 'east', onWall: true, usage: '宫城东侧门（城楼 + 门洞），通东侧宫苑' }),
+  S('F-garden-pavilion-main', '御花园·中央亭阁', 'pavilion', 'F', 0, 360, 28, 28, { bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 2, usage: '御花园中心亭阁（重檐攒尖）' }),
+  S('F-garden-hall-north', '御花园·北殿', 'hall', 'F', 0, 404, 44, 22, { bays: 5, terraceH: 0.8, roofType: 'hip', grade: 2, usage: '御花园北端殿堂' }),
+  S('F-garden-pavilion-west', '御花园·西亭', 'pavilion', 'F', -140, 355, 18, 18, { bays: 3, terraceH: 0.4, roofType: 'pyramidal', grade: 1, usage: '御花园西水池畔亭' }),
+  S('F-garden-pavilion-east', '御花园·东亭', 'pavilion', 'F', 140, 355, 18, 18, { bays: 3, terraceH: 0.4, roofType: 'pyramidal', grade: 1, usage: '御花园东水池畔亭' }),
+  S('F-garden-hall-west', '御花园·西配殿', 'sideHall', 'F', -235, 404, 26, 22, { bays: 3, terraceH: 0.5, roofType: 'gableHip', grade: 1, facing: 'south', usage: '御花园西侧配殿' }),
+  S('F-garden-hall-east', '御花园·东配殿', 'sideHall', 'F', 235, 404, 26, 22, { bays: 3, terraceH: 0.5, roofType: 'gableHip', grade: 1, facing: 'south', usage: '御花园东侧配殿' }),
+]);
+
+/** 建筑索引与统计。 */
+export const SLOT_BY_ID = deepFreeze(
+  SLOTS.reduce((acc, s) => {
+    acc[s.id] = s;
+    return acc;
+  }, {}),
+);
+
+export function getSlot(id) {
+  return SLOT_BY_ID[id] ?? null;
+}
+
+export function slotsByZone(zone) {
+  return SLOTS.filter((s) => s.zone === zone);
+}
+
+/* =============================================================================
+ * 四、COURTYARDS：有墙/门/廊道界定的院落（≥13；前朝≥3、后宫≥3、西≥4、东≥4）
+ * ========================================================================== */
+
+function CY(id, zone, area, name, minX, maxX, minZ, maxZ, gates, corridorIds, description) {
+  return {
+    id,
+    zone,
+    area,
+    name,
+    bounds: b(minX, maxX, minZ, maxZ),
+    gates,
+    corridors: corridorIds,
+    wallIds: [`${id}-wall-south`, `${id}-wall-north`, `${id}-wall-west`, `${id}-wall-east`],
+    description,
+  };
+}
+
+export const COURTYARDS = deepFreeze([
+  CY('CY-B-plaza', 'B', 'forecourt', '礼仪广场院', -96, 96, -400, -180, ['B-gate-front'], ['CR-B-plaza-west', 'CR-B-plaza-east'], '由门殿与东西配殿、两侧廊庑围合的大广场'),
+  CY('CY-B-throne', 'B', 'forecourt', '主殿院', -96, 96, -180, -40, [], ['CR-B-throne-west', 'CR-B-throne-east'], '主殿三层台基所在院落，东西配殿围合'),
+  CY('CY-B-rear', 'B', 'forecourt', '后殿院', -96, 96, -40, 80, [], ['CR-B-rear-west', 'CR-B-rear-east'], '中殿与后殿所在院落，北接内廷门'),
+  CY('CY-C-front', 'C', 'innerPalace', '内廷一进院', -96, 96, 80, 142, ['C-gate-inner', 'C-gate-west', 'C-gate-east'], ['CR-C-front-west', 'CR-C-front-east'], '内廷门内第一进院落，东西侧门通侧院'),
+  CY('CY-C-main', 'C', 'innerPalace', '寝殿院', -96, 96, 142, 216, [], ['CR-C-main-west', 'CR-C-main-east'], '寝殿正殿与东西配殿围合的主院'),
+  CY('CY-C-rear', 'C', 'innerPalace', '后寝院', -96, 96, 216, 300, [], ['CR-C-rear-west', 'CR-C-rear-east'], '后寝殿与东西配房围合，北接御花园'),
+  CY('CY-D-court1', 'D', 'west', '礼乐院', -290, -112, -392, -244, ['D-court1-gate'], ['CR-D-court1-south'], '西侧第一组院落：礼乐主题（正堂朝东）'),
+  CY('CY-D-court2', 'D', 'west', '书院院', -290, -112, -232, -84, ['D-court2-gate'], ['CR-D-court2-south'], '西侧第二组院落：书院主题'),
+  CY('CY-D-court3', 'D', 'west', '服务院', -290, -112, -72, 76, ['D-court3-gate'], ['CR-D-court3-south'], '西侧第三组院落：服务主题，含水池与亭'),
+  CY('CY-D-court4', 'D', 'west', '西后院', -290, -112, 88, 290, ['D-court4-gate'], ['CR-D-court4-south'], '西侧第四组院落：西主题后院'),
+  CY('CY-E-court1', 'E', 'east', '文华院', 112, 290, -392, -236, ['E-court1-gate'], ['CR-E-court1-south'], '东侧第一组院落：文华主题'),
+  CY('CY-E-court2', 'E', 'east', '陈设院', 112, 290, -224, -60, ['E-court2-gate'], ['CR-E-court2-south'], '东侧第二组院落：陈设主题'),
+  CY('CY-E-court3', 'E', 'east', '生活院', 112, 290, -48, 110, ['E-court3-gate'], ['CR-E-court3-south'], '东侧第三组院落：生活主题，含水池与水榭'),
+  CY('CY-E-court4', 'E', 'east', '东后院', 112, 290, 122, 290, ['E-court4-gate'], ['CR-E-court4-south'], '东侧第四组院落：东主题后院'),
+]);
+
+export const COURTYARD_BY_ID = deepFreeze(
+  COURTYARDS.reduce((acc, c) => {
+    acc[c.id] = c;
+    return acc;
+  }, {}),
+);
+
+export function courtyardsByArea(area) {
+  return COURTYARDS.filter((c) => c.area === area);
+}
+
+/* =============================================================================
+ * 五、CONNECTORS：跨区通道（唯一连接 ID + 唯一 owner + 两端共享 position/width/elevation）
+ * ========================================================================== */
+
+const ZONE_IDS = ZONES.map((z) => z.id);
+
+/**
+ * 构造跨区通道。
+ * kind: 'gate'（门洞）| 'passage'（门前/边界通道）| 'bridge'（桥）| 'stairs'（台阶，允许 elevationLow ≠ elevation）
+ * elevation = 通道面标高（台阶记上端标高）；elevationLow 仅 kind='stairs' 合法。
+ * gate 给了槽位 id 时，width 由该门洞净宽自动取值，保证与建筑注册一致。
+ */
+function CX(id, name, kind, owner, borders, x, z, widthOrGate, elevation, opts = {}) {
+  const gateSlot = opts.gate ? getSlot(opts.gate) : null;
+  const width = gateSlot ? gateSlot.doorWidth : widthOrGate;
+  for (const zid of borders) {
+    if (!ZONE_IDS.includes(zid) && zid !== 'outside') {
+      throw new Error(`connector ${id}: unknown border zone "${zid}"`);
+    }
+  }
+  if (!borders.includes(owner)) {
+    throw new Error(`connector ${id}: owner "${owner}" is not one of its borders`);
+  }
+  return {
+    id,
+    name,
+    kind,
+    owner,
+    borders,
+    position: { x, z },
+    width,
+    elevation,
+    elevationLow: kind === 'stairs' ? (opts.elevationLow ?? 0) : null,
+    walkable: true,
+    gate: opts.gate ?? null,
+    note: opts.note ?? '',
+  };
+}
+
+export const CONNECTORS = deepFreeze([
+  CX('CXN-bridge-south', '南入城桥', 'bridge', 'F', ['F', 'outside'], 0, -489, MODULES.bridgeDeckWidth, TERRAIN.bridgeDeckY, { note: '跨南护城河，外侧接南岸落脚点' }),
+  CX('CXN-bridge-north', '北入城桥', 'bridge', 'F', ['F', 'outside'], 0, 489, MODULES.bridgeDeckWidth, TERRAIN.bridgeDeckY),
+  CX('CXN-bridge-west', '西入城桥', 'bridge', 'F', ['F', 'outside'], -349, 0, 12, TERRAIN.bridgeDeckY),
+  CX('CXN-bridge-east', '东入城桥', 'bridge', 'F', ['F', 'outside'], 349, 0, 12, TERRAIN.bridgeDeckY),
+  CX('CXN-gate-south', '南城门门洞', 'gate', 'F', ['F', 'outside'], 0, -454, 26, 0.4, { gate: 'F-gate-south' }),
+  CX('CXN-gate-north', '北城门门洞', 'gate', 'F', ['F', 'outside'], 0, 454, 26, 0.4, { gate: 'F-gate-north' }),
+  CX('CXN-gate-west', '西侧城门门洞', 'gate', 'F', ['F', 'outside'], -304, 0, 26, 0.4, { gate: 'F-gate-west' }),
+  CX('CXN-gate-east', '东侧城门门洞', 'gate', 'F', ['F', 'outside'], 304, 0, 26, 0.4, { gate: 'F-gate-east' }),
+  CX('CXN-F-B-south-belt', '城门内侧带→前朝广场', 'passage', 'F', ['F', 'B'], 0, -400, 24, TERRAIN.beltY, { note: 'F 拥有城门内侧带；B 从此处起算前朝' }),
+  CX('CXN-B-C-inner-gate', '内廷门门洞', 'gate', 'C', ['B', 'C'], 0, 80, 26, TERRAIN.innerGateTerraceY, { gate: 'C-gate-inner', note: 'C 负责内廷门及其以北后宫' }),
+  CX('CXN-C-F-garden-west', '后宫→御花园（西）', 'passage', 'F', ['C', 'F'], -84, 300, 10, TERRAIN.gardenPathsY, { note: '后寝殿居中，花园入口设于两侧' }),
+  CX('CXN-C-F-garden-east', '后宫→御花园（东）', 'passage', 'F', ['C', 'F'], 84, 300, 10, TERRAIN.gardenPathsY),
+  CX('CXN-B-D-plaza-west', '前朝广场→西宫苑', 'passage', 'D', ['B', 'D'], -100, -300, 10, TERRAIN.sideCourtY),
+  CX('CXN-B-D-rear-west', '前朝后殿院→西宫苑', 'passage', 'D', ['B', 'D'], -100, 40, 10, TERRAIN.sideCourtY),
+  CX('CXN-C-D-side-west', '内廷侧门→西宫苑', 'stairs', 'C', ['C', 'D'], -100, 124, 10, TERRAIN.innerGateTerraceY, { elevationLow: TERRAIN.sideCourtY, gate: 'C-gate-west', note: '侧门后 8m 缓步台阶（0.5m 落差）' }),
+  CX('CXN-B-E-plaza-east', '前朝广场→东宫苑', 'passage', 'E', ['B', 'E'], 100, -300, 10, TERRAIN.sideCourtY),
+  CX('CXN-B-E-rear-east', '前朝后殿院→东宫苑', 'passage', 'E', ['B', 'E'], 100, 40, 10, TERRAIN.sideCourtY),
+  CX('CXN-C-E-side-east', '内廷侧门→东宫苑', 'stairs', 'E', ['C', 'E'], 100, 124, 10, TERRAIN.innerGateTerraceY, { elevationLow: TERRAIN.sideCourtY, gate: 'C-gate-east' }),
+  CX('CXN-D-F-garden-west', '西宫苑→御花园', 'passage', 'F', ['D', 'F'], -200, 300, 12, 0.45, { note: 'D 北端接花园西入口' }),
+  CX('CXN-E-F-garden-east', '东宫苑→御花园', 'passage', 'F', ['E', 'F'], 200, 300, 12, 0.45),
+  CX('CXN-F-garden-north-belt', '御花园→北门内侧带', 'passage', 'F', ['F', 'F'], -30, 420, 10, TERRAIN.beltY),
+  CX('CXN-F-garden-north-belt-east', '御花园→北门内侧带（东）', 'passage', 'F', ['F', 'F'], 30, 420, 10, TERRAIN.beltY),
+  CX('CXN-B-gate-front-opening', '前朝门殿门洞', 'gate', 'B', ['B', 'B'], 0, -386, 26, 0.45, { gate: 'B-gate-front' }),
+  CX('CXN-B-main-terrace-danbi', '主殿丹陛（三层）', 'stairs', 'B', ['B', 'B'], 0, -164, 22, MODULES.terraceTotalHeight, { elevationLow: TERRAIN.terraceGroundY, note: '中轴丹陛御道，三层共 4.5m' }),
+  CX('CXN-B-main-terrace-west-stairs', '主殿西侧台阶', 'stairs', 'B', ['B', 'B'], -80, -174, 10, MODULES.terraceTierHeight, { elevationLow: TERRAIN.terraceGroundY }),
+  CX('CXN-B-main-terrace-east-stairs', '主殿东侧台阶', 'stairs', 'B', ['B', 'B'], 80, -174, 10, MODULES.terraceTierHeight, { elevationLow: TERRAIN.terraceGroundY }),
+  CX('CXN-B-main-terrace-north-west', '主殿台北侧台阶（西）', 'stairs', 'B', ['B', 'B'], -60, -58, 10, MODULES.terraceTierHeight, { elevationLow: TERRAIN.terraceGroundY }),
+  CX('CXN-B-main-terrace-north-east', '主殿台北侧台阶（东）', 'stairs', 'B', ['B', 'B'], 60, -58, 10, MODULES.terraceTierHeight, { elevationLow: TERRAIN.terraceGroundY }),
+  CX('CXN-C-bed-terrace-danbi', '寝殿台基南台阶', 'stairs', 'C', ['C', 'C'], 0, 132, 14, 2.4, { elevationLow: TERRAIN.innerPalaceY }),
+  CX('CXN-C-bed-terrace-north-stairs', '寝殿台基北台阶', 'stairs', 'C', ['C', 'C'], 0, 204, 14, 2.4, { elevationLow: TERRAIN.innerPalaceY }),
+  CX('CXN-B-main-hall-door', '金銮殿门洞', 'gate', 'B', ['B', 'B'], 0, -140, 26, MODULES.terraceTotalHeight, { note: '可进入内景（visitable）' }),
+  CX('CXN-C-bed-hall-door', '寝殿门洞', 'gate', 'C', ['C', 'C'], 0, 187, 20, 2.4, { note: '可进入内景（visitable）' }),
+]);
+
+export const CONNECTOR_BY_ID = deepFreeze(
+  CONNECTORS.reduce((acc, c) => {
+    acc[c.id] = c;
+    return acc;
+  }, {}),
+);
+
+export function getConnector(id) {
+  return CONNECTOR_BY_ID[id] ?? null;
+}
+
+/* =============================================================================
+ * 六、ROADS：中轴与支路，每段带起止坐标与标高（不得把全城地坪统一抬到 4.5m）
+ * ========================================================================== */
+
+/**
+ * 道路段。surface: 'outerRoad' | 'bridgeRamp' | 'bridgeDeck' | 'paving' | 'plaza' |
+ *                'terrace' | 'stairs' | 'gardenPath' | 'courtPath'
+ */
+function RD(id, name, zone, from, to, width, surface, connector = null) {
+  const [x1, z1, y1] = from;
+  const [x2, z2, y2] = to;
+  const length = Math.hypot(x2 - x1, z2 - z1);
+  const slope = length > 0 ? Math.abs(y2 - y1) / length : 0;
+  return {
+    id,
+    name,
+    zone,
+    from: { x: x1, z: z1, y: y1 },
+    to: { x: x2, z: z2, y: y2 },
+    width,
+    surface,
+    length: +length.toFixed(2),
+    slope: +slope.toFixed(4),
+    connector,
+    walkable: true,
+  };
+}
+
+export const ROADS = deepFreeze([
+  /* --- 南侧进场：南岸 → 南桥 → 南城门 → 城门内侧带（F 负责） --- */
+  RD('RD-F-south-approach', '南岸引道', 'F', [0, -552, 0], [0, -540, 0], 18, 'outerRoad'),
+  RD('RD-F-south-bridge-ramp-outer', '南桥外引坡', 'F', [0, -540, 0], [0, -506, TERRAIN.bridgeDeckY], 16, 'bridgeRamp', 'CXN-bridge-south'),
+  RD('RD-F-south-bridge-deck', '南桥桥面', 'F', [0, -506, TERRAIN.bridgeDeckY], [0, -472, TERRAIN.bridgeDeckY], 16, 'bridgeDeck', 'CXN-bridge-south'),
+  RD('RD-F-south-bridge-ramp-inner', '南桥内引坡', 'F', [0, -472, TERRAIN.bridgeDeckY], [0, -458, 0.4], 16, 'bridgeRamp', 'CXN-bridge-south'),
+  RD('RD-F-south-gate-floor', '南城门门洞地面', 'F', [0, -458, 0.4], [0, -440, 0.4], 18, 'paving', 'CXN-gate-south'),
+  RD('RD-F-south-gate-inner-ramp', '城门内缓坡', 'F', [0, -440, 0.4], [0, -404, TERRAIN.beltY], 18, 'paving', 'CXN-gate-south'),
+  RD('RD-F-south-belt', '城门内侧带步道', 'F', [0, -404, TERRAIN.beltY], [0, -400, TERRAIN.beltY], 24, 'paving', 'CXN-F-B-south-belt'),
+  /* --- 西侧进场 --- */
+  RD('RD-F-west-bridge-ramp-outer', '西桥外引坡', 'F', [-400, 0, 0], [-366, 0, TERRAIN.bridgeDeckY], 12, 'bridgeRamp', 'CXN-bridge-west'),
+  RD('RD-F-west-bridge-deck', '西桥桥面', 'F', [-366, 0, TERRAIN.bridgeDeckY], [-332, 0, TERRAIN.bridgeDeckY], 12, 'bridgeDeck', 'CXN-bridge-west'),
+  RD('RD-F-west-bridge-ramp-inner', '西桥内引坡', 'F', [-332, 0, TERRAIN.bridgeDeckY], [-317, 0, 0.4], 12, 'bridgeRamp', 'CXN-bridge-west'),
+  RD('RD-F-west-gate-floor', '西侧城门门洞地面', 'F', [-317, 0, 0.4], [-291, 0, 0.4], 14, 'paving', 'CXN-gate-west'),
+  RD('RD-D-west-gate-entry', '西侧城门内接入', 'D', [-291, 0, TERRAIN.sideCourtY], [-270, 0, TERRAIN.sideCourtY], 12, 'paving', 'CXN-gate-west'),
+  /* --- 东侧进场 --- */
+  RD('RD-F-east-bridge-ramp-outer', '东桥外引坡', 'F', [400, 0, 0], [366, 0, TERRAIN.bridgeDeckY], 12, 'bridgeRamp', 'CXN-bridge-east'),
+  RD('RD-F-east-bridge-deck', '东桥桥面', 'F', [366, 0, TERRAIN.bridgeDeckY], [332, 0, TERRAIN.bridgeDeckY], 12, 'bridgeDeck', 'CXN-bridge-east'),
+  RD('RD-F-east-bridge-ramp-inner', '东桥内引坡', 'F', [332, 0, TERRAIN.bridgeDeckY], [317, 0, 0.4], 12, 'bridgeRamp', 'CXN-bridge-east'),
+  RD('RD-F-east-gate-floor', '东侧城门门洞地面', 'F', [317, 0, 0.4], [291, 0, 0.4], 14, 'paving', 'CXN-gate-east'),
+  RD('RD-E-east-gate-entry', '东侧城门内接入', 'E', [291, 0, TERRAIN.sideCourtY], [270, 0, TERRAIN.sideCourtY], 12, 'paving', 'CXN-gate-east'),
+  /* --- 北侧进场 --- */
+  RD('RD-F-north-approach', '北岸引道', 'F', [0, 552, 0], [0, 540, 0], 18, 'outerRoad'),
+  RD('RD-F-north-bridge-ramp-outer', '北桥外引坡', 'F', [0, 540, 0], [0, 506, TERRAIN.bridgeDeckY], 16, 'bridgeRamp', 'CXN-bridge-north'),
+  RD('RD-F-north-bridge-deck', '北桥桥面', 'F', [0, 506, TERRAIN.bridgeDeckY], [0, 472, TERRAIN.bridgeDeckY], 16, 'bridgeDeck', 'CXN-bridge-north'),
+  RD('RD-F-north-bridge-ramp-inner', '北桥内引坡', 'F', [0, 472, TERRAIN.bridgeDeckY], [0, 458, 0.4], 16, 'bridgeRamp', 'CXN-bridge-north'),
+  RD('RD-F-north-gate-floor', '北城门门洞地面', 'F', [0, 458, 0.4], [0, 441, 0.4], 18, 'paving', 'CXN-gate-north'),
+  RD('RD-F-north-gate-inner-ramp', '北城门内缓坡', 'F', [0, 441, 0.4], [0, 428, TERRAIN.beltY], 18, 'paving', 'CXN-gate-north'),
+  RD('RD-F-north-belt', '北门内侧带步道', 'F', [-30, 428, TERRAIN.beltY], [0, 440, TERRAIN.beltY], 12, 'paving', 'CXN-F-garden-north-belt'),
+  /* --- B 中轴前朝 --- */
+  RD('RD-B-plaza-axis', '礼仪广场中轴', 'B', [0, -400, 0], [0, -180, 0], 22, 'plaza', 'CXN-F-B-south-belt'),
+  RD('RD-B-plaza-west-branch', '广场西支路', 'B', [-60, -380, 0], [-60, -180, 0], 10, 'plaza'),
+  RD('RD-B-plaza-east-branch', '广场东支路', 'B', [60, -380, 0], [60, -180, 0], 10, 'plaza'),
+  RD('RD-B-main-danbi-1', '主殿丹陛第一层', 'B', [0, -180, 0], [0, -168, MODULES.terraceTierHeight], 22, 'stairs', 'CXN-B-main-terrace-danbi'),
+  RD('RD-B-main-danbi-2', '主殿丹陛第二层', 'B', [0, -168, MODULES.terraceTierHeight], [0, -158, MODULES.terraceTierHeight * 2], 22, 'stairs', 'CXN-B-main-terrace-danbi'),
+  RD('RD-B-main-danbi-3', '主殿丹陛第三层', 'B', [0, -158, MODULES.terraceTierHeight * 2], [0, -148, MODULES.terraceTotalHeight], 22, 'stairs', 'CXN-B-main-terrace-danbi'),
+  RD('RD-B-terrace-top', '主殿台基顶面御道', 'B', [0, -148, MODULES.terraceTotalHeight], [0, -84, MODULES.terraceTotalHeight], 24, 'terrace'),
+  RD('RD-B-terrace-west-stairs', '主殿西侧台阶', 'B', [-80, -180, 0], [-80, -168, MODULES.terraceTierHeight], 10, 'stairs', 'CXN-B-main-terrace-west-stairs'),
+  RD('RD-B-terrace-east-stairs', '主殿东侧台阶', 'B', [80, -180, 0], [80, -168, MODULES.terraceTierHeight], 10, 'stairs', 'CXN-B-main-terrace-east-stairs'),
+  RD('RD-B-terrace-north-west-stairs', '主殿台北台阶（西）', 'B', [-60, -64, MODULES.terraceTierHeight], [-60, -52, 0], 10, 'stairs', 'CXN-B-main-terrace-north-west'),
+  RD('RD-B-terrace-north-east-stairs', '主殿台北台阶（东）', 'B', [60, -64, MODULES.terraceTierHeight], [60, -52, 0], 10, 'stairs', 'CXN-B-main-terrace-north-east'),
+  RD('RD-B-bypass-west', '主殿西绕行步道', 'B', [-88, -52, 0], [-88, 60, 0], 10, 'paving'),
+  RD('RD-B-bypass-east', '主殿东绕行步道', 'B', [88, -52, 0], [88, 60, 0], 10, 'paving'),
+  RD('RD-B-axis-mid', '中殿南侧中轴', 'B', [0, -56, 0], [0, -36, 0], 16, 'paving'),
+  RD('RD-B-axis-mid-rear', '中殿后殿间中轴', 'B', [0, -4, 0], [0, 27, 0], 16, 'paving'),
+  RD('RD-B-axis-rear-inner', '后殿北至内廷门', 'B', [0, 61, 0], [0, 78, TERRAIN.innerGateTerraceY], 20, 'paving', 'CXN-B-C-inner-gate'),
+  RD('RD-B-west-court-link', '广场西侧接西宫苑', 'B', [-88, -300, 0], [-100, -300, 0], 10, 'paving', 'CXN-B-D-plaza-west'),
+  RD('RD-B-east-court-link', '广场东侧接东宫苑', 'B', [88, -300, 0], [100, -300, 0], 10, 'paving', 'CXN-B-E-plaza-east'),
+  RD('RD-B-west-court-link-rear', '后殿院西接西宫苑', 'B', [-88, 40, 0], [-100, 40, 0], 10, 'paving', 'CXN-B-D-rear-west'),
+  RD('RD-B-east-court-link-rear', '后殿院东接东宫苑', 'B', [88, 40, 0], [100, 40, 0], 10, 'paving', 'CXN-B-E-rear-east'),
+  /* --- C 后宫 --- */
+  RD('RD-C-inner-gate-floor', '内廷门门洞地面', 'C', [0, 80, TERRAIN.innerGateTerraceY], [0, 110, TERRAIN.innerGateTerraceY], 22, 'paving', 'CXN-B-C-inner-gate'),
+  RD('RD-C-axis-front', '内廷一进中轴', 'C', [0, 110, TERRAIN.innerPalaceY], [0, 128, TERRAIN.innerPalaceY], 22, 'paving'),
+  RD('RD-C-bed-danbi', '寝殿台基南台阶', 'C', [0, 128, TERRAIN.innerPalaceY], [0, 137, 2.4], 14, 'stairs', 'CXN-C-bed-terrace-danbi'),
+  RD('RD-C-bed-terrace-top', '寝殿台基顶面', 'C', [0, 137, 2.4], [0, 199, 2.4], 18, 'terrace'),
+  RD('RD-C-bed-north-stairs', '寝殿台基北台阶', 'C', [0, 199, 2.4], [0, 210, TERRAIN.innerPalaceY], 14, 'stairs', 'CXN-C-bed-terrace-north-stairs'),
+  RD('RD-C-axis-rear', '寝殿北中轴', 'C', [0, 210, TERRAIN.innerPalaceY], [0, 216, TERRAIN.innerPalaceY], 10, 'paving'),
+  RD('RD-C-rear-cross-west', '后寝院西横路', 'C', [0, 216, TERRAIN.innerPalaceY], [-84, 216, TERRAIN.innerPalaceY], 10, 'paving'),
+  RD('RD-C-rear-cross-east', '后寝院东横路', 'C', [0, 216, TERRAIN.innerPalaceY], [84, 216, TERRAIN.innerPalaceY], 10, 'paving'),
+  RD('RD-C-rear-bypass-west', '后寝殿西绕行', 'C', [-84, 210, TERRAIN.innerPalaceY], [-84, 298, TERRAIN.innerPalaceY], 10, 'paving'),
+  RD('RD-C-rear-bypass-east', '后寝殿东绕行', 'C', [84, 210, TERRAIN.innerPalaceY], [84, 298, TERRAIN.innerPalaceY], 10, 'paving'),
+  RD('RD-C-garden-ramp-west', '后宫出花园西坡道', 'C', [-84, 298, TERRAIN.innerPalaceY], [-84, 306, TERRAIN.gardenPathsY], 10, 'gardenPath', 'CXN-C-F-garden-west'),
+  RD('RD-C-garden-ramp-east', '后宫出花园东坡道', 'C', [84, 298, TERRAIN.innerPalaceY], [84, 306, TERRAIN.gardenPathsY], 10, 'gardenPath', 'CXN-C-F-garden-east'),
+  RD('RD-C-side-gate-west', '一进院至西侧门', 'C', [-60, 124, TERRAIN.innerPalaceY], [-90, 124, TERRAIN.innerPalaceY], 8, 'paving'),
+  RD('RD-C-side-gate-east', '一进院至东侧门', 'C', [60, 124, TERRAIN.innerPalaceY], [90, 124, TERRAIN.innerPalaceY], 8, 'paving'),
+  RD('RD-C-D-west-steps', '西侧门后缓步台阶', 'C', [-96, 124, TERRAIN.innerGateTerraceY], [-104, 124, TERRAIN.sideCourtY], 10, 'stairs', 'CXN-C-D-side-west'),
+  RD('RD-C-E-east-steps', '东侧门后缓步台阶', 'E', [96, 124, TERRAIN.innerGateTerraceY], [104, 124, TERRAIN.sideCourtY], 10, 'stairs', 'CXN-C-E-side-east'),
+  /* --- D 西侧宫苑 --- */
+  RD('RD-D-ring-road', '西宫苑南北主道', 'D', [-106, -392, TERRAIN.sideCourtY], [-106, 290, TERRAIN.sideCourtY], 10, 'courtPath'),
+  RD('RD-D-court1-path', '礼乐院院前路', 'D', [-106, -318, TERRAIN.sideCourtY], [-123, -318, TERRAIN.sideCourtY], 8, 'courtPath'),
+  RD('RD-D-court2-path', '书院院院前路', 'D', [-106, -158, TERRAIN.sideCourtY], [-123, -158, TERRAIN.sideCourtY], 8, 'courtPath'),
+  RD('RD-D-court3-path', '服务院院前路', 'D', [-106, 2, TERRAIN.sideCourtY], [-123, 2, TERRAIN.sideCourtY], 8, 'courtPath'),
+  RD('RD-D-court4-path', '西后院院前路', 'D', [-106, 188, TERRAIN.sideCourtY], [-123, 188, TERRAIN.sideCourtY], 8, 'courtPath'),
+  RD('RD-D-plaza-link', '接前朝广场', 'D', [-106, -300, TERRAIN.sideCourtY], [-100, -300, TERRAIN.sideCourtY], 10, 'courtPath', 'CXN-B-D-plaza-west'),
+  RD('RD-D-rear-link', '接前朝后殿院', 'D', [-106, 40, TERRAIN.sideCourtY], [-100, 40, TERRAIN.sideCourtY], 10, 'courtPath', 'CXN-B-D-rear-west'),
+  RD('RD-D-side-link', '接内廷侧门', 'D', [-106, 124, TERRAIN.sideCourtY], [-100, 124, TERRAIN.sideCourtY], 10, 'courtPath', 'CXN-C-D-side-west'),
+  RD('RD-D-garden-spur', '接花园西入口', 'D', [-106, 290, TERRAIN.sideCourtY], [-200, 290, TERRAIN.sideCourtY], 10, 'courtPath'),
+  RD('RD-D-garden-ramp', '花园西入口坡道', 'D', [-200, 290, TERRAIN.sideCourtY], [-200, 300, 0.45], 12, 'gardenPath', 'CXN-D-F-garden-west'),
+  /* --- E 东侧宫苑 --- */
+  RD('RD-E-ring-road', '东宫苑南北主道', 'E', [106, -392, TERRAIN.sideCourtY], [106, 290, TERRAIN.sideCourtY], 10, 'courtPath'),
+  RD('RD-E-court1-path', '文华院院前路', 'E', [106, -320, TERRAIN.sideCourtY], [113, -320, TERRAIN.sideCourtY], 8, 'courtPath'),
+  RD('RD-E-court2-path', '陈设院院前路', 'E', [106, -150, TERRAIN.sideCourtY], [113, -150, TERRAIN.sideCourtY], 8, 'courtPath'),
+  RD('RD-E-court3-path', '生活院院前路', 'E', [106, 20, TERRAIN.sideCourtY], [113, 20, TERRAIN.sideCourtY], 8, 'courtPath'),
+  RD('RD-E-court4-path', '东后院院前路', 'E', [106, 200, TERRAIN.sideCourtY], [113, 200, TERRAIN.sideCourtY], 8, 'courtPath'),
+  RD('RD-E-plaza-link', '接前朝广场', 'E', [100, -300, TERRAIN.sideCourtY], [106, -300, TERRAIN.sideCourtY], 10, 'courtPath', 'CXN-B-E-plaza-east'),
+  RD('RD-E-rear-link', '接前朝后殿院', 'E', [100, 40, TERRAIN.sideCourtY], [106, 40, TERRAIN.sideCourtY], 10, 'courtPath', 'CXN-B-E-rear-east'),
+  RD('RD-E-side-link', '接内廷侧门', 'E', [100, 124, TERRAIN.sideCourtY], [106, 124, TERRAIN.sideCourtY], 10, 'courtPath', 'CXN-C-E-side-east'),
+  RD('RD-E-garden-spur', '接花园东入口', 'E', [106, 290, TERRAIN.sideCourtY], [200, 290, TERRAIN.sideCourtY], 10, 'courtPath'),
+  RD('RD-E-garden-ramp', '花园东入口坡道', 'E', [200, 290, TERRAIN.sideCourtY], [200, 300, 0.45], 12, 'gardenPath', 'CXN-E-F-garden-east'),
+  /* --- F 御花园 --- */
+  RD('RD-F-garden-west-entry', '花园西入口步道', 'F', [-200, 300, 0.45], [-200, 320, TERRAIN.gardenPathsY], 12, 'gardenPath', 'CXN-D-F-garden-west'),
+  RD('RD-F-garden-east-entry', '花园东入口步道', 'F', [200, 300, 0.45], [200, 320, TERRAIN.gardenPathsY], 12, 'gardenPath', 'CXN-E-F-garden-east'),
+  RD('RD-F-garden-axis-west', '花园西中轴步道', 'F', [-84, 306, TERRAIN.gardenPathsY], [-84, 340, TERRAIN.gardenPathsY], 10, 'gardenPath', 'CXN-C-F-garden-west'),
+  RD('RD-F-garden-axis-east', '花园东中轴步道', 'F', [84, 306, TERRAIN.gardenPathsY], [84, 340, TERRAIN.gardenPathsY], 10, 'gardenPath', 'CXN-C-F-garden-east'),
+  RD('RD-F-garden-cross', '花园东西横路', 'F', [-96, 340, TERRAIN.gardenPathsY], [96, 340, TERRAIN.gardenPathsY], 10, 'gardenPath'),
+  RD('RD-F-garden-main-approach', '中央亭阁前步道', 'F', [0, 340, TERRAIN.gardenPathsY], [0, 344, TERRAIN.gardenPathsY], 12, 'gardenPath'),
+  RD('RD-F-garden-north-west-path', '花园北西步道', 'F', [-30, 340, TERRAIN.gardenPathsY], [-30, 410, TERRAIN.gardenPathsY], 8, 'gardenPath'),
+  RD('RD-F-garden-north-east-path', '花园北东步道', 'F', [30, 340, TERRAIN.gardenPathsY], [30, 410, TERRAIN.gardenPathsY], 8, 'gardenPath'),
+  RD('RD-F-garden-west-loop', '花园西侧环路', 'F', [-96, 340, TERRAIN.gardenPathsY], [-96, 410, TERRAIN.gardenPathsY], 8, 'gardenPath'),
+  RD('RD-F-garden-east-loop', '花园东侧环路', 'F', [96, 340, TERRAIN.gardenPathsY], [96, 410, TERRAIN.gardenPathsY], 8, 'gardenPath'),
+  RD('RD-F-garden-north-cross', '花园北横路', 'F', [-96, 410, TERRAIN.gardenPathsY], [96, 410, TERRAIN.gardenPathsY], 8, 'gardenPath'),
+  RD('RD-F-garden-west-pond-walk', '西水池畔步道', 'F', [-200, 320, TERRAIN.gardenPathsY], [-200, 380, TERRAIN.gardenPathsY], 8, 'gardenPath'),
+  RD('RD-F-garden-east-pond-walk', '东水池畔步道', 'F', [200, 320, TERRAIN.gardenPathsY], [200, 380, TERRAIN.gardenPathsY], 8, 'gardenPath'),
+  RD('RD-F-garden-north-west-ramp', '花园至北门带（西）', 'F', [-30, 410, TERRAIN.gardenPathsY], [-30, 426, TERRAIN.beltY], 10, 'gardenPath', 'CXN-F-garden-north-belt'),
+  RD('RD-F-garden-north-east-ramp', '花园至北门带（东）', 'F', [30, 410, TERRAIN.gardenPathsY], [30, 426, TERRAIN.beltY], 10, 'gardenPath', 'CXN-F-garden-north-belt-east'),
+]);
+
+export const ROAD_BY_ID = deepFreeze(
+  ROADS.reduce((acc, r) => {
+    acc[r.id] = r;
+    return acc;
+  }, {}),
+);
+
+/* =============================================================================
+ * 七、TERRACES：台基（主殿三层总高 4.5m；寝殿 1.5m）
+ * ========================================================================== */
+
+export const TERRACES = deepFreeze([
+  {
+    id: 'TR-B-main-tier1',
+    owner: 'B',
+    zone: 'B',
+    label: '主殿台基第一层',
+    tier: 1,
+    bounds: b(-88, 88, -168, -64),
+    y0: 0,
+    y1: MODULES.terraceTierHeight,
+    stoneRole: 'terraceStone',
+  },
+  {
+    id: 'TR-B-main-tier2',
+    owner: 'B',
+    zone: 'B',
+    label: '主殿台基第二层',
+    tier: 2,
+    bounds: b(-72, 72, -158, -74),
+    y0: MODULES.terraceTierHeight,
+    y1: MODULES.terraceTierHeight * 2,
+    stoneRole: 'terraceStone',
+  },
+  {
+    id: 'TR-B-main-tier3',
+    owner: 'B',
+    zone: 'B',
+    label: '主殿台基第三层',
+    tier: 3,
+    bounds: b(-56, 56, -148, -84),
+    y0: MODULES.terraceTierHeight * 2,
+    y1: MODULES.terraceTotalHeight,
+    stoneRole: 'terraceStone',
+  },
+  {
+    id: 'TR-C-bed',
+    owner: 'C',
+    zone: 'C',
+    label: '寝殿台基',
+    tier: 1,
+    bounds: b(-72, 72, 137, 199),
+    y0: TERRAIN.innerPalaceY,
+    y1: 2.4,
+    stoneRole: 'terraceStone',
+  },
+]);
+
+/* =============================================================================
+ * 八、WALKABLE：可行走面（世界坐标范围 + 地面高度；重叠时取最高面，ramp 定义过渡）
+ * ========================================================================== */
+
+function WK(id, zone, kind, name, minX, maxX, minZ, maxZ, y, enterable = true) {
+  return {
+    id,
+    zone,
+    kind,
+    name,
+    bounds: b(minX, maxX, minZ, maxZ),
+    y,
+    enterable,
+    centerY: y,
+    area: +((maxX - minX) * (maxZ - minZ)).toFixed(1),
+  };
+}
+
+export const WALKABLE = deepFreeze([
+  WK('WK-F-bank-south', 'F', 'outerTerrain', '南岸地形', -420, 420, -560, -506, TERRAIN.outerTerrainY),
+  WK('WK-F-bank-north', 'F', 'outerTerrain', '北岸地形', -420, 420, 506, 560, TERRAIN.outerTerrainY),
+  WK('WK-F-bank-west', 'F', 'outerTerrain', '西岸地形', -420, -366, -506, 506, TERRAIN.outerTerrainY),
+  WK('WK-F-bank-east', 'F', 'outerTerrain', '东岸地形', 366, 420, -506, 506, TERRAIN.outerTerrainY),
+  WK('WK-F-berm-south', 'F', 'ground', '南墙外岸台', -332, 332, -472, -458, TERRAIN.cityGroundY),
+  WK('WK-F-berm-north', 'F', 'ground', '北墙外岸台', -332, 332, 458, 472, TERRAIN.cityGroundY),
+  WK('WK-F-berm-west', 'F', 'ground', '西墙外岸台', -332, -308, -458, 458, TERRAIN.cityGroundY),
+  WK('WK-F-berm-east', 'F', 'ground', '东墙外岸台', 308, 332, -458, 458, TERRAIN.cityGroundY),
+  WK('WK-F-bridge-south', 'F', 'bridgeDeck', '南桥桥面', -8, 8, -506, -472, TERRAIN.bridgeDeckY),
+  WK('WK-F-bridge-north', 'F', 'bridgeDeck', '北桥桥面', -8, 8, 472, 506, TERRAIN.bridgeDeckY),
+  WK('WK-F-bridge-west', 'F', 'bridgeDeck', '西桥桥面', -366, -332, -6, 6, TERRAIN.bridgeDeckY),
+  WK('WK-F-bridge-east', 'F', 'bridgeDeck', '东桥桥面', 332, 366, -6, 6, TERRAIN.bridgeDeckY),
+  WK('WK-F-belt-south', 'F', 'ground', '南门内侧带', -300, 300, -450, -400, TERRAIN.beltY),
+  WK('WK-F-belt-north', 'F', 'ground', '北门内侧带', -300, 300, 420, 450, TERRAIN.beltY),
+  WK('WK-F-garden', 'F', 'gardenGround', '御花园地坪', -300, 300, 300, 420, TERRAIN.gardenPathsY),
+  WK('WK-B-plaza', 'B', 'ground', '礼仪广场', -100, 100, -400, -168, TERRAIN.terraceGroundY),
+  WK('WK-B-terrace-strip-west', 'B', 'ground', '主殿西侧地面', -100, -88, -168, -64, TERRAIN.terraceGroundY),
+  WK('WK-B-terrace-strip-east', 'B', 'ground', '主殿东侧地面', 88, 100, -168, -64, TERRAIN.terraceGroundY),
+  WK('WK-B-terrace-tier1', 'B', 'terrace', '主殿台基一层顶', -88, 88, -168, -64, MODULES.terraceTierHeight),
+  WK('WK-B-terrace-tier2', 'B', 'terrace', '主殿台基二层顶', -72, 72, -158, -74, MODULES.terraceTierHeight * 2),
+  WK('WK-B-terrace-tier3', 'B', 'terrace', '主殿台基三层顶', -56, 56, -148, -84, MODULES.terraceTotalHeight),
+  WK('WK-B-hall-main-interior', 'B', 'interior', '金銮殿内景地面', -36, 36, -134, -98, MODULES.terraceTotalHeight),
+  WK('WK-B-ground-north', 'B', 'ground', '主殿北地面', -100, 100, -64, 80, TERRAIN.terraceGroundY),
+  WK('WK-C-ground', 'C', 'ground', '后宫庭院地面', -100, 100, 80, 300, TERRAIN.innerPalaceY),
+  WK('WK-C-bed-terrace', 'C', 'terrace', '寝殿台基顶', -72, 72, 137, 199, 2.4),
+  WK('WK-C-bed-interior', 'C', 'interior', '寝殿内景地面', -27, 27, 154, 182, 2.4),
+  WK('WK-D-ground', 'D', 'ground', '西宫苑地坪', -300, -100, -400, 300, TERRAIN.sideCourtY),
+  WK('WK-E-ground', 'E', 'ground', '东宫苑地坪', 100, 300, -400, 300, TERRAIN.sideCourtY),
+]);
+
+/** 可行走面索引（重叠时按 y 降序，供 floorYAt / 碰撞使用）。 */
+export function walkableAt(x, z) {
+  const hits = [];
+  for (const s of WALKABLE) {
+    const r = s.bounds;
+    if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) hits.push(s);
+  }
+  hits.sort((p, q) => q.y - p.y);
+  return hits;
+}
+
+/** 地面高度：可行走面最高面优先；位于道路/坡道/台阶走廊内时，按线性插值取面高，仍取最高。 */
+export function floorYAt(x, z) {
+  let y = null;
+  for (const s of WALKABLE) {
+    const r = s.bounds;
+    if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) {
+      if (y === null || s.y > y) y = s.y;
+    }
+  }
+  for (const road of ROADS) {
+    const { x: x1, z: z1, y: y1 } = road.from;
+    const { x: x2, z: z2, y: y2 } = road.to;
+    const dx = x2 - x1;
+    const dz = z2 - z1;
+    const len2 = dx * dx + dz * dz;
+    if (len2 === 0) continue;
+    const t = ((x - x1) * dx + (z - z1) * dz) / len2;
+    if (t < 0 || t > 1) continue;
+    const px = x1 + dx * t;
+    const pz = z1 + dz * t;
+    const dist = Math.hypot(x - px, z - pz);
+    if (dist > road.width / 2) continue;
+    const ry = y1 + (y2 - y1) * t;
+    if (y === null || ry > y) y = ry;
+  }
+  return y;
+}
+
+/* =============================================================================
+ * 九、障碍、水体和点景：不可进入建筑登记为障碍物，不得成为可穿越空间
+ * ========================================================================== */
+
+/** 建筑障碍：全部槽位都登记（可通行构件带 door 口）；水面/假山/城墙单独登记。 */
+export const OBSTACLES = deepFreeze([
+  ...SLOTS.map((s) => ({
+    id: `OB-${s.id}`,
+    sourceType: 'building',
+    zone: s.zone,
+    buildingId: s.id,
+    bounds: s.bounds,
+    y0: s.baseY,
+    y1: s.totalHeight,
+    blocks: s.hasDoor ? 'exceptDoor' : 'all',
+    door: s.door,
+    note: s.visitable ? '可进入内景：门洞可通行，墙体阻挡' : s.hasDoor ? '门洞可通行，其余体块阻挡' : '整体阻挡（不可进入）',
+  })),
+  ...CITY_WALL.innerFace
+    ? [
+        {
+          id: 'OB-WALL-CITY-south',
+          sourceType: 'wall',
+          zone: 'F',
+          buildingId: 'WALL-CITY',
+          bounds: b(-304, 304, -458, -450),
+          y0: 0,
+          y1: CITY_WALL.height,
+          blocks: 'exceptDoor',
+          door: { axis: 'x', center: { x: 0, z: -454 }, width: 26, height: 12, sillY: 0.4 },
+          note: '南段宫墙，南城门处留门洞',
+        },
+        {
+          id: 'OB-WALL-CITY-north',
+          sourceType: 'wall',
+          zone: 'F',
+          buildingId: 'WALL-CITY',
+          bounds: b(-304, 304, 450, 458),
+          y0: 0,
+          y1: CITY_WALL.height,
+          blocks: 'exceptDoor',
+          door: { axis: 'x', center: { x: 0, z: 454 }, width: 26, height: 12, sillY: 0.4 },
+          note: '北段宫墙，北城门处留门洞',
+        },
+        {
+          id: 'OB-WALL-CITY-west',
+          sourceType: 'wall',
+          zone: 'F',
+          buildingId: 'WALL-CITY',
+          bounds: b(-308, -300, -458, 458),
+          y0: 0,
+          y1: CITY_WALL.height,
+          blocks: 'exceptDoor',
+          door: { axis: 'z', center: { x: -304, z: 0 }, width: 26, height: 12, sillY: 0.4 },
+          note: '西段宫墙，西侧门处留门洞',
+        },
+        {
+          id: 'OB-WALL-CITY-east',
+          sourceType: 'wall',
+          zone: 'F',
+          buildingId: 'WALL-CITY',
+          bounds: b(300, 308, -458, 458),
+          y0: 0,
+          y1: CITY_WALL.height,
+          blocks: 'exceptDoor',
+          door: { axis: 'z', center: { x: 304, z: 0 }, width: 26, height: 12, sillY: 0.4 },
+          note: '东段宫墙，东侧门处留门洞',
+        },
+      ]
+    : [],
+  ...MOAT.rects.map((r) => ({
+    id: `OB-${r.id}`,
+    sourceType: 'water',
+    zone: 'F',
+    buildingId: r.id,
+    bounds: r.bounds,
+    y0: MOAT.waterY - MOAT.depth,
+    y1: MOAT.waterY,
+    blocks: 'all',
+    door: null,
+    note: '护城河水面：不可行走（桥面另行登记为可行走面）',
+  })),
+  {
+    id: 'OB-WB-F-pond-west',
+    sourceType: 'water',
+    zone: 'F',
+    buildingId: 'WB-F-pond-west',
+    bounds: b(-250, -150, 318, 392),
+    y0: -0.4,
+    y1: 0.05,
+    blocks: 'all',
+    door: null,
+    note: '御花园西水池：不可行走',
+  },
+  {
+    id: 'OB-WB-F-pond-east',
+    sourceType: 'water',
+    zone: 'F',
+    buildingId: 'WB-F-pond-east',
+    bounds: b(150, 250, 318, 392),
+    y0: -0.4,
+    y1: 0.05,
+    blocks: 'all',
+    door: null,
+    note: '御花园东水池：不可行走',
+  },
+  {
+    id: 'OB-WB-D-pond',
+    sourceType: 'water',
+    zone: 'D',
+    buildingId: 'WB-D-pond',
+    bounds: b(-188, -124, 16, 68),
+    y0: -0.2,
+    y1: 0.05,
+    blocks: 'all',
+    door: null,
+    note: '西侧服务院水池：不可行走（亭子单独登记）',
+  },
+  {
+    id: 'OB-WB-E-pond',
+    sourceType: 'water',
+    zone: 'E',
+    buildingId: 'WB-E-pond',
+    bounds: b(124, 188, 16, 68),
+    y0: -0.2,
+    y1: 0.05,
+    blocks: 'all',
+    door: null,
+    note: '东侧生活院水池：不可行走（水榭单独登记）',
+  },
+  {
+    id: 'OB-SC-F-rockery-west',
+    sourceType: 'rockery',
+    zone: 'F',
+    buildingId: 'SC-F-rockery-west',
+    bounds: b(-285, -255, 320, 360),
+    y0: 0.5,
+    y1: 7.2,
+    blocks: 'all',
+    door: null,
+    note: '御花园西假山：不可穿越',
+  },
+  {
+    id: 'OB-SC-F-rockery-east',
+    sourceType: 'rockery',
+    zone: 'F',
+    buildingId: 'SC-F-rockery-east',
+    bounds: b(255, 285, 320, 360),
+    y0: 0.5,
+    y1: 7.2,
+    blocks: 'all',
+    door: null,
+    note: '御花园东假山：不可穿越',
+  },
+]);
+
+/** 水体登记（渲染与反射用）。 */
+export const WATER_BODIES = deepFreeze([
+  ...MOAT.rects.map((r) => ({ id: r.id, kind: 'moat', owner: 'F', bounds: r.bounds, y: MOAT.waterY, depth: MOAT.depth })),
+  { id: 'WB-F-pond-west', kind: 'pond', owner: 'F', bounds: b(-250, -150, 318, 392), y: 0.05, depth: 0.45 },
+  { id: 'WB-F-pond-east', kind: 'pond', owner: 'F', bounds: b(150, 250, 318, 392), y: 0.05, depth: 0.45 },
+  { id: 'WB-D-pond', kind: 'pond', owner: 'D', bounds: b(-188, -124, 16, 68), y: 0.05, depth: 0.35 },
+  { id: 'WB-E-pond', kind: 'pond', owner: 'E', bounds: b(124, 188, 16, 68), y: 0.05, depth: 0.35 },
+]);
+
+/** 假山与点景（不属于有顶建筑，不计数）。 */
+export const SCENIC_OBJECTS = deepFreeze([
+  { id: 'SC-F-rockery-west', kind: 'rockery', owner: 'F', bounds: b(-285, -255, 320, 360), height: 7.2, styleRole: 'stoneWhite' },
+  { id: 'SC-F-rockery-east', kind: 'rockery', owner: 'F', bounds: b(255, 285, 320, 360), height: 7.2, styleRole: 'stoneWhite' },
+  { id: 'SC-F-garden-screen', kind: 'screenWall', owner: 'F', bounds: b(-60, 60, 330, 332), height: 3.2, styleRole: 'wallPrimary' },
+  { id: 'SC-B-plaza-drum', kind: 'drum', owner: 'B', bounds: b(-24, -18, -366, -360), height: 1.4, styleRole: 'metalGilt' },
+  { id: 'SC-B-plaza-bell', kind: 'bell', owner: 'B', bounds: b(18, 24, -366, -360), height: 1.4, styleRole: 'metalGilt' },
+]);
+
+/** 廊道段（按段统计，不计入建筑数量）。 */
+export const CORRIDORS = deepFreeze([
+  { id: 'CR-B-plaza-west', owner: 'B', name: '礼仪广场西廊庑', from: { x: -92, z: -374 }, to: { x: -92, z: -182 }, width: MODULES.corridorWidth, floors: 3 },
+  { id: 'CR-B-plaza-east', owner: 'B', name: '礼仪广场东廊庑', from: { x: 92, z: -374 }, to: { x: 92, z: -182 }, width: MODULES.corridorWidth, floors: 3 },
+  { id: 'CR-B-throne-west', owner: 'B', name: '主殿院西廊', from: { x: -92, z: -178 }, to: { x: -92, z: -42 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-B-throne-east', owner: 'B', name: '主殿院东廊', from: { x: 92, z: -178 }, to: { x: 92, z: -42 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-B-rear-west', owner: 'B', name: '后殿院西廊', from: { x: -92, z: -38 }, to: { x: -92, z: 76 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-B-rear-east', owner: 'B', name: '后殿院东廊', from: { x: 92, z: -38 }, to: { x: 92, z: 76 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-C-front-west', owner: 'C', name: '内廷一进西廊', from: { x: -80, z: 84 }, to: { x: -80, z: 138 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-C-front-east', owner: 'C', name: '内廷一进东廊', from: { x: 80, z: 84 }, to: { x: 80, z: 138 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-C-main-west', owner: 'C', name: '寝殿院西廊', from: { x: -90, z: 146 }, to: { x: -90, z: 212 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-C-main-east', owner: 'C', name: '寝殿院东廊', from: { x: 90, z: 146 }, to: { x: 90, z: 212 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-C-rear-west', owner: 'C', name: '后寝院西廊', from: { x: -90, z: 220 }, to: { x: -90, z: 296 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-C-rear-east', owner: 'C', name: '后寝院东廊', from: { x: 90, z: 220 }, to: { x: 90, z: 296 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-D-court1-south', owner: 'D', name: '礼乐院南廊', from: { x: -286, z: -384 }, to: { x: -200, z: -384 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-D-court2-south', owner: 'D', name: '书院院南廊', from: { x: -286, z: -222 }, to: { x: -120, z: -222 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-D-court3-south', owner: 'D', name: '服务院南廊', from: { x: -286, z: -62 }, to: { x: -120, z: -62 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-D-court4-south', owner: 'D', name: '西后院南廊', from: { x: -286, z: 98 }, to: { x: -120, z: 98 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-E-court1-south', owner: 'E', name: '文华院南廊', from: { x: 120, z: -390 }, to: { x: 286, z: -390 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-E-court2-south', owner: 'E', name: '陈设院南廊', from: { x: 120, z: -214 }, to: { x: 286, z: -214 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-E-court3-south', owner: 'E', name: '生活院南廊', from: { x: 120, z: -38 }, to: { x: 286, z: -38 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-E-court4-south', owner: 'E', name: '东后院南廊', from: { x: 120, z: 132 }, to: { x: 286, z: 132 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-F-garden-west', owner: 'F', name: '御花园西廊', from: { x: -120, z: 306 }, to: { x: -120, z: 392 }, width: MODULES.corridorWidth, floors: 1 },
+  { id: 'CR-F-garden-east', owner: 'F', name: '御花园东廊', from: { x: 120, z: 306 }, to: { x: 120, z: 392 }, width: MODULES.corridorWidth, floors: 1 },
+]);
+
+/* =============================================================================
+ * 十、WALLS：宫墙四段 + 院落墙（由院落 bounds 生成，自动开门洞）
+ * ========================================================================== */
+
+function segmentBox(from, to, thickness) {
+  const horizontal = Math.abs(to.x - from.x) >= Math.abs(to.z - from.z);
+  if (horizontal) {
+    return b(Math.min(from.x, to.x), Math.max(from.x, to.x), from.z - thickness / 2, from.z + thickness / 2);
+  }
+  return b(from.x - thickness / 2, from.x + thickness / 2, Math.min(from.z, to.z), Math.max(from.z, to.z));
+}
+
+/** 找出所有穿过该墙段且在墙段跨度内的开口（门洞槽位 / 跨区通道 / 道路段）。 */
+function computeOpenings(wall, from, to) {
+  const horizontal = Math.abs(to.x - from.x) >= Math.abs(to.z - from.z);
+  const line = horizontal ? from.z : from.x;
+  const lo = horizontal ? Math.min(from.x, to.x) : Math.min(from.z, to.z);
+  const hi = horizontal ? Math.max(from.x, to.x) : Math.max(from.z, to.z);
+  const found = [];
+
+  const consider = (source, point, width, kind, tol) => {
+    const along = horizontal ? point.x : point.z;
+    const across = horizontal ? point.z : point.x;
+    if (across < line - tol || across > line + tol) return;
+    if (along < lo - 1 || along > hi + 1) return;
+    found.push({ at: +along.toFixed(2), width, source, kind });
+  };
+
+  for (const s of SLOTS) {
+    if (!s.hasDoor) continue;
+    consider(s.id, { x: s.x, z: s.z }, s.doorWidth, 'gateSlot', 14);
+  }
+  for (const c of CONNECTORS) {
+    consider(c.id, c.position, c.width, 'connector', 10);
+  }
+  for (const r of ROADS) {
+    const from2 = { x: r.from.x, z: r.from.z };
+    const to2 = { x: r.to.x, z: r.to.z };
+    const crosses = horizontal
+      ? (from2.z - line) * (to2.z - line) <= 0 && from2.z !== to2.z
+      : (from2.x - line) * (to2.x - line) <= 0 && from2.x !== to2.x;
+    if (!crosses) continue;
+    const t = horizontal ? (line - from2.z) / (to2.z - from2.z) : (line - from2.x) / (to2.x - from2.x);
+    const at = horizontal ? from2.x + (to2.x - from2.x) * t : from2.z + (to2.z - from2.z) * t;
+    consider(r.id, horizontal ? { x: at, z: line } : { x: line, z: at }, r.width, 'road', 6);
+  }
+
+  found.sort((p, q) => p.at - q.at);
+  const merged = [];
+  for (const item of found) {
+    const last = merged[merged.length - 1];
+    if (last && Math.abs(last.at - item.at) <= 4) {
+      last.width = Math.max(last.width, item.width);
+      if (!last.sources.includes(item.source)) last.sources.push(item.source);
+      continue;
+    }
+    merged.push({ at: item.at, width: item.width, sources: [item.source], kind: item.kind });
+  }
+  return merged;
+}
+
+function makeWall(id, owner, kind, name, from, to, thickness, height, extra = {}) {
+  const box = segmentBox(from, to, thickness);
+  const wall = {
+    id,
+    owner,
+    kind,
+    name,
+    from,
+    to,
+    axis: Math.abs(to.x - from.x) >= Math.abs(to.z - from.z) ? 'x' : 'z',
+    thickness,
+    height,
+    bounds: box,
+    openings: [],
+    ...extra,
+  };
+  wall.openings = computeOpenings(wall, from, to);
+  return wall;
+}
+
+export const WALLS = deepFreeze([
+  makeWall('WALL-CITY-south', 'F', 'cityWall', '南段宫墙', { x: -304, z: -454 }, { x: 304, z: -454 }, CITY_WALL.thickness, CITY_WALL.height, { cityWall: true }),
+  makeWall('WALL-CITY-north', 'F', 'cityWall', '北段宫墙', { x: -304, z: 454 }, { x: 304, z: 454 }, CITY_WALL.thickness, CITY_WALL.height, { cityWall: true }),
+  makeWall('WALL-CITY-west', 'F', 'cityWall', '西段宫墙', { x: -304, z: -458 }, { x: -304, z: 458 }, CITY_WALL.thickness, CITY_WALL.height, { cityWall: true }),
+  makeWall('WALL-CITY-east', 'F', 'cityWall', '东段宫墙', { x: 304, z: -458 }, { x: 304, z: 458 }, CITY_WALL.thickness, CITY_WALL.height, { cityWall: true }),
+  ...COURTYARDS.flatMap((c) => {
+    const r = c.bounds;
+    return [
+      makeWall(`${c.id}-wall-south`, c.zone, 'courtWall', `${c.name}南墙`, { x: r.minX, z: r.minZ }, { x: r.maxX, z: r.minZ }, MODULES.courtyardWallThickness, MODULES.courtyardWallHeight, { courtyardId: c.id }),
+      makeWall(`${c.id}-wall-north`, c.zone, 'courtWall', `${c.name}北墙`, { x: r.minX, z: r.maxZ }, { x: r.maxX, z: r.maxZ }, MODULES.courtyardWallThickness, MODULES.courtyardWallHeight, { courtyardId: c.id }),
+      makeWall(`${c.id}-wall-west`, c.zone, 'courtWall', `${c.name}西墙`, { x: r.minX, z: r.minZ }, { x: r.minX, z: r.maxZ }, MODULES.courtyardWallThickness, MODULES.courtyardWallHeight, { courtyardId: c.id }),
+      makeWall(`${c.id}-wall-east`, c.zone, 'courtWall', `${c.name}东墙`, { x: r.maxX, z: r.minZ }, { x: r.maxX, z: r.maxZ }, MODULES.courtyardWallThickness, MODULES.courtyardWallHeight, { courtyardId: c.id }),
+    ];
+  }),
+]);
+
+/* =============================================================================
+ * 十一、VIEWPOINTS：八视角的机位登记（每区 1 zone + 1 fp-spawn；B/C 各加 1 interior）
+ * ========================================================================== */
+
+function VP(id, name, mode, area, position, target, opts = {}) {
+  return {
+    id,
+    name,
+    mode,
+    area,
+    position: { x: position[0], y: position[1], z: position[2] },
+    target: { x: target[0], y: target[1], z: target[2] },
+    fov: opts.fov ?? 45,
+    cameraMode: opts.cameraMode ?? null,
+    owner: opts.owner ?? area,
+    note: opts.note ?? '',
+  };
+}
+
+export const VIEWPOINTS = deepFreeze([
+  VP('VP-city-oblique', '全城鸟瞰', 'zone', 'city', [0, 520, -1180], [0, 30, -60], { fov: 45, cameraMode: 'oblique', owner: 't2', note: '首屏：南侧高位斜俯视，覆盖城墙、城门与护城河' }),
+  VP('VP-city-iso', '等距沙盘', 'zone', 'city', [900, 900, -900], [0, 20, 0], { fov: 35, cameraMode: 'iso', owner: 't2' }),
+  VP('VP-B-zone', '前朝分区机位', 'zone', 'B', [0, 150, -330], [0, 20, -120], { fov: 42, owner: 't6' }),
+  VP('VP-B-fp-spawn', '前朝第一人称出生点', 'fp-spawn', 'B', [-30, 1.65, -360], [0, 1.65, -300], { fov: 70, owner: 't6' }),
+  VP('VP-B-interior', '金銮殿内景', 'interior', 'B', [0, 6.15, -128], [0, 5.5, -100], { fov: 62, owner: 't6', note: '室内包围盒 x[-36,36] z[-134,-98]，限制在室内' }),
+  VP('VP-B-main-hall', '金銮殿近景', 'focus-extra', 'B', [0, 26, -230], [0, 8, -120], { fov: 38, owner: 't6', cameraMode: 'focus' }),
+  VP('VP-C-zone', '后宫分区机位', 'zone', 'C', [0, 150, -30], [0, 25, 190], { fov: 45, owner: 't7' }),
+  VP('VP-C-fp-spawn', '后宫第一人称出生点', 'fp-spawn', 'C', [-40, 2.55, 110], [0, 2.55, 170], { fov: 70, owner: 't7' }),
+  VP('VP-C-interior', '寝殿内景', 'interior', 'C', [0, 4.05, 157], [0, 3.5, 180], { fov: 60, owner: 't7', note: '室内包围盒 x[-27,27] z[154,182]' }),
+  VP('VP-C-bed-hall', '寝殿近景', 'focus-extra', 'C', [0, 22, -10], [0, 6, 168], { fov: 40, owner: 't7', cameraMode: 'focus' }),
+  VP('VP-D-zone', '西宫苑分区机位', 'zone', 'D', [-120, 110, -560], [-200, 10, -200], { fov: 42, owner: 't10' }),
+  VP('VP-D-fp-spawn', '西宫苑第一人称出生点', 'fp-spawn', 'D', [-160, 2.05, -318], [-180, 1.2, -340], { fov: 70, owner: 't10' }),
+  VP('VP-D-court1', '礼乐院近景', 'focus-extra', 'D', [-150, 26, -430], [-176, 4, -358], { fov: 45, owner: 't10', cameraMode: 'focus' }),
+  VP('VP-E-zone', '东宫苑分区机位', 'zone', 'E', [120, 110, -560], [200, 10, -200], { fov: 42, owner: 't11' }),
+  VP('VP-E-fp-spawn', '东宫苑第一人称出生点', 'fp-spawn', 'E', [160, 2.05, -320], [180, 1.2, -340], { fov: 70, owner: 't11' }),
+  VP('VP-E-court1', '文华院近景', 'focus-extra', 'E', [150, 26, -430], [196, 4, -364], { fov: 45, owner: 't11', cameraMode: 'focus' }),
+  VP('VP-F-zone', '御花园分区机位', 'zone', 'F', [0, 90, 180], [0, 10, 360], { fov: 45, owner: 't8' }),
+  VP('VP-F-fp-spawn', '御花园第一人称出生点', 'fp-spawn', 'F', [0, 2.15, 320], [0, 2.15, 360], { fov: 70, owner: 't8' }),
+  VP('VP-F-south-gate', '南城门近景', 'focus-extra', 'F', [0, 60, -640], [0, 14, -454], { fov: 40, owner: 't8', cameraMode: 'focus' }),
+  VP('VP-F-north-gate', '北城门近景', 'focus-extra', 'F', [0, 60, 660], [0, 14, 454], { fov: 40, owner: 't8', cameraMode: 'focus' }),
+]);
+
+export const VIEWPOINT_BY_ID = deepFreeze(
+  VIEWPOINTS.reduce((acc, v) => {
+    acc[v.id] = v;
+    return acc;
+  }, {}),
+);
+
+export function viewpointsByZone(zone) {
+  return VIEWPOINTS.filter((v) => v.area === zone);
+}
+
+/* =============================================================================
+ * 十二、导览点与第一人称走查路线（§6.2 中轴导览、§6.4 走查）
+ * ========================================================================== */
+
+export const TOUR_POINTS = deepFreeze([
+  { index: 1, id: 'TP-01', name: '南桥', zone: 'F', position: { x: 0, y: 46, z: -556 }, target: { x: 0, y: 10, z: -500 }, viewpointId: null, narration: '跨护城河石桥，望向南城门城楼。' },
+  { index: 2, id: 'TP-02', name: '南城门', zone: 'F', position: { x: 0, y: 52, z: -530 }, target: { x: 0, y: 14, z: -454 }, viewpointId: 'VP-F-south-gate', narration: '宫城正南门：城楼与门洞，进入即为前朝。' },
+  { index: 3, id: 'TP-03', name: '前朝门殿', zone: 'B', position: { x: 0, y: 40, z: -450 }, target: { x: 0, y: 10, z: -386 }, viewpointId: null, narration: '前朝门殿，中轴第一道宫门。' },
+  { index: 4, id: 'TP-04', name: '礼仪广场', zone: 'B', position: { x: 0, y: 36, z: -330 }, target: { x: 0, y: 8, z: -200 }, viewpointId: 'VP-B-zone', narration: '东西配殿与廊庑围合的礼仪大广场。' },
+  { index: 5, id: 'TP-05', name: '主殿台基', zone: 'B', position: { x: 0, y: 30, z: -230 }, target: { x: 0, y: 12, z: -120 }, viewpointId: 'VP-B-main-hall', narration: '三层白石台基，丹陛御道居中，金銮殿在顶。' },
+  { index: 6, id: 'TP-06', name: '金銮殿内景', zone: 'B', position: { x: 0, y: 6.15, z: -128 }, target: { x: 0, y: 5.5, z: -100 }, viewpointId: 'VP-B-interior', narration: '金砖地面、宝座、屏风、盘龙柱与藻井。' },
+  { index: 7, id: 'TP-07', name: '内廷门', zone: 'C', position: { x: 0, y: 26, z: 20 }, target: { x: 0, y: 8, z: 94 }, viewpointId: 'VP-C-zone', narration: '前朝与后宫的分界，尺度收敛、围合增强。' },
+  { index: 8, id: 'TP-08', name: '寝殿内景', zone: 'C', position: { x: 0, y: 4.05, z: 157 }, target: { x: 0, y: 3.5, z: 180 }, viewpointId: 'VP-C-interior', narration: '可进入的寝殿内景：床榻、屏风与金砖地面。' },
+  { index: 9, id: 'TP-09', name: '后宫', zone: 'C', position: { x: 0, y: 34, z: 120 }, target: { x: 0, y: 8, z: 258 }, viewpointId: 'VP-C-bed-hall', narration: '三进内廷院落与东西配房。' },
+  { index: 10, id: 'TP-10', name: '御花园', zone: 'F', position: { x: 0, y: 40, z: 250 }, target: { x: 0, y: 10, z: 380 }, viewpointId: 'VP-F-zone', narration: '中央亭阁、水池、假山与曲折步道，宫城北端收束。' },
+]);
+
+/** 第一人称走查路线（§6.4 必须可通）：南桥 → 南城门 → 前朝广场 → 主殿台基 → 金銮殿内景 → 内廷门 → 寝殿内景 → 御花园。 */
+export const FP_ROUTE = deepFreeze([
+  { index: 1, id: 'WP-fp-01', name: '南桥北端', zone: 'F', position: { x: 0, y: TERRAIN.bridgeDeckY + 1.65, z: -480 }, passes: ['CXN-bridge-south'], surfaceId: 'WK-F-bridge-south' },
+  { index: 2, id: 'WP-fp-02', name: '南城门内', zone: 'F', position: { x: 0, y: 2.05, z: -445 }, passes: ['CXN-gate-south'], surfaceId: 'WK-F-belt-south' },
+  { index: 3, id: 'WP-fp-03', name: '礼仪广场', zone: 'B', position: { x: 0, y: 1.65, z: -300 }, passes: ['CXN-F-B-south-belt', 'CXN-B-gate-front-opening'], surfaceId: 'WK-B-plaza' },
+  { index: 4, id: 'WP-fp-04', name: '主殿丹陛前', zone: 'B', position: { x: 0, y: 1.65, z: -190 }, passes: ['CXN-B-main-terrace-danbi'], surfaceId: 'WK-B-plaza' },
+  { index: 5, id: 'WP-fp-05', name: '主殿台基顶', zone: 'B', position: { x: 0, y: MODULES.terraceTotalHeight + 1.65, z: -146 }, passes: ['CXN-B-main-terrace-danbi'], surfaceId: 'WK-B-terrace-tier3' },
+  { index: 6, id: 'WP-fp-06', name: '金銮殿内景', zone: 'B', position: { x: 0, y: MODULES.terraceTotalHeight + 1.65, z: -110 }, passes: ['CXN-B-main-hall-door'], surfaceId: 'WK-B-hall-main-interior' },
+  { index: 7, id: 'WP-fp-07', name: '内廷门', zone: 'C', position: { x: 0, y: TERRAIN.innerGateTerraceY + 1.65, z: 95 }, passes: ['CXN-B-C-inner-gate'], surfaceId: 'WK-C-ground' },
+  { index: 8, id: 'WP-fp-08', name: '寝殿内景', zone: 'C', position: { x: 0, y: 4.05, z: 165 }, passes: ['CXN-C-bed-terrace-danbi', 'CXN-C-bed-hall-door'], surfaceId: 'WK-C-bed-interior' },
+  { index: 9, id: 'WP-fp-09', name: '御花园', zone: 'F', position: { x: 0, y: TERRAIN.gardenPathsY + 1.65, z: 340 }, passes: ['CXN-C-F-garden-west', 'CXN-C-F-garden-east'], surfaceId: 'WK-F-garden' },
+]);
+
+/* =============================================================================
+ * 十三、绿化、灯位与统计
+ * ========================================================================== */
+
+export const VEGETATION = deepFreeze([
+  { id: 'VEG-F-garden', zone: 'F', area: 'garden', treeCount: 64, blossomCount: 8, rngSeed: deriveSeed('F', 'garden'), densityPer1000m2: 2.4 },
+  { id: 'VEG-F-berm', zone: 'F', area: 'berm', treeCount: 40, blossomCount: 0, rngSeed: deriveSeed('F', 'berm'), densityPer1000m2: 0.6 },
+  { id: 'VEG-B-forecourt', zone: 'B', area: 'forecourt', treeCount: 10, blossomCount: 2, rngSeed: deriveSeed('B', 'trees'), densityPer1000m2: 0.15 },
+  { id: 'VEG-C-inner', zone: 'C', area: 'innerPalace', treeCount: 14, blossomCount: 4, rngSeed: deriveSeed('C', 'trees'), densityPer1000m2: 0.35 },
+  { id: 'VEG-D-west', zone: 'D', area: 'west', treeCount: 32, blossomCount: 6, rngSeed: deriveSeed('D', 'trees'), densityPer1000m2: 0.27 },
+  { id: 'VEG-E-east', zone: 'E', area: 'east', treeCount: 32, blossomCount: 6, rngSeed: deriveSeed('E', 'trees'), densityPer1000m2: 0.27 },
+]);
+
+function buildLanternAnchors() {
+  const out = [];
+  let i = 0;
+  for (let z = -390; z <= 300; z += 40) {
+    for (const x of [-9, 9]) {
+      i += 1;
+      out.push({ id: `LA-${String(i).padStart(3, '0')}`, zone: zoneAt(x, z) ?? 'F', kind: 'lantern', position: { x, y: 0, z }, height: 3.2, role: 'axisLantern' });
+    }
+  }
+  for (const g of [
+    [-92, 340],
+    [92, 340],
+    [-200, 356],
+    [200, 356],
+    [0, 386],
+    [-40, 396],
+    [40, 396],
+    [-106, -318],
+    [-106, 188],
+    [106, -320],
+    [106, 200],
+    [-92, 124],
+    [92, 124],
+  ]) {
+    i += 1;
+    const [x, z] = g;
+    out.push({ id: `LA-${String(i).padStart(3, '0')}`, zone: zoneAt(x, z) ?? 'F', kind: 'lantern', position: { x, y: 0, z }, height: 3.2, role: 'gardenOrCourtLantern' });
+  }
+  return out;
+}
+
+export const LIGHT_ANCHORS = deepFreeze(buildLanternAnchors());
+
+const countBy = (arr, key) =>
+  arr.reduce((acc, item) => {
+    const k = item[key];
+    acc[k] = (acc[k] ?? 0) + 1;
+    return acc;
+  }, {});
+
+/** 统计摘要：数量可由注册表核对，不得用廊段/拆件/重复编号虚增。 */
+export const LAYOUT_STATS = deepFreeze({
+  layoutVersion: LAYOUT_VERSION,
+  sceneSeed: SCENE_SEED,
+  envelope: ENVELOPE,
+  outerBounds: OUTER_BOUNDS,
+  wallOuterOverhang: WALL_OUTER_OVERHANG,
+  slotCount: SLOTS.length,
+  slotsByZone: countBy(SLOTS, 'zone'),
+  slotsByKind: countBy(SLOTS, 'kind'),
+  visitableCount: SLOTS.filter((s) => s.visitable).length,
+  visitableSlots: SLOTS.filter((s) => s.visitable).map((s) => s.id),
+  courtyardCount: COURTYARDS.length,
+  courtyardsByArea: countBy(COURTYARDS, 'area'),
+  connectorCount: CONNECTORS.length,
+  connectorsByKind: countBy(CONNECTORS, 'kind'),
+  roadCount: ROADS.length,
+  roadLength: +ROADS.reduce((sum, r) => sum + r.length, 0).toFixed(1),
+  wallSegmentCount: WALLS.length,
+  cityWallSegmentCount: WALLS.filter((w) => w.cityWall).length,
+  courtyardWallCount: WALLS.filter((w) => w.kind === 'courtWall').length,
+  corridorCount: CORRIDORS.length,
+  walkableCount: WALKABLE.length,
+  obstacleCount: OBSTACLES.length,
+  waterBodyCount: WATER_BODIES.length,
+  viewpointCount: VIEWPOINTS.length,
+  tourPointCount: TOUR_POINTS.length,
+  fpRouteCount: FP_ROUTE.length,
+  lanternCount: LIGHT_ANCHORS.length,
+  drawCallBudget: Object.freeze(
+    ZONES.reduce((acc, z) => {
+      acc[z.id] = z.drawCallBudget;
+      return acc;
+    }, {}),
+  ),
+});
+
+export default deepFreeze({
+  LAYOUT_VERSION,
+  ENVELOPE,
+  CENTRAL_X,
+  FORECOURT_Z,
+  INNER_PALACE_Z,
+  GARDEN_Z,
+  WALL_OUTER_OVERHANG,
+  OUTER_BOUNDS,
+  TERRAIN_EXTENT,
+  CITY_WALL,
+  MOAT,
+  BRIDGES,
+  ZONES,
+  SLOTS,
+  SLOT_BY_ID,
+  COURTYARDS,
+  CONNECTORS,
+  ROADS,
+  TERRACES,
+  WALKABLE,
+  OBSTACLES,
+  WATER_BODIES,
+  SCENIC_OBJECTS,
+  CORRIDORS,
+  WALLS,
+  VIEWPOINTS,
+  TOUR_POINTS,
+  FP_ROUTE,
+  VEGETATION,
+  LIGHT_ANCHORS,
+  LAYOUT_STATS,
+});

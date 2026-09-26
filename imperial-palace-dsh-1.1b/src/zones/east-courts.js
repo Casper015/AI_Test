@@ -1,0 +1,851 @@
+/**
+ * E 区 · 东侧宫苑（计划 §5.4 / CONTRACTS §3 / STYLE_GUIDE §3–§5）
+ * =============================================================================
+ * 四组可识别院落，各含院门、主屋（正殿/正堂）、配房与连接步道：
+ *   CY-E-court1 文华院（文华殿 + 南厢 + 院门）、CY-E-court2 陈设院（陈设正堂 + 北房 + 院门）、
+ *   CY-E-court3 生活院（生活主屋 + 南房 + 东耳房 + 院门 + **水池与水榭**）、
+ *   CY-E-court4 东后院（东后殿 + 南厢 + 院门 + 角亭）。
+ * 布局分配给 E 的 **15 个槽位**全部落地（id 与 `layout.SLOTS` 逐一对应，不新增、不扩张边界）。
+ * 院落内墙（16 段）、院内道路与步道、水池石岸、树木与灯位均由本区负责；外宫墙 / 城门 / 护城河 /
+ * 桥与外水系归 F，本区不实现、不越界（仅按 layout 的道路段把铺装铺到 `x=291` / `z=290` 的路端）。
+ *
+ * 与西侧 D 的统一与差异（计划 §5.4）：
+ *   · 统一：同一套 kit 构件 + config 令牌（模数/色板/屋顶等级白名单由 kit 强校验），
+ *     主屋 grade 2 歇山、配房 grade 1 硬山、亭 grade 1 攒尖——与 D 完全同源（layout 冻结同一批参数）；
+ *   · 差异（本区主动设计的"装饰语言"，不是体量镜像）：E 以**水景生活院**为主题——
+ *     生活院中央 64m×52m 水池（`WB-E-pond`）+ 池上水榭 + 石岸 + 池畔香炉，
+ *     两处院门加**影壁**（照壁）形成"进门见屏"的东侧宫苑动线，
+ *     南北主道（`RD-E-ring-road`）+ 四院院前路构成"一轴四院"的联系，
+ *     32 株乔（含 6 株花树）沿院墙内侧成列、8 座宫灯（含院门与池畔）。
+ *     体量（开间/进深/等级）来自 layout 冻结数据，因此与 D 的"镜像"关系只在体量层面；
+ *     本区的装饰、水景与植被布置为 E 专属，D 区由 t10 独立设计，两区装饰不共用一份脚本。
+ *   · 主题名称（文华/陈设/生活/东后）仅作展示设定，不作史实断言。
+ *
+ * 竖直定位：E 区地坪 `TERRAIN.sideCourtY = 0.4`（`WK-E-ground.y`、`VP-E-fp-spawn.y = 2.05 = 0.4 + 1.65`），
+ * 而 `SLOTS.baseY` 是相对区域基准 0 的估值 → 与 C 区同样抬到地坪上：`baseY(kit) = 0.4 + 槽位 terraceH`。
+ * 自检见 `tests/zone-east.test.mjs`（11/15 栋 `|kit 檐口 −(layout 估值 + 0.4)| ≤ 6mm`，其余为无台基亭）。
+ *
+ * 成批策略：构件单档（`lod:'mid'`，不逐栋三档 LOD —— 理由与实测对照见 `docs/handoff-east-courts.md` §2.6），
+ * 末端一次 `kit.mergeZone(root)`。E 区分区预算 40，实测 39（明细见回执）。
+ *
+ * 契约来源：docs/CONTRACTS.md §3（返回值/ctx）、§4（建筑字段）、§5（机位）、§6（碰撞）、§8.3（灯位）。
+ */
+
+import { CONFIG } from '../shared/config.js';
+import { rampsFromRoads } from '../core/layout-slice.js';
+
+export const ZONE_ID = 'E';
+export const ZONE_VERSION = '1.0.0';
+export const ZONE_KIND = 'eastCourts';
+
+/**
+ * 屋身形制：**直接使用槽位 kind**（`hall` / `sideHall` / `courtyardGate` / `pavilion`）。
+ * kit 在 t22 之后把"门洞 / 屋顶形制 / 窗 / 门扇开合"解耦（src/kit/geometry.js buildBody 注释）：
+ * 正立面门洞只由 `door`（或 `doorOpening/openFront`）决定，因此 `courtyardGate` 也会按
+ * `layout.OBSTACLES` 登记的 `door.width` 留出真实门洞——本区不再需要任何分支替换或开启比覆盖。
+ */
+
+/** 主体构件细节档：E 区 15 栋全部 `mid`（实测：任何一栋取 mid 都会引入同一套部件桶，
+ *  其余栋取 mid 不再增加绘制批次，只增加三角面 ~6k/15 栋，远低于 150 万预算）。 */
+const BUILDING_DETAIL = 'mid';
+
+/** 铺装厚度 / 水池水片厚度（kit.water 的水片固定 6cm 厚，故底面标高 = 水面 − 该值）。 */
+const SCREEN_WALL_COURTS = Object.freeze(['CY-E-court2', 'CY-E-court3']);
+
+const round = (v) => Math.round(v * 1000) / 1000;
+
+function pointToSegmentDistance(x, z, from, to) {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const len2 = dx * dx + dz * dz;
+  if (len2 === 0) return Math.hypot(x - from.x, z - from.z);
+  let t = ((x - from.x) * dx + (z - from.z) * dz) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(x - (from.x + dx * t), z - (from.z + dz * t));
+}
+
+function insideRect(bounds, x, z, margin = 0) {
+  return x >= bounds.minX - margin && x <= bounds.maxX + margin && z >= bounds.minZ - margin && z <= bounds.maxZ + margin;
+}
+
+/** 沿墙轴向的实心段（门洞之间），绝对世界坐标；供碰撞盒使用。 */
+function wallSolidSpans(wall) {
+  const horizontal = wall.axis === 'x';
+  const lo = horizontal ? Math.min(wall.from.x, wall.to.x) : Math.min(wall.from.z, wall.to.z);
+  const hi = horizontal ? Math.max(wall.from.x, wall.to.x) : Math.max(wall.from.z, wall.to.z);
+  const gaps = (wall.openings ?? [])
+    .map((o) => [o.at - o.width / 2, o.at + o.width / 2])
+    .sort((a, b) => a[0] - b[0]);
+  const spans = [];
+  let cursor = lo;
+  for (const [a, b] of gaps) {
+    const start = Math.max(lo, a);
+    if (start > cursor + 0.05) spans.push([round(cursor), round(start)]);
+    cursor = Math.max(cursor, Math.min(hi, b));
+  }
+  if (hi > cursor + 0.05) spans.push([round(cursor), round(hi)]);
+  return spans;
+}
+
+/**
+ * 区域入口（CONTRACTS §3.1）；返回值逐字段满足 §3.3。
+ * @param {object} ctx 由 `src/core/context.js` 构造
+ */
+export async function createZone(ctx) {
+  if (!ctx || !ctx.THREE) throw new Error('east-courts: 需要 ctx.THREE（同一份 three，不得另装一份）');
+  const THREE = ctx.THREE;
+  const config = ctx.config ?? CONFIG;
+  const zone = ctx.zoneLayout;
+  if (!zone) throw new Error('east-courts: ctx.zoneLayout 缺失（由 src/core/context.js 提供）');
+  const kit = ctx.kit;
+  if (!kit || typeof kit.terrace !== 'function') throw new Error('east-courts: ctx.kit 缺失（CONTRACTS §3.4）');
+  const helpers = zone.helpers ?? {};
+  const quality = ctx.quality ?? config.QUALITY.default;
+
+  const TERRAIN = config.TERRAIN;
+  const MODULES = config.MODULES;
+  const INTERACTION = config.INTERACTION;
+  const PLANTS = config.PLANTS;
+  const groundY = TERRAIN.sideCourtY;
+  const playerHeadroom = round(INTERACTION.player.height + MODULES.stairsStepHeight);
+  const pavingThickness = MODULES.plinthHeightMin;
+  const waterSlabThickness = round(MODULES.stairsStepHeight * 0.4); // 0.06 = kit.water 水片厚
+
+  const root = new THREE.Group();
+  root.name = `zone-root:${ZONE_ID}`;
+  root.userData.zoneId = ZONE_ID;
+  root.userData.zoneVersion = ZONE_VERSION;
+
+  const buildings = [];
+  const stats = {};
+  const buildingFacts = [];
+
+  /* ---- 构件装配工具 ---- */
+
+  /** 铺地：优先 `kit.paving`（t3 额外工厂）；灰盒替身没有该工厂时用 `kit.terrace` 薄层兜底。 */
+  function slab({ id, name, x, z, w, d, y, thickness, material }) {
+    if (typeof kit.paving === 'function') {
+      const mesh = kit.paving({ id, name, x, z, w, d, y, thickness, material, detail: 'mid' });
+      root.add(mesh);
+      return mesh;
+    }
+    const mesh = kit.terrace({
+      id,
+      name,
+      bounds: { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 },
+      x,
+      y0: round(y - thickness),
+      z,
+      w,
+      d,
+      y1: y,
+      railing: false,
+      detail: 'mid',
+    });
+    root.add(mesh);
+    return mesh;
+  }
+
+  /** 实体（台基/石岸/水榭基座）：统一的 kit.terrace 薄/厚层。 */
+  function solid({ id, name, bounds, y0, y1 }) {
+    const mesh = kit.terrace({
+      id,
+      name,
+      bounds: { ...bounds },
+      x: round((bounds.minX + bounds.maxX) / 2),
+      z: round((bounds.minZ + bounds.maxZ) / 2),
+      w: round(bounds.maxX - bounds.minX),
+      d: round(bounds.maxZ - bounds.minZ),
+      y0,
+      y1,
+      railing: false,
+      detail: 'mid',
+    });
+    root.add(mesh);
+    return mesh;
+  }
+
+  function countMeshes(object) {
+    let n = 0;
+    object.traverse((node) => {
+      if (node.isMesh || node.isPoints || node.isLine) n += 1;
+    });
+    return n;
+  }
+
+  function countTriangles(object) {
+    if (typeof kit.countTriangles === 'function') return kit.countTriangles(object);
+    let tris = 0;
+    object.traverse((node) => {
+      if (!node.isMesh) return;
+      const count = node.geometry?.index ? node.geometry.index.count : node.geometry?.attributes?.position?.count ?? 0;
+      tris += Math.floor(count / 3);
+    });
+    return tris;
+  }
+
+  /* ========================================================================
+   *  0. 读取件（优先 zoneLayout；院墙沿用 owner 兜底，水池取 zoneLayout 的水体障碍）
+   * ====================================================================== */
+
+  const slots = zone.slots ?? [];
+  const courtyards = zone.courtyards ?? [];
+  const roads = zone.roads ?? [];
+  const corridors = zone.corridors ?? [];
+  const obstaclesFromLayout = zone.obstacles ?? [];
+  const vegetation = (zone.vegetation ?? [])[0] ?? null;
+
+  // 院墙：`zoneLayout.courtyardWalls` 由 layout-slice 以 `w.zone` 过滤而 WALLS 只有 `owner` → 恒空。
+  // 优先用切片，为空时按 owner 回退到同一份冻结 layout（不改共享文件，与 C 区同一处理）。
+  const courtyardWalls = (zone.courtyardWalls ?? []).length > 0
+    ? zone.courtyardWalls
+    : ((ctx.layout ?? {}).WALLS ?? []).filter((w) => w.kind === 'courtWall' && w.owner === zone.id);
+
+  // 水体：`zoneLayout` 不含 waterBodies，但把水体登记为障碍（`OB-WB-E-pond`，sourceType='water'），
+  // 其 bounds/y0/y1 即池界与水面/池底标高 → 只用 zoneLayout 即可建造；测试再与 layout.WATER_BODIES 交叉校验。
+  const waterObstacle = obstaclesFromLayout.find((o) => o.sourceType === 'water') ?? null;
+
+  /** 本区槽位按 id 查（灯位/影壁定位用）。 */
+  function slotById(id) {
+    return slots.find((s) => s.id === id) ?? null;
+  }
+
+  /* ========================================================================
+   *  1. 建筑（15 槽位；参数直接展开槽位对象，字段逐条回显 layout）
+   * ====================================================================== */
+
+  for (const slot of slots) {
+    const baseY = round(groundY + slot.terraceH);
+    const params = { ...slot, quality, lod: BUILDING_DETAIL, baseY };
+    const factory = slot.kind;
+    if (typeof kit[factory] !== 'function') throw new Error(`east-courts: kit.${factory} 缺失（CONTRACTS §3.4）`);
+    const object = kit[factory](params);
+    object.name = `building:${slot.id}`;
+    root.add(object);
+
+    const anchor = new THREE.Object3D();
+    anchor.name = `building-anchor:${slot.id}`;
+    anchor.position.set(slot.x, baseY, slot.z);
+    anchor.userData.buildingId = slot.id;
+    anchor.userData.kind = slot.kind;
+    root.add(anchor);
+
+    const record = { ...slot, anchor };
+    const worldBounds = object.userData?.kit?.worldBounds ?? null;
+    if (worldBounds) record.worldBounds = { ...worldBounds };
+    buildings.push(record);
+
+    const m = object.userData?.kit?.metrics ?? null;
+    if (m) {
+      const tris = typeof m.triangles === 'object' && m.triangles !== null ? Math.max(...Object.values(m.triangles)) : m.triangles;
+      buildingFacts.push({
+        id: slot.id,
+        kind: slot.kind,
+        bodyBranch: factory,
+        detail: BUILDING_DETAIL,
+        baseY,
+        terraceH: slot.terraceH,
+        groundLevel: round(baseY - slot.terraceH),
+        eaveHeightAbsolute: m.eaveHeightAbsolute ?? null,
+        roofType: m.roofType ?? slot.roofType,
+        doorWidth: m.doorWidth ?? 0,
+        triangles: tris ?? null,
+        worldBounds: worldBounds ? { ...worldBounds } : null,
+      });
+    }
+  }
+
+  /* ========================================================================
+   *  2. 地面与步道（水池处留洞；道路按 layout 段铺成浅色条带）
+   * ====================================================================== */
+
+  const zoneMinX = zone.bounds ? zone.bounds.minX : 100;
+  const zoneMaxX = zone.bounds ? zone.bounds.maxX : 300;
+  const zoneMinZ = zone.bounds ? zone.bounds.minZ : -400;
+  const zoneMaxZ = zone.bounds ? zone.bounds.maxZ : 300;
+
+  let groundPieces = 0;
+  if (waterObstacle) {
+    const wb = waterObstacle.bounds;
+    const pieces = [
+      { id: 'C', minX: zoneMinX, maxX: zoneMaxX, minZ: zoneMinZ, maxZ: wb.minZ }, // 池北整片
+      { id: 'S', minX: zoneMinX, maxX: zoneMaxX, minZ: wb.maxZ, maxZ: zoneMaxZ }, // 池南整片
+      { id: 'W', minX: zoneMinX, maxX: wb.minX, minZ: wb.minZ, maxZ: wb.maxZ }, // 池西
+      { id: 'E', minX: wb.maxX, maxX: zoneMaxX, minZ: wb.minZ, maxZ: wb.maxZ }, // 池东
+    ];
+    for (const piece of pieces) {
+      if (piece.maxX - piece.minX < 0.01 || piece.maxZ - piece.minZ < 0.01) continue;
+      slab({
+        id: `E-ground-${piece.id}`,
+        name: '东宫苑地面',
+        x: round((piece.minX + piece.maxX) / 2),
+        z: round((piece.minZ + piece.maxZ) / 2),
+        w: round(piece.maxX - piece.minX),
+        d: round(piece.maxZ - piece.minZ),
+        y: groundY,
+        thickness: pavingThickness,
+        material: 'pavingStone',
+      });
+      groundPieces += 1;
+    }
+  } else {
+    slab({
+      id: 'E-ground',
+      name: '东宫苑地面',
+      x: round((zoneMinX + zoneMaxX) / 2),
+      z: round((zoneMinZ + zoneMaxZ) / 2),
+      w: round(zoneMaxX - zoneMinX),
+      d: round(zoneMaxZ - zoneMinZ),
+      y: groundY,
+      thickness: pavingThickness,
+      material: 'pavingStone',
+    });
+    groundPieces = 1;
+  }
+  stats.groundPieces = groundPieces;
+
+  // 2.2 步道 / 主道：layout 的平地道路段（courtPath / paving / gardenPath）铺成同宽浅色条带
+  const stripSurfaces = new Set(['courtPath', 'paving', 'gardenPath']);
+  let stripCount = 0;
+  for (const road of roads) {
+    if (!stripSurfaces.has(road.surface)) continue;
+    const horizontal = Math.abs(road.to.x - road.from.x) >= Math.abs(road.to.z - road.from.z);
+    slab({
+      id: `E-road-${road.id}`,
+      name: road.name,
+      x: round((road.from.x + road.to.x) / 2),
+      z: round((road.from.z + road.to.z) / 2),
+      w: horizontal ? round(Math.abs(road.to.x - road.from.x)) : road.width,
+      d: horizontal ? road.width : round(Math.abs(road.to.z - road.from.z)),
+      y: round(Math.max(road.from.y, road.to.y) + 0.02),
+      thickness: pavingThickness,
+      material: 'pavingLight',
+    });
+    stripCount += 1;
+  }
+
+  // 2.3 内廷侧门 → 东宫苑的缓步台阶（layout 把 RD-C-E-east-steps 归 E；上端接 C 区铺装 x=100）
+  const sideStepsConnector = typeof helpers.getConnector === 'function' ? helpers.getConnector('CXN-C-E-side-east') : null;
+  if (sideStepsConnector) {
+    const rise = round(sideStepsConnector.elevation - (sideStepsConnector.elevationLow ?? groundY));
+    const steps = kit.stairs({
+      id: 'E-stairs-inner-side-gate',
+      name: sideStepsConnector.name,
+      x: sideStepsConnector.position.x,
+      z: sideStepsConnector.position.z,
+      width: sideStepsConnector.width,
+      rise,
+      baseY: sideStepsConnector.elevationLow ?? groundY, // 台阶自下端起算，上端 = C 区地坪
+      rotationYDeg: config.ORIENTATION.rotationYDeg.east, // 正面朝东 → 台阶向 +X 下降（进东宫苑）
+      imperialRamp: false, // 侧门踏道，不是丹陛
+      detail: 'mid',
+    });
+    root.add(steps);
+    stats.sideSteps = 1;
+  }
+  stats.roadStrips = stripCount;
+
+  /* ========================================================================
+   *  3. 院落内墙（16 段，layout.WALLS.kind='courtWall', owner='E'）+ 影壁
+   * ====================================================================== */
+
+  const wallObstacles = [];
+  const wallOpenings = [];
+  for (const wall of courtyardWalls) {
+    const horizontal = wall.axis === 'x';
+    const mid = horizontal ? (wall.from.x + wall.to.x) / 2 : (wall.from.z + wall.to.z) / 2;
+    const openings = (wall.openings ?? []).map((o) => {
+      const atX = horizontal ? o.at : wall.from.x;
+      const atZ = horizontal ? wall.from.z : o.at;
+      const localFloor = (typeof helpers.floorYAt === 'function' ? helpers.floorYAt(atX, atZ) : null) ?? groundY;
+      const needed = round(localFloor + playerHeadroom - groundY);
+      const height = Math.min(wall.height, Math.max(round(wall.height * 0.62), needed));
+      wallOpenings.push({ wallId: wall.id, axis: wall.axis, position: { x: atX, z: atZ }, width: o.width, height, floorY: localFloor, neededHeight: needed });
+      return { at: round(o.at - mid), width: o.width, height };
+    });
+    const mesh = kit.wall({
+      id: wall.id,
+      name: wall.name,
+      from: { ...wall.from },
+      to: { ...wall.to },
+      thickness: wall.thickness,
+      height: wall.height,
+      baseY: groundY,
+      openings,
+      detail: 'far', // kit.wall 仅"压顶脊线"按 detail 分支；省下的批次留给分区预算
+    });
+    root.add(mesh);
+
+    // 院墙实心段碰撞（layout.OBSTACLES 未登记院墙；院墙是 E 自己负责的实体边界）
+    for (const [i, [a, b]] of wallSolidSpans(wall).entries()) {
+      wallObstacles.push({
+        id: `OB-${wall.id}-span${i + 1}`,
+        sourceType: 'wall',
+        zone: ZONE_ID,
+        buildingId: wall.id,
+        bounds: horizontal
+          ? { minX: a, maxX: b, minZ: round(wall.from.z - wall.thickness / 2), maxZ: round(wall.from.z + wall.thickness / 2) }
+          : { minX: round(wall.from.x - wall.thickness / 2), maxX: round(wall.from.x + wall.thickness / 2), minZ: a, maxZ: b },
+        y0: groundY,
+        y1: round(groundY + wall.height),
+        blocks: 'all',
+        door: null,
+        note: `院墙实心段（${wall.name}）；门洞见 layout.WALLS.${wall.id}.openings`,
+      });
+    }
+  }
+  stats.courtyardWalls = courtyardWalls.length;
+
+  // 3.2 影壁（照壁）：两处院门内侧的屏壁，是 E 区"进门见屏"的东侧宫苑动线（与 D 区装饰相区分）
+  const screenWalls = [];
+  for (const courtId of SCREEN_WALL_COURTS) {
+    const courtyard = courtyards.find((c) => c.id === courtId);
+    if (!courtyard) continue;
+    const gate = (courtyard.gates ?? []).map((id) => slotById(id)).find(Boolean);
+    if (!gate) continue;
+    // 影壁立在院门**内侧**（门东侧一个台明宽处），面宽覆盖门洞
+    const x = round(gate.x + gate.w / 2 + MODULES.plinthWidth);
+    const half = round(MODULES.bayPitch * 1.6);
+    const wall = kit.wall({
+      id: `E-screenwall-${courtId}`,
+      name: `${courtyard.name}影壁`,
+      from: { x, z: round(gate.z - half) },
+      to: { x, z: round(gate.z + half) },
+      thickness: MODULES.courtyardWallThickness,
+      height: MODULES.courtyardWallHeight,
+      baseY: groundY,
+      detail: 'far',
+    });
+    root.add(wall);
+    screenWalls.push({ id: `E-screenwall-${courtId}`, x, z: gate.z, half, court: courtId, gate: gate.id });
+    wallObstacles.push({
+      id: `OB-E-screenwall-${courtId}-span1`,
+      sourceType: 'wall',
+      zone: ZONE_ID,
+      buildingId: `E-screenwall-${courtId}`,
+      bounds: {
+        minX: round(x - MODULES.courtyardWallThickness / 2),
+        maxX: round(x + MODULES.courtyardWallThickness / 2),
+        minZ: round(gate.z - half),
+        maxZ: round(gate.z + half),
+      },
+      y0: groundY,
+      y1: round(groundY + MODULES.courtyardWallHeight),
+      blocks: 'all',
+      door: null,
+      note: '院门内侧影壁（照壁）：正面阻挡，绕行入院',
+    });
+  }
+  stats.screenWalls = screenWalls.length;
+  stats.wallObstacles = wallObstacles.length;
+
+  /* ========================================================================
+   *  4. 廊庑（4 段 CR-E-*，四院围合）
+   * ====================================================================== */
+
+  for (const corridor of corridors) {
+    const mesh = kit.corridor({
+      id: corridor.id,
+      name: corridor.name,
+      from: { ...corridor.from },
+      to: { ...corridor.to },
+      width: corridor.width,
+      floors: corridor.floors,
+      baseY: groundY,
+      grade: 1,
+      detail: 'mid',
+    });
+    root.add(mesh);
+  }
+  stats.corridors = corridors.length;
+
+  /* ========================================================================
+   *  5. 水池（WB-E-pond：水片 + 石岸 + 水榭基座）
+   * ====================================================================== */
+
+  const pondSummary = {};
+  if (waterObstacle) {
+    const wb = waterObstacle.bounds;
+    const waterY = waterObstacle.y1;
+    const pondBottom = waterObstacle.y0;
+    const centerX = round((wb.minX + wb.maxX) / 2);
+    const centerZ = round((wb.minZ + wb.maxZ) / 2);
+    const pondW = round(wb.maxX - wb.minX);
+    const pondD = round(wb.maxZ - wb.minZ);
+    // 水片：优先 kit.water（t3 的水体工厂，y 参数是水片底面）；替身没有该工厂时用 kit.paving + waterSurface 材质。
+    // 两者都设 userData.waterSurface = true 并压入 ctx.shared.water —— 环境系统统一做微波（本区不自建第二套水面动画）。
+    const waterMesh = typeof kit.water === 'function'
+      ? kit.water({ id: 'E-pond-water', name: '生活院水池', x: centerX, z: centerZ, w: pondW, d: pondD, y: round(waterY - waterSlabThickness), detail: 'mid' })
+      : slab({ id: 'E-pond-water', name: '生活院水池', x: centerX, z: centerZ, w: pondW, d: pondD, y: waterY, thickness: waterSlabThickness, material: 'waterSurface' });
+    root.add(waterMesh);
+    waterMesh.userData.waterSurface = true;
+    waterMesh.name = waterMesh.name || 'E-pond-water';
+    if (Array.isArray(ctx.shared?.water)) ctx.shared.water.push(waterMesh);
+    // 石岸：池界内侧一圈白石压边（顶 = 东宫苑地坪，侧面落到水面）
+    const rimW = MODULES.plinthWidth + MODULES.courtyardWallThickness;
+    for (const [i, rim] of [
+      { minX: wb.minX, maxX: round(wb.minX + rimW), minZ: wb.minZ, maxZ: wb.maxZ },
+      { minX: round(wb.maxX - rimW), maxX: wb.maxX, minZ: wb.minZ, maxZ: wb.maxZ },
+      { minX: wb.minX, maxX: wb.maxX, minZ: wb.minZ, maxZ: round(wb.minZ + rimW) },
+      { minX: wb.minX, maxX: wb.maxX, minZ: round(wb.maxZ - rimW), maxZ: wb.maxZ },
+    ].entries()) {
+      solid({ id: `E-pond-rim-${i + 1}`, name: '水池石岸', bounds: rim, y0: waterY, y1: groundY });
+    }
+    // 水榭基座：把亭子立于水面上（亭自带台明在 地面~地面+terraceH，基座补 水面~地面 一段）
+    const pavilion = buildings.find((b) => b.id === 'E-court3-pavilion') ?? null;
+    if (pavilion) {
+      const expand = MODULES.plinthWidth;
+      solid({
+        id: 'E-pond-pavilion-base',
+        name: '水榭基座',
+        bounds: {
+          minX: round(pavilion.bounds.minX - expand),
+          maxX: round(pavilion.bounds.maxX + expand),
+          minZ: round(pavilion.bounds.minZ - expand),
+          maxZ: round(pavilion.bounds.maxZ + expand),
+        },
+        y0: waterY,
+        y1: groundY,
+      });
+      pondSummary.pavilionBase = 'E-pond-pavilion-base';
+    }
+    pondSummary.id = waterObstacle.buildingId;
+    pondSummary.bounds = { ...wb };
+    pondSummary.waterY = waterY;
+    pondSummary.bottomY = pondBottom;
+    pondSummary.waterMesh = 'E-pond-water';
+  }
+  stats.pond = pondSummary;
+
+  /* ========================================================================
+   *  6. 绿化（layout.VEGETATION：32 株 / 花树 6 株，种子固定可复现）
+   * ====================================================================== */
+
+  const trees = [];
+  if (vegetation && typeof kit.tree === 'function') {
+    const rng = typeof ctx.rng?.fork === 'function' ? ctx.rng.fork('trees') : null;
+    const clearance = round(MODULES.plinthWidth * 1.5);
+    const blocked = (x, z) => {
+      for (const slot of slots) if (insideRect(slot.bounds, x, z, clearance)) return true;
+      if (waterObstacle && insideRect(waterObstacle.bounds, x, z, clearance)) return true;
+      for (const road of roads) {
+        if (pointToSegmentDistance(x, z, road.from, road.to) < road.width / 2 + clearance) return true;
+      }
+      for (const corridor of corridors) {
+        if (pointToSegmentDistance(x, z, corridor.from, corridor.to) < corridor.width / 2 + clearance) return true;
+      }
+      for (const wall of courtyardWalls) {
+        if (pointToSegmentDistance(x, z, wall.from, wall.to) < wall.thickness / 2 + clearance) return true;
+      }
+      for (const screen of screenWalls) {
+        if (Math.abs(x - screen.x) < clearance + MODULES.courtyardWallThickness && Math.abs(z - screen.z) < screen.half + clearance) return true;
+      }
+      return false;
+    };
+    const count = vegetation.treeCount ?? PLANTS.densityPerCourt;
+    const blossoms = Math.min(vegetation.blossomCount ?? 0, count);
+    const sizes = Object.keys(PLANTS.treeHeights);
+    let guard = 0;
+    while (rng && trees.length < count && guard < 12000) {
+      guard += 1;
+      const cy = courtyards[trees.length % Math.max(1, courtyards.length)];
+      if (!cy) break;
+      const b = cy.bounds;
+      const x = rng.range(b.minX + 8, b.maxX - 8);
+      const z = rng.range(b.minZ + 8, b.maxZ - 8);
+      if (blocked(x, z)) continue;
+      if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < MODULES.bayPitch * 1.2)) continue;
+      trees.push({ x: round(x), z: round(z) });
+    }
+    // 逐株的确定性规格（尺寸/朝向/花树）——实例化时用等比缩放表达"乔木尺度 5.5/9/13.5m"（树几何对高度线性相似）
+    for (const [i, spot] of trees.entries()) {
+      const size = rng ? rng.pick(sizes) : sizes[0];
+      spot.size = size;
+      spot.blossom = i < blossoms;
+      spot.yaw = round(rng ? rng.range(0, Math.PI * 2) : 0);
+    }
+  }
+
+  /* ---- 树群用 kit.instance 实例化（队长口径：重复构件用实例化；3 次调用覆盖 32 株） ---- */
+  const treeInstances = [];
+  const templateGeometries = [];
+  if (trees.length > 0) {
+    const sizeKeys = Object.keys(PLANTS.treeHeights);
+    const baseSize = sizeKeys.includes('medium') ? 'medium' : sizeKeys[0];
+    const baseHeight = PLANTS.treeHeights[baseSize];
+    const foliageShape = PLANTS.canopyShapes[1] ?? PLANTS.canopyShapes[0];
+    const blossomShape = PLANTS.canopyShapes[2] ?? PLANTS.canopyShapes[0];
+    const canInstance = typeof kit.instance === 'function' && kit.__fallback !== true;
+    if (!canInstance) {
+      // 灰盒替身的 instance 不支持逐实例矩阵 → 退回逐株建造（仅测试替身路径；真 kit 永远走实例化）
+      for (const spot of trees) {
+        const mesh = kit.tree({
+          id: `E-tree-${spot.x}-${spot.z}`,
+          x: spot.x,
+          z: spot.z,
+          y: groundY,
+          height: PLANTS.treeHeights[spot.size],
+          size: spot.size,
+          canopyShape: spot.blossom ? blossomShape : foliageShape,
+          blossom: spot.blossom,
+          detail: 'mid',
+        });
+        root.add(mesh);
+      }
+      stats.treeBuild = 'per-tree(fallback kit)';
+    } else {
+      const makeTemplate = (blossom) => {
+        const tpl = kit.tree({
+          id: `E-tree-template-${blossom ? 'blossom' : 'leaf'}`,
+          x: 0,
+          z: 0,
+          y: 0,
+          height: baseHeight,
+          size: baseSize,
+          canopyShape: blossom ? blossomShape : foliageShape,
+          blossom,
+          detail: 'mid',
+        });
+        tpl.traverse((node) => {
+          if (node.isMesh && node.geometry?.userData?.kitOwned === true) templateGeometries.push(node.geometry);
+        });
+        return tpl;
+      };
+      const leafTemplate = makeTemplate(false);
+      const blossomTemplate = trees.some((t) => t.blossom) ? makeTemplate(true) : null;
+      const pick = (tpl, part) => {
+        let found = null;
+        tpl?.traverse((node) => {
+          if (!found && node.isMesh && node.userData?.part === part) found = node;
+        });
+        return found;
+      };
+      const trunkMesh = pick(leafTemplate, 'trunk');
+      const leafCanopyMesh = pick(leafTemplate, 'canopy');
+      const blossomCanopyMesh = blossomTemplate ? pick(blossomTemplate, 'canopy') : null;
+      const position = new THREE.Vector3();
+      const quaternion = new THREE.Quaternion();
+      const euler = new THREE.Euler();
+      const scale = new THREE.Vector3();
+      const composeAt = (m, spot) => {
+        const s = round(PLANTS.treeHeights[spot.size] / baseHeight);
+        euler.set(0, spot.yaw, 0);
+        quaternion.setFromEuler(euler);
+        position.set(spot.x, groundY, spot.z);
+        scale.set(s, s, s);
+        m.compose(position, quaternion, scale);
+        return m;
+      };
+      const addInstances = (mesh, spots, name) => {
+        if (!mesh || spots.length === 0) return;
+        const instanced = kit.instance(mesh, spots.length, (i, m) => composeAt(m, spots[i]), { name });
+        instanced.name = name;
+        instanced.userData.part = mesh.userData?.part ?? 'tree'; // 与逐株路径同名的部位标记（诊断/统计用）
+        instanced.userData.instancedFrom = mesh.name ?? name;
+        instanced.castShadow = true;
+        instanced.receiveShadow = true;
+        root.add(instanced);
+        treeInstances.push({ name, count: spots.length, part: instanced.userData.part });
+      };
+      addInstances(trunkMesh, trees, 'E-trees-trunk');
+      addInstances(leafCanopyMesh, trees.filter((t) => !t.blossom), 'E-trees-canopy-leaf');
+      addInstances(blossomCanopyMesh, trees.filter((t) => t.blossom), 'E-trees-canopy-blossom');
+      stats.treeBuild = 'instanced(kit.instance)';
+    }
+  }
+  stats.treeInstances = treeInstances;
+  stats.trees = trees.length;
+  stats.blossomTrees = trees.filter((t) => t.blossom).length;
+
+  /* ========================================================================
+   *  7. 灯位与灯体（layout.LIGHT_ANCHORS 的 E 区条目 + 院门/池畔 6 座）
+   * ====================================================================== */
+
+  const lightAnchors = (zone.lightAnchors ?? []).map((a) => ({ ...a, position: { ...a.position } }));
+  const extraLampSpots = [];
+  for (const courtyard of courtyards) {
+    const gate = (courtyard.gates ?? []).map((id) => slotById(id)).find(Boolean);
+    if (!gate) continue;
+    extraLampSpots.push({ x: round(gate.x - MODULES.bayPitch), z: gate.z, role: 'courtGateLantern', court: courtyard.id });
+  }
+  if (waterObstacle) {
+    const wb = waterObstacle.bounds;
+    for (const z of [round((wb.minZ + wb.maxZ) / 2 - MODULES.bayPitch * 1.5), round((wb.minZ + wb.maxZ) / 2 + MODULES.bayPitch * 1.5)]) {
+      extraLampSpots.push({ x: round(wb.minX - MODULES.bayPitch), z, role: 'pondLantern', court: 'CY-E-court3' });
+    }
+  }
+  for (const [i, spot] of extraLampSpots.entries()) {
+    lightAnchors.push({
+      id: `LA-E-extra-${String(i + 1).padStart(2, '0')}`,
+      zone: ZONE_ID,
+      kind: 'lantern',
+      position: { x: spot.x, y: groundY, z: spot.z },
+      height: 3.2,
+      role: spot.role,
+    });
+  }
+  if (typeof kit.lantern === 'function') {
+    for (const anchor of lightAnchors) {
+      // 灯体立在灯位处的实际地坪上（layout 锚点 y=0 是"区域基准"，东宫苑地坪为 0.4）
+      const surfaceY = typeof helpers.floorYAt === 'function' ? helpers.floorYAt(anchor.position.x, anchor.position.z) : null;
+      const mesh = kit.lantern({
+        id: `E-lamp-${anchor.id}`,
+        x: anchor.position.x,
+        y: surfaceY ?? groundY,
+        z: anchor.position.z,
+        height: anchor.height,
+        kind: 'post',
+        detail: 'far', // 灯座/灯杆/灯身三件；灯罩/灯珠/灯架三个批次留给水池与院门
+      });
+      root.add(mesh);
+    }
+  }
+  stats.lanternMeshes = lightAnchors.length;
+
+  /* ========================================================================
+   *  8. 陈设摆件（铜器：四院各 1 件，位于主屋前的御路两侧）
+   * ====================================================================== */
+
+  const bronzes = [];
+  if (typeof kit.bronze === 'function') {
+    for (const courtyard of courtyards) {
+      const hallId = slots.find((s) => s.zone === ZONE_ID && s.courtyard === courtyard.id && s.kind === 'hall')?.id ?? null;
+      const hall = hallId ? buildings.find((b) => b.id === hallId) : null;
+      if (!hall) continue;
+      const facingWest = hall.facing === 'west';
+      const frontX = facingWest ? round(hall.x - hall.w / 2 - MODULES.plinthWidth) : round(hall.x + hall.w / 2 + MODULES.plinthWidth);
+      const mesh = kit.bronze({
+        id: `E-bronze-${courtyard.id}`,
+        kind: 'vessel',
+        x: frontX,
+        y: groundY,
+        z: hall.z,
+        detail: 'far',
+      });
+      root.add(mesh);
+      bronzes.push({ id: `E-bronze-${courtyard.id}`, x: frontX, z: hall.z, court: courtyard.id });
+    }
+  }
+  stats.bronzes = bronzes.length;
+  stats.bronzeSpots = bronzes;
+
+  /* ========================================================================
+   *  9. 整区合批（跨建筑 × 同材质同部位）——§8.2 分区预算
+   * ====================================================================== */
+
+  stats.preMergeMeshes = countMeshes(root);
+  stats.preMergeTriangles = countTriangles(root);
+  if (typeof kit.mergeZone === 'function') {
+    const merged = kit.mergeZone(root, { name: `zone-batch:${ZONE_ID}` });
+    stats.merge = merged?.stats ?? null;
+  }
+  stats.drawCalls = typeof kit.countDrawCalls === 'function' ? kit.countDrawCalls(root) : countMeshes(root);
+  stats.triangles = countTriangles(root);
+  stats.drawCallBudget = zone.drawCallBudget ?? config.BUDGET.drawCalls.perZone[ZONE_ID];
+
+  /* ========================================================================
+   * 10. 碰撞 / 连接 / 机位（回显 layout，院墙与影壁补充实心段）
+   * ====================================================================== */
+
+  const connectors = (zone.connectors ?? []).map((c) => ({ ...c, position: { ...c.position } }));
+  // 障碍回显 + 两处按"世界坐标正确阻挡"的必要修正（回执 §2.8 缺陷 6/7）：
+  //   · layout 的 y0 = 槽位 baseY（按"区域基准 0"估的台基顶）；E 区地坪为 0.4，主屋台基 0.9~1.0，
+  //     若原值回显，障碍盒底部会高出地面 0.5~0.6，垂直判定会放行"从建筑下方穿入" → 下钳到地坪（y1 不动）；
+  //   · layout 的水体障碍盒是"水体本身"（顶面 0.05 < 地坪 0.4），无法拦人 → 池面另补一条地面高度拦阻盒。
+  const layoutObstacles = obstaclesFromLayout.map((o) => ({
+    ...o,
+    bounds: { ...o.bounds },
+    y0: Math.min(o.y0, groundY),
+  }));
+  if (waterObstacle) {
+    layoutObstacles.push({
+      id: 'OB-E-pond-guard',
+      sourceType: 'water',
+      zone: ZONE_ID,
+      buildingId: waterObstacle.buildingId,
+      bounds: { ...waterObstacle.bounds },
+      y0: groundY,
+      y1: round(groundY + INTERACTION.player.height + MODULES.stairsStepHeight),
+      blocks: 'all',
+      door: null,
+      note: '水池地面高度拦阻（水体障碍盒顶面低于地坪，无法用垂直判定拦人）',
+    });
+  }
+  const colliders = {
+    obstacles: [...layoutObstacles, ...wallObstacles],
+    walkable: (zone.walkable ?? []).map((w) => ({ ...w, bounds: { ...w.bounds } })),
+    ramps: rampsFromRoads(roads).map((r) => ({ ...r })),
+  };
+  const viewpoints = (zone.viewpoints ?? []).map((v) => ({ ...v, position: { ...v.position }, target: { ...v.target } }));
+
+  Object.assign(stats, {
+    zone: ZONE_ID,
+    zoneVersion: ZONE_VERSION,
+    buildings: buildings.length,
+    connectors: connectors.length,
+    obstacles: colliders.obstacles.length,
+    walkable: colliders.walkable.length,
+    ramps: colliders.ramps.length,
+    viewpoints: viewpoints.length,
+    viewpointsByMode: viewpoints.reduce((acc, v) => {
+      acc[v.mode] = (acc[v.mode] ?? 0) + 1;
+      return acc;
+    }, {}),
+    lightAnchors: lightAnchors.length,
+    groundY,
+    buildingFacts,
+    wallOpenings,
+    kitSource: kit.__fallback === true ? 'fallback(greybox)' : `kit ${kit.version ?? '?'}`,
+  });
+
+  /* ========================================================================
+   * 11. update / dispose
+   * ====================================================================== */
+
+  let disposed = false;
+  let elapsed = 0;
+
+  return {
+    root,
+    buildings,
+    connectors,
+    colliders,
+    viewpoints,
+    lightAnchors,
+    /**
+     * 只累计时间：水池微波、灯焰、烟雾全部由 `src/core/environment.js` 的统一系统驱动
+     * （CONTRACTS §3.3 / §8.3「区域不得另建第二套灯光系统 / 第二套水面动画」）。
+     */
+    update(dtSeconds /* , elapsedSeconds, state */) {
+      if (Number.isFinite(dtSeconds)) elapsed += dtSeconds;
+    },
+    /**
+     * 只释放自有几何（`geometry.userData.kitOwned === true`）；共享 kit 材质/贴图归 t3 + core，
+     * 绝不在此销毁。树群模板几何（未挂到 root 的实例化来源）一并释放，用 seen 集合避免重复 dispose。
+     */
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      const seen = new Set();
+      root.traverse((node) => {
+        if (!node.isMesh) return;
+        const geometry = node.geometry;
+        if (geometry?.userData?.kitOwned !== true || seen.has(geometry)) return;
+        seen.add(geometry);
+        geometry.dispose();
+      });
+      for (const geometry of templateGeometries) {
+        if (!geometry || seen.has(geometry)) continue;
+        seen.add(geometry);
+        geometry.dispose();
+      }
+      root.clear();
+    },
+    stats,
+    get elapsedSeconds() {
+      return elapsed;
+    },
+  };
+}
+
+export default createZone;

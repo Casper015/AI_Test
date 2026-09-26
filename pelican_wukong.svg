@@ -1,0 +1,384 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1920" height="1200" viewBox="0 0 1920 1200">
+  <defs>
+    <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16324f"/>
+      <stop offset="0.35" stop-color="#4f83b3"/>
+      <stop offset="0.68" stop-color="#a7d0e8"/>
+      <stop offset="1" stop-color="#f7d9a8"/>
+    </linearGradient>
+    <radialGradient id="sunGrad" cx="0.5" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#fff8c9"/>
+      <stop offset="0.45" stop-color="#ffe27a"/>
+      <stop offset="1" stop-color="#f6b73c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="planeBody" x1="0" y1="0" x2="0.2" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#dbe7ef"/>
+      <stop offset="1" stop-color="#9fb5c7"/>
+    </linearGradient>
+    <linearGradient id="wingGrad" x1="0" y1="0" x2="0.45" y2="1">
+      <stop offset="0" stop-color="#f9fcff"/>
+      <stop offset="0.55" stop-color="#c9dbe8"/>
+      <stop offset="1" stop-color="#8fa8bb"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff2a8"/>
+      <stop offset="0.35" stop-color="#ffd54a"/>
+      <stop offset="0.7" stop-color="#d99a16"/>
+      <stop offset="1" stop-color="#a96700"/>
+    </linearGradient>
+    <linearGradient id="beakGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="0.55" stop-color="#f9a03f"/>
+      <stop offset="1" stop-color="#e06b16"/>
+    </linearGradient>
+    <linearGradient id="bearFur" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#e9f2f7"/>
+      <stop offset="1" stop-color="#b9cdd9"/>
+    </linearGradient>
+    <linearGradient id="glassGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d9fbff" stop-opacity="0.85"/>
+      <stop offset="0.45" stop-color="#7ed9f2" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#2c6b8f" stop-opacity="0.45"/>
+    </linearGradient>
+    <linearGradient id="bubbleGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffef8"/>
+      <stop offset="1" stop-color="#fff2d2"/>
+    </linearGradient>
+    <pattern id="rivets" width="34" height="34" patternUnits="userSpaceOnUse">
+      <circle cx="6" cy="6" r="1.6" fill="#5e7285" opacity="0.45"/>
+    </pattern>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#0b1a2b" flood-opacity="0.35"/>
+    </filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <g id="wheel">
+      <circle r="43" fill="none" stroke="#1f2a33" stroke-width="9"/>
+      <circle r="35" fill="none" stroke="#dce6ee" stroke-width="3"/>
+      <circle r="7" fill="#edf3f7" stroke="#405463" stroke-width="3"/>
+      <g stroke="#aebdca" stroke-width="2">
+        <line x1="0" y1="-41" x2="0" y2="41"/>
+        <line x1="0" y1="-41" x2="29" y2="29"/>
+        <line x1="0" y1="-41" x2="41" y2="0"/>
+        <line x1="0" y1="-41" x2="29" y2="-29"/>
+        <line x1="0" y1="-41" x2="-29" y2="29"/>
+        <line x1="0" y1="-41" x2="-41" y2="0"/>
+        <line x1="0" y1="-41" x2="-29" y2="-29"/>
+        <line x1="0" y1="-41" x2="-9" y2="-40"/>
+      </g>
+    </g>
+    <g id="cloud">
+      <path d="M -90 16 C -116 -5 -105 -43 -72 -50 C -62 -84 -14 -98 18 -77 C 44 -108 101 -101 116 -66 C 153 -66 170 -27 145 3 C 130 26 104 24 80 30 L -55 30 C -76 28 -88 24 -90 16 Z"
+            fill="#ffffff" opacity="0.75"/>
+    </g>
+  </defs>
+
+  <rect width="1920" height="1200" fill="url(#skyGrad)"/>
+  <circle cx="250" cy="175" r="130" fill="url(#sunGrad)"/>
+  <use xlink:href="#cloud" transform="translate(350 150) scale(1.25)" opacity="0.7"/>
+  <use xlink:href="#cloud" transform="translate(980 120) scale(0.9)" opacity="0.55"/>
+  <use xlink:href="#cloud" transform="translate(1720 210) scale(1.05)" opacity="0.5"/>
+  <use xlink:href="#cloud" transform="translate(520 780) scale(0.8)" opacity="0.35"/>
+  <use xlink:href="#cloud" transform="translate(1500 900) scale(1.4)" opacity="0.35"/>
+  <path d="M 80 620 C 280 560, 430 640, 620 590" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.28"/>
+  <path d="M 1380 740 C 1530 690, 1680 760, 1830 700" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.25"/>
+
+  <path d="M 245 285 C 470 130, 800 80, 1030 165 L 930 212 C 705 150, 455 185, 255 325 Z"
+        fill="#a9c4dc" opacity="0.72" stroke="#7d9bb4" stroke-width="3"/>
+
+  <path d="M 120 306 L 58 76 L 258 252 Z" fill="url(#planeBody)" stroke="#7d95a8" stroke-width="4"/>
+  <path d="M 58 76 L 34 66 L 132 300 Z" fill="#d94b45" opacity="0.92"/>
+  <path d="M 165 300 L 20 232 L 132 308 Z" fill="#d9e5ee" stroke="#8099ad" stroke-width="3"/>
+  <path d="M 150 250 L 44 104 L 82 98 Z" fill="#ffd54a" opacity="0.9"/>
+
+  <path d="M 70 303 C 120 232, 300 198, 525 182 C 665 172, 795 150, 862 182 C 908 204, 904 240, 850 262 C 710 333, 382 352, 183 341 C 111 338, 64 327, 70 303 Z"
+        fill="url(#planeBody)" stroke="#7d95a8" stroke-width="4" filter="url(#drop)"/>
+  <path d="M 94 306 C 250 330, 610 310, 840 248" fill="none" stroke="#ffffff" stroke-width="6" opacity="0.75"/>
+  <path d="M 120 275 C 340 255, 610 225, 820 210" fill="none" stroke="#b7c9d8" stroke-width="2"/>
+
+  <g fill="#95d8f2" stroke="#5a788d" stroke-width="2">
+    <rect x="205" y="238" width="28" height="18" rx="7"/>
+    <rect x="254" y="232" width="28" height="18" rx="7"/>
+    <rect x="303" y="226" width="28" height="18" rx="7"/>
+    <rect x="352" y="221" width="28" height="18" rx="7"/>
+    <rect x="401" y="217" width="28" height="18" rx="7"/>
+    <rect x="450" y="214" width="28" height="18" rx="7"/>
+    <rect x="499" y="212" width="28" height="18" rx="7"/>
+    <rect x="548" y="211" width="28" height="18" rx="7"/>
+  </g>
+  <text x="330" y="303" transform="rotate(-7 330 303)" font-family="'Noto Serif SC','Songti SC','Microsoft YaHei',serif"
+        font-size="29" font-weight="700" fill="#c62828" letter-spacing="4">齐天大圣号</text>
+  <text x="650" y="296" transform="rotate(-12 650 296)" font-family="'Noto Serif SC','Songti SC','Microsoft YaHei',serif"
+        font-size="15" fill="#8a4b00" opacity="0.9">悟空航空 · 万钧号</text>
+
+  <g id="cockpit-pilot">
+    <path d="M 728 240 C 718 201, 748 168, 792 162 C 830 157, 858 180, 856 216 C 854 249, 818 268, 780 264 C 750 261, 735 253, 728 240 Z"
+          fill="#c47d3d"/>
+    <circle cx="742" cy="205" r="18" fill="#a9602a"/>
+    <circle cx="846" cy="205" r="18" fill="#a9602a"/>
+    <ellipse cx="793" cy="208" rx="47" ry="45" fill="#bf7437"/>
+    <ellipse cx="793" cy="218" rx="31" ry="24" fill="#f0c58e"/>
+    <path d="M 744 194 C 748 150, 840 150, 844 194" fill="#7a3f1b"/>
+    <path d="M 744 184 C 766 162, 820 162, 844 184" fill="none" stroke="#ffd54a" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="793" cy="169" r="5" fill="#fff2a8" stroke="#b27b05" stroke-width="2"/>
+    <ellipse cx="773" cy="202" rx="11" ry="9" fill="#fff"/>
+    <ellipse cx="813" cy="202" rx="11" ry="9" fill="#fff"/>
+    <circle cx="773" cy="203" r="5" fill="#c1121f"/>
+    <circle cx="813" cy="203" r="5" fill="#c1121f"/>
+    <circle cx="774.8" cy="200.8" r="1.7" fill="#ffffff"/>
+    <circle cx="814.8" cy="200.8" r="1.7" fill="#ffffff"/>
+    <path d="M 780 225 Q 793 234 806 225" fill="none" stroke="#6d3417" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M 752 266 C 760 242, 775 232, 793 232 C 814 232, 830 244, 838 268 L 744 268 Z"
+          fill="#b71c1c" stroke="#ffd54a" stroke-width="2"/>
+    <path d="M 758 244 C 738 252, 722 262, 712 252" fill="none" stroke="#bf7437" stroke-width="10" stroke-linecap="round"/>
+    <path d="M 830 244 C 848 252, 858 260, 866 250" fill="none" stroke="#bf7437" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="852" cy="252" r="15" fill="none" stroke="#2c3e50" stroke-width="6"/>
+  </g>
+  <path d="M 692 218 C 722 164, 815 156, 868 188 C 896 206, 886 249, 850 267 C 798 292, 718 275, 692 238 Z"
+        fill="url(#glassGrad)" stroke="#b9efff" stroke-width="4"/>
+  <path d="M 708 213 C 742 184, 805 173, 848 191" fill="none" stroke="#ffffff" stroke-width="5" opacity="0.75"/>
+  <text x="806" y="292" font-family="'Noto Serif SC','Songti SC','Microsoft YaHei',serif" font-size="16" fill="#7a3f1b" opacity="0.9">齐天大圣</text>
+
+  <g>
+    <path d="M 648 624 C 700 584, 842 592, 878 636 L 856 716 C 800 754, 682 748, 636 706 Z"
+          fill="#d3e0e9" stroke="#70889d" stroke-width="4"/>
+    <ellipse cx="660" cy="656" rx="22" ry="38" fill="#8fb4cf" stroke="#4e6a82" stroke-width="5"/>
+    <ellipse cx="660" cy="656" rx="11" ry="21" fill="#30485b"/>
+    <path d="M 706 610 C 760 596, 830 602, 858 628" fill="none" stroke="#ffffff" stroke-width="5" opacity="0.8"/>
+    <path d="M 1204 700 C 1256 664, 1392 674, 1428 718 L 1404 798 C 1348 832, 1238 824, 1192 784 Z"
+          fill="#d3e0e9" stroke="#70889d" stroke-width="4"/>
+    <ellipse cx="1216" cy="734" rx="22" ry="38" fill="#8fb4cf" stroke="#4e6a82" stroke-width="5"/>
+    <ellipse cx="1216" cy="734" rx="11" ry="21" fill="#30485b"/>
+  </g>
+
+  <path d="M 330 300 C 650 330, 950 430, 1200 465 C 1450 500, 1700 570, 1900 610 L 1880 770 C 1500 820, 950 720, 600 590 C 450 535, 360 430, 330 300 Z"
+        fill="url(#wingGrad)" stroke="#71899d" stroke-width="5" filter="url(#drop)"/>
+  <path d="M 346 304 C 660 340, 955 436, 1205 471 C 1455 506, 1705 575, 1888 616"
+        fill="none" stroke="#ffffff" stroke-width="7" opacity="0.75"/>
+  <path d="M 390 360 C 680 392, 980 472, 1240 510 C 1490 548, 1700 610, 1868 660"
+        fill="none" stroke="#8da4b7" stroke-width="3" opacity="0.8"/>
+  <path d="M 466 466 C 760 512, 1050 568, 1320 618 C 1540 658, 1710 700, 1858 744"
+        fill="none" stroke="#8da4b7" stroke-width="3" opacity="0.7"/>
+  <path d="M 640 560 C 900 606, 1160 648, 1420 696 C 1580 724, 1720 756, 1846 792"
+        fill="none" stroke="#9db1c2" stroke-width="2" opacity="0.7"/>
+  <path d="M 330 300 C 650 330, 950 430, 1200 465 C 1450 500, 1700 570, 1900 610 L 1880 770 C 1500 820, 950 720, 600 590 C 450 535, 360 430, 330 300 Z"
+        fill="url(#rivets)" opacity="0.6"/>
+  <path d="M 1785 602 L 1896 630 L 1882 702 L 1770 670 Z" fill="#d94b45" opacity="0.92"/>
+  <path d="M 1810 618 L 1870 634" fill="none" stroke="#ffd54a" stroke-width="5"/>
+
+  <g filter="url(#drop)">
+    <path d="M 876 480 C 900 466, 1200 466, 1234 484 L 1228 501 C 1180 490, 920 492, 876 501 Z" fill="url(#goldGrad)"/>
+    <path d="M 915 500 L 900 542 L 934 542 L 939 498 Z" fill="#c28a0a"/>
+    <path d="M 1170 500 L 1158 546 L 1192 546 L 1198 498 Z" fill="#c28a0a"/>
+    <path d="M 876 480 C 900 466, 1200 466, 1234 484" fill="none" stroke="#fff2a8" stroke-width="3"/>
+  </g>
+
+  <use xlink:href="#wheel" transform="translate(950 438)"/>
+  <use xlink:href="#wheel" transform="translate(1140 438)"/>
+  <g fill="none" stroke="#c62828" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 950 438 L 1026 438 L 1005 354 Z"/>
+    <path d="M 950 438 L 1005 354"/>
+    <path d="M 1026 438 L 1122 352"/>
+    <path d="M 1005 354 L 1122 352"/>
+    <path d="M 1122 352 L 1140 438"/>
+  </g>
+  <path d="M 992 352 Q 1005 338 1021 352" fill="none" stroke="#28323b" stroke-width="9" stroke-linecap="round"/>
+  <path d="M 1115 346 Q 1134 328 1150 340" fill="none" stroke="#28323b" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="1026" cy="438" r="17" fill="#d9e5ee" stroke="#53697b" stroke-width="4"/>
+  <circle cx="1026" cy="438" r="5" fill="#53697b"/>
+  <path d="M 1026 438 L 1130 438" fill="none" stroke="#63798b" stroke-width="3" stroke-dasharray="4 4"/>
+  <path d="M 1014 455 L 1038 455" fill="none" stroke="#374b5c" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 1012 421 L 1040 421" fill="none" stroke="#374b5c" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 998 452 Q 989 466 1005 474 Q 1017 470 1018 458 Z" fill="#f39c12" stroke="#b95f00" stroke-width="2"/>
+  <path d="M 1040 418 Q 1052 430 1036 438 Q 1024 434 1022 423 Z" fill="#f39c12" stroke="#b95f00" stroke-width="2"/>
+
+  <g>
+    <path d="M 1006 302 C 918 234, 808 170, 646 154 C 696 246, 804 318, 976 350 Z"
+          fill="#f8fcff" stroke="#7893a8" stroke-width="4" filter="url(#drop)"/>
+    <path d="M 955 314 C 865 260, 770 205, 672 172" fill="none" stroke="#c3d5e2" stroke-width="3"/>
+    <path d="M 925 322 C 838 278, 750 232, 668 195" fill="none" stroke="#c3d5e2" stroke-width="3"/>
+    <path d="M 884 326 C 800 294, 724 254, 660 220" fill="none" stroke="#c3d5e2" stroke-width="3"/>
+    <path d="M 646 154 C 672 182, 700 207, 733 227" fill="none" stroke="#ffffff" stroke-width="5" opacity="0.9"/>
+    <path d="M 1064 302 C 1160 326, 1372 410, 1608 526 C 1494 380, 1308 290, 1102 342 Z"
+          fill="#f3f9fd" stroke="#7893a8" stroke-width="4" filter="url(#drop)"/>
+    <path d="M 1110 318 C 1210 350, 1370 420, 1536 500" fill="none" stroke="#c2d4e2" stroke-width="3"/>
+    <path d="M 1150 330 C 1250 368, 1390 432, 1528 494" fill="none" stroke="#c2d4e2" stroke-width="3"/>
+    <path d="M 1190 342 C 1280 382, 1400 438, 1518 488" fill="none" stroke="#c2d4e2" stroke-width="3"/>
+    <path d="M 1608 526 C 1570 488, 1530 450, 1488 416" fill="none" stroke="#ffffff" stroke-width="6" opacity="0.9"/>
+
+    <path d="M 970 352 C 920 334, 866 322, 842 350 C 876 378, 928 390, 978 378 Z"
+          fill="#f9fcff" stroke="#7893a8" stroke-width="3"/>
+    <path d="M 888 350 C 924 352, 952 360, 972 370" fill="none" stroke="#c3d5e2" stroke-width="3"/>
+
+    <path d="M 964 340 C 952 288, 982 252, 1035 250 C 1084 248, 1112 278, 1106 324 C 1100 362, 1064 384, 1018 380 C 984 377, 968 360, 964 340 Z"
+          fill="#fdfefe" stroke="#6b8599" stroke-width="5" filter="url(#drop)"/>
+    <path d="M 982 330 C 1000 350, 1050 362, 1092 342" fill="none" stroke="#d5e2ea" stroke-width="4"/>
+    <path d="M 977 300 C 1010 314, 1055 318, 1094 300" fill="none" stroke="#d5e2ea" stroke-width="3"/>
+
+    <path d="M 1042 278 C 1070 246, 1102 220, 1118 190 L 1158 198 C 1148 240, 1126 282, 1092 312 Z"
+          fill="#fdfefe" stroke="#6b8599" stroke-width="4"/>
+    <path d="M 1104 202 C 1098 168, 1122 150, 1150 152 C 1178 154, 1188 184, 1174 208 C 1161 230, 1118 226, 1104 202 Z"
+          fill="#fdfefe" stroke="#6b8599" stroke-width="4"/>
+    <path d="M 1120 170 C 1140 158, 1168 168, 1178 184" fill="none" stroke="#d5e2ea" stroke-width="3"/>
+    <circle cx="1147" cy="183" r="5" fill="#1f2933"/>
+    <circle cx="1145.5" cy="181.5" r="1.7" fill="#ffffff"/>
+
+    <path d="M 1152 178 C 1198 172, 1258 186, 1304 212 C 1258 214, 1202 202, 1158 194 Z"
+          fill="url(#beakGrad)" stroke="#c66a13" stroke-width="3"/>
+    <path d="M 1158 194 C 1188 220, 1238 250, 1282 240 C 1310 233, 1316 218, 1304 212 C 1260 216, 1202 202, 1158 194 Z"
+          fill="#f7b731" stroke="#c66a13" stroke-width="3"/>
+    <path d="M 1174 205 C 1204 226, 1244 244, 1274 238" fill="none" stroke="#ffd98a" stroke-width="3" opacity="0.8"/>
+    <path d="M 1298 208 C 1310 204, 1318 208, 1316 218" fill="none" stroke="#9d4a08" stroke-width="3"/>
+
+    <path d="M 1002 360 C 992 396, 996 430, 1000 456" fill="none" stroke="#e67e22" stroke-width="9" stroke-linecap="round"/>
+    <path d="M 1056 360 C 1060 396, 1058 420, 1048 440" fill="none" stroke="#e67e22" stroke-width="9" stroke-linecap="round"/>
+    <path d="M 988 450 Q 974 468 997 478 Q 1012 474 1013 459 Z" fill="#f39c12" stroke="#b95f00" stroke-width="2"/>
+    <path d="M 1036 434 Q 1054 444 1038 453 Q 1022 450 1020 438 Z" fill="#f39c12" stroke="#b95f00" stroke-width="2"/>
+  </g>
+
+  <path d="M 958 266 C 996 244, 1085 244, 1128 270" fill="none" stroke="#d4a017" stroke-width="13" stroke-linecap="round"/>
+  <path d="M 958 266 C 996 244, 1085 244, 1128 270" fill="none" stroke="#fff2a8" stroke-width="4" stroke-linecap="round"/>
+
+  <g id="polar-bear">
+    <path d="M 1006 260 C 996 222, 1014 186, 1056 180 C 1098 174, 1128 196, 1132 226 C 1135 248, 1116 262, 1084 264 L 1022 264 C 1008 264, 1002 262, 1006 260 Z"
+          fill="url(#bearFur)" stroke="#8ea7b8" stroke-width="4"/>
+    <path d="M 1014 246 C 1006 268, 1008 286, 1018 292 C 1028 296, 1034 286, 1032 268 L 1030 246 Z" fill="#edf5f9" stroke="#8ea7b8" stroke-width="3"/>
+    <path d="M 1084 246 C 1080 270, 1085 290, 1098 294 C 1109 296, 1113 282, 1107 264 L 1104 246 Z" fill="#edf5f9" stroke="#8ea7b8" stroke-width="3"/>
+    <ellipse cx="1000" cy="204" rx="29" ry="27" fill="#fdfefe" stroke="#8ea7b8" stroke-width="4"/>
+    <path d="M 980 184 C 968 174, 958 182, 964 194 C 970 204, 982 204, 986 198 Z" fill="#fdfefe" stroke="#8ea7b8" stroke-width="3"/>
+    <path d="M 1004 179 C 1010 166, 1023 168, 1026 180 C 1028 190, 1020 198, 1010 196 Z" fill="#fdfefe" stroke="#8ea7b8" stroke-width="3"/>
+    <ellipse cx="981" cy="209" rx="15" ry="12" fill="#f7fbfe" stroke="#b3c4cf" stroke-width="2"/>
+    <ellipse cx="972" cy="207" rx="5" ry="4" fill="#26323d"/>
+    <circle cx="1008" cy="197" r="4" fill="#26323d"/>
+    <circle cx="1009.5" cy="195.5" r="1.4" fill="#ffffff"/>
+    <path d="M 985 217 Q 994 222 1002 216" fill="none" stroke="#6f8798" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M 1022 186 C 1044 174, 1092 178, 1114 194 C 1096 210, 1050 214, 1022 202 Z"
+          fill="#b71c1c" stroke="#ffd54a" stroke-width="4"/>
+    <path d="M 1026 196 L 1108 194" stroke="#ffd54a" stroke-width="3"/>
+    <circle cx="1038" cy="224" r="8" fill="#f7fbfe" stroke="#8ea7b8" stroke-width="2"/>
+  </g>
+
+  <g id="qin-shi-huang">
+    <path d="M 1048 174 C 1038 148, 1052 128, 1072 126 C 1094 124, 1104 144, 1102 170 L 1104 198 L 1046 198 Z"
+          fill="#20252b" stroke="#d4a017" stroke-width="3"/>
+    <path d="M 1046 194 C 1060 204, 1090 204, 1104 194" fill="none" stroke="#d4a017" stroke-width="4"/>
+    <path d="M 1050 184 C 1038 188, 1028 202, 1034 212 C 1042 220, 1056 212, 1060 200 Z" fill="#2b3037" stroke="#d4a017" stroke-width="2"/>
+    <path d="M 1096 184 C 1110 188, 1120 198, 1116 210 C 1108 220, 1094 212, 1090 200 Z" fill="#2b3037" stroke="#d4a017" stroke-width="2"/>
+    <path d="M 1052 170 C 1046 142, 1060 122, 1080 120 C 1100 118, 1112 138, 1108 166 L 1104 198 L 1048 198 Z"
+          fill="#15191f" stroke="#d4a017" stroke-width="4"/>
+    <path d="M 1052 146 L 1106 146" stroke="#c62828" stroke-width="5"/>
+    <path d="M 1054 160 L 1106 160" stroke="#c62828" stroke-width="3"/>
+    <path d="M 1062 138 C 1075 148, 1092 160, 1104 164" fill="none" stroke="#15191f" stroke-width="13" stroke-linecap="round"/>
+    <path d="M 1092 158 C 1098 168, 1102 178, 1100 188" fill="none" stroke="#f1c27d" stroke-width="8" stroke-linecap="round"/>
+    <g transform="rotate(24 1116 190)">
+      <path d="M 1098 174 L 1136 206 L 1130 214 L 1092 182 Z" fill="#d7e1e8" stroke="#4e6577" stroke-width="2"/>
+      <path d="M 1129 200 L 1144 212 L 1136 221 L 1121 209 Z" fill="none" stroke="#4e6577" stroke-width="5"/>
+    </g>
+    <path d="M 1056 110 C 1052 84, 1068 66, 1088 66 C 1108 66, 1120 84, 1116 112 C 1112 132, 1098 142, 1086 140 C 1068 138, 1058 128, 1056 110 Z"
+          fill="#f1c27d" stroke="#b57a3c" stroke-width="3"/>
+    <path d="M 1056 104 C 1050 78, 1068 58, 1090 58 C 1112 58, 1126 78, 1120 106 C 1114 84, 1098 74, 1086 74 C 1072 74, 1062 86, 1056 104 Z" fill="#161616"/>
+    <rect x="1046" y="52" width="62" height="12" rx="4" fill="#111111" stroke="#d4a017" stroke-width="2"/>
+    <path d="M 1052 52 L 1052 36 L 1060 44 L 1068 34 L 1076 44 L 1084 34 L 1092 44 L 1100 36 L 1102 52 Z" fill="#111111" stroke="#d4a017" stroke-width="2"/>
+    <g stroke="#f5d76e" stroke-width="2">
+      <line x1="1056" y1="64" x2="1056" y2="82"/>
+      <line x1="1066" y1="64" x2="1066" y2="82"/>
+      <line x1="1076" y1="64" x2="1076" y2="82"/>
+      <line x1="1086" y1="64" x2="1086" y2="82"/>
+      <line x1="1096" y1="64" x2="1096" y2="82"/>
+    </g>
+    <g fill="#f5d76e">
+      <circle cx="1056" cy="84" r="2.5"/><circle cx="1066" cy="84" r="2.5"/>
+      <circle cx="1076" cy="84" r="2.5"/><circle cx="1086" cy="84" r="2.5"/>
+      <circle cx="1096" cy="84" r="2.5"/>
+    </g>
+    <circle cx="1074" cy="99" r="3" fill="#1f2933"/>
+    <circle cx="1094" cy="99" r="3" fill="#1f2933"/>
+    <path d="M 1070 116 Q 1084 122 1098 114" fill="none" stroke="#8b4a25" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 1078 122 C 1080 132, 1092 132, 1094 122" fill="#161616"/>
+    <path d="M 1098 140 C 1110 148, 1122 160, 1128 172" fill="none" stroke="#15191f" stroke-width="13" stroke-linecap="round"/>
+    <path d="M 1124 166 C 1132 172, 1138 180, 1138 186" fill="none" stroke="#f1c27d" stroke-width="8" stroke-linecap="round"/>
+    <g transform="translate(1144 192)">
+      <circle r="17" fill="url(#goldGrad)" stroke="#9b6b05" stroke-width="3"/>
+      <circle r="8" fill="#7a5200" stroke="#f5d76e" stroke-width="3"/>
+      <path d="M -21 -6 L 21 -6 L 21 6 L -21 6 Z" fill="#a6b4c0" stroke="#4f6578" stroke-width="2" opacity="0.95"/>
+      <path d="M -12 -13 L 12 -13 L 12 13 L -12 13 Z" fill="none" stroke="#4f6578" stroke-width="3"/>
+    </g>
+    <g stroke="#ffd54a" stroke-width="3" stroke-linecap="round" filter="url(#glow)">
+      <line x1="1150" y1="166" x2="1156" y2="156"/>
+      <line x1="1155" y1="172" x2="1168" y2="168"/>
+      <line x1="1158" y1="182" x2="1172" y2="186"/>
+    </g>
+    <text x="1028" y="45" font-family="'Noto Serif SC','Songti SC','Microsoft YaHei',serif" font-size="13" fill="#b71c1c" font-weight="700">秦始皇</text>
+  </g>
+
+  <g filter="url(#drop)">
+    <path d="M 1364 344 C 1322 305, 1298 260, 1280 222 C 1312 262, 1350 302, 1388 342 Z"
+          fill="url(#bubbleGrad)" stroke="#d4a017" stroke-width="4"/>
+    <rect x="1330" y="15" width="560" height="490" rx="36" fill="url(#bubbleGrad)" stroke="#d4a017" stroke-width="5"/>
+    <rect x="1348" y="32" width="524" height="456" rx="27" fill="none" stroke="#f0c760" stroke-width="2" stroke-dasharray="8 8"/>
+    <text x="1610" y="55" text-anchor="middle" font-family="'Noto Serif SC','Songti SC','Microsoft YaHei',serif"
+          font-size="27" font-weight="800" fill="#b33a2b">鹈鹕的挑战</text>
+    <g>
+      <circle cx="1430" cy="80" r="12" fill="#e63946" stroke="#9d1d28" stroke-width="2"/>
+      <path d="M 1430 71 L 1434 78 L 1442 79 L 1436 84 L 1438 92 L 1430 88 L 1422 92 L 1424 84 L 1418 79 L 1426 78 Z" fill="#fff7a8"/>
+      <circle cx="1560" cy="80" r="12" fill="#ffb703" stroke="#b56b00" stroke-width="2"/>
+      <path d="M 1560 71 L 1564 78 L 1572 79 L 1566 84 L 1568 92 L 1560 88 L 1552 92 L 1554 84 L 1548 79 L 1556 78 Z" fill="#ffffff"/>
+      <circle cx="1690" cy="80" r="12" fill="#2a9d8f" stroke="#146c63" stroke-width="2"/>
+      <path d="M 1690 71 L 1694 78 L 1702 79 L 1696 84 L 1698 92 L 1690 88 L 1682 92 L 1684 84 L 1678 79 L 1686 78 Z" fill="#fff7a8"/>
+    </g>
+
+    <text x="1352" y="112" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif"
+          font-size="14.8" fill="#3b3b3b">
+      <tspan x="1352" dy="0">在一个黑色的袋子里放有三种口味的糖果，</tspan>
+      <tspan x="1352" dy="19">每种糖果有两种不同的形状（圆形和五角星形，</tspan>
+      <tspan x="1352" dy="19">不同的形状靠手感可以分辨）。现已知不同口味的</tspan>
+      <tspan x="1352" dy="19">糖和不同形状的数量统计如下表。参赛者需要</tspan>
+      <tspan x="1352" dy="19">在活动前决定摸出的糖果数目，那么，最少取出</tspan>
+      <tspan x="1352" dy="19">多少个糖果才能保证手中同时拥有不同形状的</tspan>
+      <tspan x="1352" dy="19">苹果味和桃子味的糖？（同时手中有圆形苹果味</tspan>
+      <tspan x="1352" dy="19">匹配五角星桃子味糖果，或者有圆形桃子味匹配</tspan>
+      <tspan x="1352" dy="19">五角星苹果味糖果都满足要求）</tspan>
+    </text>
+
+    <g font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif" font-size="14.5" fill="#4a3416">
+      <rect x="1350" y="278" width="512" height="98" rx="10" fill="#fff8e7" stroke="#e0c987" stroke-width="2"/>
+      <line x1="1350" y1="310" x2="1862" y2="310" stroke="#e0c987" stroke-width="2"/>
+      <line x1="1350" y1="341" x2="1862" y2="341" stroke="#e0c987" stroke-width="2"/>
+      <line x1="1350" y1="372" x2="1862" y2="372" stroke="#e0c987" stroke-width="2"/>
+      <line x1="1450" y1="278" x2="1450" y2="376" stroke="#e0c987" stroke-width="2"/>
+      <line x1="1560" y1="278" x2="1560" y2="376" stroke="#e0c987" stroke-width="2"/>
+      <line x1="1672" y1="278" x2="1672" y2="376" stroke="#e0c987" stroke-width="2"/>
+      <text x="1362" y="301" font-weight="700" fill="#8a4b00">形状 \ 口味</text>
+      <text x="1505" y="301" text-anchor="middle" font-weight="700" fill="#8a4b00">苹果味</text>
+      <text x="1616" y="301" text-anchor="middle" font-weight="700" fill="#8a4b00">桃子味</text>
+      <text x="1767" y="301" text-anchor="middle" font-weight="700" fill="#8a4b00">西瓜味</text>
+      <text x="1362" y="333">圆形</text>
+      <text x="1505" y="333" text-anchor="middle">7</text>
+      <text x="1616" y="333" text-anchor="middle">9</text>
+      <text x="1767" y="333" text-anchor="middle">8</text>
+      <text x="1362" y="364">五角星形</text>
+      <text x="1505" y="364" text-anchor="middle">7</text>
+      <text x="1616" y="364" text-anchor="middle">6</text>
+      <text x="1767" y="364" text-anchor="middle">4</text>
+    </g>
+
+    <text x="1608" y="416" text-anchor="middle" font-family="'Noto Serif SC','Songti SC','Microsoft YaHei',serif"
+          font-size="24" font-weight="900" fill="#c62828">最少取出 29 个糖果！</text>
+    <text x="1608" y="443" text-anchor="middle" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif"
+          font-size="13.5" fill="#5b4b2b">最坏情况可先摸到 28 个仍不成对，第 29 个必成。</text>
+    <text x="1608" y="466" text-anchor="middle" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif"
+          font-size="12.5" fill="#7a6848">7（圆苹果）+ 9（圆桃）+ 全部西瓜12 = 28</text>
+  </g>
+
+  <use xlink:href="#cloud" transform="translate(180 1130) scale(1.85)" opacity="0.45"/>
+  <use xlink:href="#cloud" transform="translate(1030 1170) scale(2.1)" opacity="0.38"/>
+  <use xlink:href="#cloud" transform="translate(1760 1110) scale(1.7)" opacity="0.42"/>
+</svg>

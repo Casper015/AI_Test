@@ -1,0 +1,55 @@
+# OS metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# Dependencies & Package Managers
+node_modules/
+package-lock.json.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Logs & Temporary Files
+*.log
+*.tmp
+*.temp
+*.local
+
+# Build Output
+dist/
+dist-ssr/
+build/
+
+# Work & Headless / Probe Caches
+work/
+
+# Screenshots & Visual Snapshots
+docs/shots/*.png
+docs/shots/**/*.png
+docs/shots/*.dom.html
+docs/screenshots/*.png
+docs/screenshots/**/*.png
+docs/reports/**/*.png
+
+# Retain Critical Documentation & Manifests
+!docs/shots/*.md
+!docs/shots/*.json
+!docs/screenshots/*.md
+!docs/reports/*.md
+!docs/reports/*.txt
+!docs/reports/**/manifest.json
+
+# Core Assets Protection
+!assets/
+!assets/**
+!public/
+!public/**
+!src/
+!scripts/
+!tests/

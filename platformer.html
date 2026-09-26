@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CYBER HOPPER // Neo-Platformer Engine</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #050711;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, monospace, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #game-shell {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      max-width: 177.78vh; /* Strict 16:9 aspect ratio */
+      max-height: 56.25vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 60px rgba(0, 240, 255, 0.15), 0 0 25px rgba(0, 0, 0, 0.9);
+      border: 1px solid rgba(0, 240, 255, 0.28);
+      background-color: #04060d;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+      image-rendering: pixelated;
+    }
+
+    #ui-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 22px 28px;
+    }
+
+    .hud-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      width: 100%;
+    }
+
+    .hud-badge {
+      background: rgba(6, 10, 26, 0.78);
+      border: 1px solid rgba(0, 240, 255, 0.38);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 10px 18px;
+      border-radius: 6px;
+      color: #e0f8ff;
+      font-size: 14px;
+      letter-spacing: 1px;
+      font-weight: 700;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.65), inset 0 0 10px rgba(0, 240, 255, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .hud-value {
+      color: #00f0ff;
+      text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hud-hearts {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .heart-icon {
+      width: 18px;
+      height: 18px;
+      fill: #ff2a6d;
+      filter: drop-shadow(0 0 5px rgba(255, 42, 109, 0.8));
+      transition: transform 0.2s ease, fill 0.2s ease;
+    }
+
+    .heart-icon.lost {
+      fill: #272d42;
+      filter: none;
+      opacity: 0.45;
+    }
+
+    .hud-controls-hint {
+      background: rgba(6, 10, 26, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      padding: 8px 14px;
+      border-radius: 4px;
+      color: #8c9bb0;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    .hud-controls-hint span {
+      color: #00f0ff;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="game-shell">
+    <canvas id="gameCanvas" width="960" height="540"></canvas>
+    <div id="ui-overlay">
+      <div class="hud-row">
+        <div class="hud-badge">
+          <span>SCORE: <span id="hud-score" class="hud-value">00000</span></span>
+          <span style="opacity: 0.3">|</span>
+          <span>ORBS: <span id="hud-coins" class="hud-value" style="color: #ffd700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.7);">0 / 25</span></span>
+        </div>
+        <div class="hud-badge">
+          <span>SHIELDS</span>
+          <div class="hud-hearts" id="hud-lives">
+            <svg class="heart-icon" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            <svg class="heart-icon" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            <svg class="heart-icon" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="hud-row" style="align-items: flex-end;">
+        <div class="hud-controls-hint">
+          [<span>A</span> / <span>D</span> or <span>&larr;</span> <span>&rarr;</span>] MOVE &nbsp;&bull;&nbsp; 
+          [<span>W</span> / <span>SPACE</span> / <span>K</span>] JUMP &nbsp;&bull;&nbsp; 
+          [<span>S</span> + <span>JUMP</span>] DROP THROUGH &nbsp;&bull;&nbsp; 
+          [<span>R</span>] RESTART
+        </div>
+        <div class="hud-badge" style="font-size: 13px;">
+          GRID: <span class="hud-value">SECTOR-01</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       CYBER HOPPER: 2D PLATFORMER ENGINE
+       Zero External Dependencies | Web Audio API | Decoupled AABB | Micro-Physics
+       ========================================================================== */
+
+    // --- Audio Subsystem (Pure Procedural Web Audio API) ---
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.initialized = false;
+      }
+
+      init() {
+        if (this.initialized && this.ctx && this.ctx.state === 'running') return;
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            if (!this.ctx) {
+              this.ctx = new AudioContextClass();
+            }
+            if (this.ctx.state === 'suspended') {
+              this.ctx.resume();
+            }
+            this.initialized = true;
+          }
+        } catch (e) {
+          console.warn("AudioContext initialization warning:", e);
+        }
+      }
+
+      playJump() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(620, now + 0.14);
+
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.15);
+      }
+
+      playCoin() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+
+        // Tone 1: High note B5 (987.77 Hz)
+        const osc1 = this.ctx.createOscillator();
+        const gain1 = this.ctx.createGain();
+        osc1.type = 'triangle';
+        osc1.frequency.setValueAtTime(987.77, now);
+        gain1.gain.setValueAtTime(0.24, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc1.connect(gain1);
+        gain1.connect(this.ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.08);
+
+        // Tone 2: Higher note E6 (1318.51 Hz) in arpeggiated succession
+        const osc2 = this.ctx.createOscillator();
+        const gain2 = this.ctx.createGain();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(1318.51, now + 0.06);
+        gain2.gain.setValueAtTime(0.001, now);
+        gain2.gain.setValueAtTime(0.26, now + 0.06);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+        osc2.connect(gain2);
+        gain2.connect(this.ctx.destination);
+        osc2.start(now + 0.06);
+        osc2.stop(now + 0.26);
+      }
+
+      playStomp() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(260, now);
+        osc.frequency.exponentialRampToValueAtTime(45, now + 0.16);
+
+        gain.gain.setValueAtTime(0.38, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.18);
+      }
+
+      playDamage() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.linearRampToValueAtTime(55, now + 0.24);
+
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.26);
+      }
+
+      playGameOver() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(65, now + 0.75);
+
+        gain.gain.setValueAtTime(0.32, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.8);
+      }
+
+      playVictory() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6 fanfare
+        notes.forEach((freq, i) => {
+          const startTime = now + i * 0.13;
+          const dur = (i === 3) ? 0.65 : 0.2;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, startTime);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.setValueAtTime(0.28, startTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + dur);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          osc.start(startTime);
+          osc.stop(startTime + dur);
+        });
+      }
+    }
+
+    const sound = new SoundEngine();
+
+    // --- Input Subsystem ---
+    class InputHandler {
+      constructor() {
+        this.keys = {
+          left: false,
+          right: false,
+          up: false,
+          down: false,
+          jump: false,
+          jumpPressed: false,
+          jumpReleased: false,
+          restart: false,
+          anyKey: false
+        };
+
+        window.addEventListener('keydown', (e) => this.onKeyDown(e));
+        window.addEventListener('keyup', (e) => this.onKeyUp(e));
+      }
+
+      onKeyDown(e) {
+        sound.init(); // Autoplay compliance: initialize on first key gesture
+        this.keys.anyKey = true;
+
+        if (e.code === 'KeyA' || e.code === 'ArrowLeft') this.keys.left = true;
+        if (e.code === 'KeyD' || e.code === 'ArrowRight') this.keys.right = true;
+        if (e.code === 'KeyW' || e.code === 'ArrowUp') this.keys.up = true;
+        if (e.code === 'KeyS' || e.code === 'ArrowDown') this.keys.down = true;
+
+        if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'KeyK') {
+          if (!this.keys.jump) {
+            this.keys.jumpPressed = true;
+          }
+          this.keys.jump = true;
+        }
+
+        if (e.code === 'KeyR') this.keys.restart = true;
+
+        // Prevent browser scrolling during gameplay
+        if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+          e.preventDefault();
+        }
+      }
+
+      onKeyUp(e) {
+        if (e.code === 'KeyA' || e.code === 'ArrowLeft') this.keys.left = false;
+        if (e.code === 'KeyD' || e.code === 'ArrowRight') this.keys.right = false;
+        if (e.code === 'KeyW' || e.code === 'ArrowUp') this.keys.up = false;
+        if (e.code === 'KeyS' || e.code === 'ArrowDown') this.keys.down = false;
+
+        if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'KeyK') {
+          this.keys.jump = false;
+          this.keys.jumpReleased = true;
+        }
+
+        if (e.code === 'KeyR') this.keys.restart = false;
+      }
+
+      resetTransient() {
+        this.keys.jumpPressed = false;
+        this.keys.jumpReleased = false;
+        this.keys.restart = false;
+        this.keys.anyKey = false;
+      }
+    }
+
+    // --- High Performance Particle FX System ---
+    class ParticleEngine {
+      constructor() {
+        this.particles = [];
+      }
+
+      spawnBurst(x, y, color, count = 16, speedMult = 1, sizeBase = 4) {
+        for (let i = 0; i < count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = (Math.random() * 190 + 50) * speedMult;
+          this.particles.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - Math.random() * 70,
+            color: color,
+            alpha: 1.0,
+            maxLife: Math.random() * 0.4 + 0.35,
+            life: 0,
+            size: (Math.random() * sizeBase + 2.5),
+            gravity: 460
+          });
+        }
+      }
+
+      spawnDust(x, y, vx = 0) {
+        for (let i = 0; i < 4; i++) {
+          this.particles.push({
+            x: x + (Math.random() - 0.5) * 14,
+            y: y,
+            vx: -vx * 0.2 + (Math.random() - 0.5) * 45,
+            vy: -Math.random() * 30 - 10,
+            color: '#a0c4ff',
+            alpha: 0.75,
+            maxLife: 0.24,
+            life: 0,
+            size: Math.random() * 3.5 + 2,
+            gravity: 120
+          });
+        }
+      }
+
+      update(dt) {
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+          const p = this.particles[i];
+          p.life += dt;
+          if (p.life >= p.maxLife) {
+            this.particles.splice(i, 1);
+            continue;
+          }
+          p.vy += p.gravity * dt;
+          p.vx *= (1 - 2.5 * dt);
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.alpha = 1 - (p.life / p.maxLife);
+        }
+      }
+
+      draw(ctx) {
+        ctx.save();
+        for (let i = 0; i < this.particles.length; i++) {
+          const p = this.particles[i];
+          ctx.globalAlpha = Math.max(0, p.alpha);
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (1 - p.life / p.maxLife * 0.5), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      clear() {
+        this.particles = [];
+      }
+    }
+
+    // --- Collision Math Helper ---
+    function aabbOverlap(r1, r2) {
+      return (
+        r1.x < r2.x + r2.w &&
+        r1.x + r1.w > r2.x &&
+        r1.y < r2.y + r2.h &&
+        r1.y + r1.h > r2.y
+      );
+    }
+
+    // --- Entity Classes ---
+
+    class Player {
+      constructor(x, y) {
+        this.spawnX = x;
+        this.spawnY = y;
+        this.reset();
+      }
+
+      reset() {
+        this.x = this.spawnX;
+        this.y = this.spawnY;
+        this.w = 26;
+        this.h = 42;
+        this.vx = 0;
+        this.vy = 0;
+        this.facing = 1; // 1: right, -1: left
+
+        // Physical Constants (Units in px/sec and px/sec^2 for framerate parity)
+        this.MOVE_ACCEL = 2300;
+        this.GROUND_FRICTION = 2500;
+        this.AIR_ACCEL = 1400;
+        this.AIR_DRAG = 700;
+        this.MAX_RUN_SPEED = 285;
+        this.GRAVITY_UP = 1100;
+        this.GRAVITY_FALL = 1850;
+        this.TERMINAL_VELOCITY = 720;
+        this.JUMP_FORCE = -495;
+        this.CORNER_SLIP_DIST = 9; // Corner rounding forgiveness threshold in pixels
+
+        // Micro-mechanic Windows & Timers
+        this.isGrounded = false;
+        this.wasGrounded = false;
+        this.coyoteTimer = 0;
+        this.jumpBufferTimer = 0;
+        this.dropThroughTimer = 0;
+
+        // Visual Polish: Squash & Stretch Animation
+        this.scaleX = 1.0;
+        this.scaleY = 1.0;
+
+        // State Tracking
+        this.dead = false;
+        this.ridingPlatform = null;
+        this.invulnerableTimer = 0;
+        this.walkAnimTimer = 0;
+      }
+
+      update(dt, input, level, particles) {
+        if (this.dead) return;
+
+        this.wasGrounded = this.isGrounded;
+
+        // Micro-mechanic timers decrement
+        if (this.coyoteTimer > 0) this.coyoteTimer -= dt;
+        if (this.jumpBufferTimer > 0) this.jumpBufferTimer -= dt;
+        if (this.dropThroughTimer > 0) this.dropThroughTimer -= dt;
+        if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+
+        // 1. Jump Buffering Registration (120ms window)
+        if (input.keys.jumpPressed) {
+          this.jumpBufferTimer = 0.12;
+        }
+
+        // 2. Horizontal Acceleration & Friction
+        let moveDir = 0;
+        if (input.keys.left) moveDir -= 1;
+        if (input.keys.right) moveDir += 1;
+
+        if (moveDir !== 0) {
+          this.facing = moveDir;
+          const accel = this.isGrounded ? this.MOVE_ACCEL : this.AIR_ACCEL;
+          this.vx += moveDir * accel * dt;
+          if (Math.abs(this.vx) > this.MAX_RUN_SPEED) {
+            this.vx = Math.sign(this.vx) * this.MAX_RUN_SPEED;
+          }
+          this.walkAnimTimer += dt * 14;
+        } else {
+          const friction = this.isGrounded ? this.GROUND_FRICTION : this.AIR_DRAG;
+          if (Math.abs(this.vx) <= friction * dt) {
+            this.vx = 0;
+          } else {
+            this.vx -= Math.sign(this.vx) * friction * dt;
+          }
+          this.walkAnimTimer = 0;
+        }
+
+        // 3. Drop-Through Trigger (S + Jump or Down + Jump)
+        if (input.keys.down && (input.keys.jump || input.keys.jumpPressed)) {
+          this.dropThroughTimer = 0.22; // 220ms drop-through window
+        }
+
+        // 4. Jump Execution with Coyote Time (120ms) & Jump Buffer (120ms)
+        const canJump = (this.isGrounded || this.coyoteTimer > 0);
+        if (this.jumpBufferTimer > 0 && canJump) {
+          this.vy = this.JUMP_FORCE;
+          this.isGrounded = false;
+          this.coyoteTimer = 0;
+          this.jumpBufferTimer = 0;
+
+          // Squash & Stretch: Takeoff stretch
+          this.scaleX = 0.72;
+          this.scaleY = 1.36;
+
+          // Audio & Takeoff Dust
+          sound.playJump();
+          particles.spawnDust(this.x + this.w / 2, this.y + this.h, this.vx);
+
+          // Moving Platform Momentum inheritance
+          if (this.ridingPlatform && Math.abs(this.ridingPlatform.vx) > 10) {
+            this.vx += this.ridingPlatform.vx * 0.75;
+          }
+          this.ridingPlatform = null;
+        }
+
+        // 5. Variable Jump Height: Truncate upward velocity immediately on jump key release
+        if (input.keys.jumpReleased && this.vy < -160) {
+          this.vy = -160; // Snappy short-hop cutoff
+        }
+
+        // 6. Gravity Integration
+        const currentGravity = (this.vy < 0 && input.keys.jump) ? this.GRAVITY_UP : this.GRAVITY_FALL;
+        this.vy += currentGravity * dt;
+        if (this.vy > this.TERMINAL_VELOCITY) {
+          this.vy = this.TERMINAL_VELOCITY;
+        }
+
+        // --- DECOUPLED AXIS-ALIGNED BOUNDING BOX (AABB) RESOLUTION ---
+
+        // Axis 1: Horizontal displacement and collision resolution
+        this.x += this.vx * dt;
+
+        // Platform carryover if riding
+        if (this.ridingPlatform && this.isGrounded) {
+          this.x += this.ridingPlatform.vx * dt;
+        }
+
+        for (let i = 0; i < level.solids.length; i++) {
+          const s = level.solids[i];
+          if (aabbOverlap(this, s)) {
+            if (this.vx > 0) {
+              this.x = s.x - this.w;
+              this.vx = 0;
+            } else if (this.vx < 0) {
+              this.x = s.x + s.w;
+              this.vx = 0;
+            }
+          }
+        }
+
+        // Level Bounds (Left boundary clamp)
+        if (this.x < 0) {
+          this.x = 0;
+          this.vx = 0;
+        }
+
+        // Axis 2: Vertical displacement and collision resolution
+        const prevY = this.y;
+        this.y += this.vy * dt;
+        this.isGrounded = false;
+
+        // Solid platforms vertical resolution
+        for (let i = 0; i < level.solids.length; i++) {
+          const s = level.solids[i];
+          if (aabbOverlap(this, s)) {
+            if (this.vy > 0) {
+              // Landing on top of solid surface
+              this.y = s.y - this.h;
+              this.vy = 0;
+              this.isGrounded = true;
+            } else if (this.vy < 0) {
+              // Upward collision: CORNER SLIP / HEAD ROUNDING RESOLUTION
+              const leftOverlap = (this.x + this.w) - s.x;
+              const rightOverlap = (s.x + s.w) - this.x;
+
+              if (leftOverlap <= this.CORNER_SLIP_DIST) {
+                // Slip past the left corner seamlessly
+                this.x = s.x - this.w - 1;
+              } else if (rightOverlap <= this.CORNER_SLIP_DIST) {
+                // Slip past the right corner seamlessly
+                this.x = s.x + s.w + 1;
+              } else {
+                // Solid head bonk
+                this.y = s.y + s.h;
+                this.vy = 0;
+              }
+            }
+          }
+        }
+
+        // Moving platforms vertical resolution
+        for (let i = 0; i < level.movingPlatforms.length; i++) {
+          const mp = level.movingPlatforms[i];
+          if (aabbOverlap(this, mp)) {
+            if (this.vy >= 0 && prevY + this.h <= mp.y + 12) {
+              this.y = mp.y - this.h;
+              this.vy = 0;
+              this.isGrounded = true;
+              this.ridingPlatform = mp;
+            }
+          }
+        }
+
+        // One-Way Drop-Through platforms vertical resolution
+        if (this.dropThroughTimer <= 0) {
+          for (let i = 0; i < level.oneWayPlatforms.length; i++) {
+            const ow = level.oneWayPlatforms[i];
+            if (aabbOverlap(this, ow)) {
+              // Land only when falling from above the platform top
+              if (this.vy >= 0 && (prevY + this.h) <= ow.y + 10) {
+                this.y = ow.y - this.h;
+                this.vy = 0;
+                this.isGrounded = true;
+              }
+            }
+          }
+        }
+
+        // Coyote Time Initiation: Transitioning from ground to air without jumping
+        if (this.wasGrounded && !this.isGrounded && this.vy >= 0) {
+          this.coyoteTimer = 0.12; // 120ms window
+          this.ridingPlatform = null;
+        }
+
+        // Landing Impact: Squash & Stretch + Landing Dust
+        if (!this.wasGrounded && this.isGrounded) {
+          this.scaleX = 1.34;
+          this.scaleY = 0.68;
+          particles.spawnDust(this.x + this.w / 2, this.y + this.h, this.vx);
+
+          // Immediate fulfillment of queued jump buffer on exact touchdown frame
+          if (this.jumpBufferTimer > 0) {
+            this.vy = this.JUMP_FORCE;
+            this.isGrounded = false;
+            this.jumpBufferTimer = 0;
+            this.coyoteTimer = 0;
+            this.scaleX = 0.72;
+            this.scaleY = 1.36;
+            sound.playJump();
+            particles.spawnDust(this.x + this.w / 2, this.y + this.h, this.vx);
+          }
+        }
+
+        if (!this.isGrounded) {
+          this.ridingPlatform = null;
+        }
+
+        // Smooth squash/stretch decay towards 1.0 equilibrium
+        this.scaleX += (1.0 - this.scaleX) * 12 * dt;
+        this.scaleY += (1.0 - this.scaleY) * 12 * dt;
+
+        // Bottomless pit hazard detection
+        if (this.y > level.height + 60) {
+          this.dead = true;
+        }
+      }
+
+      draw(ctx) {
+        if (this.dead) return;
+
+        // Flickering invulnerability effect
+        if (this.invulnerableTimer > 0 && Math.floor(Date.now() / 60) % 2 === 0) {
+          return;
+        }
+
+        ctx.save();
+        // Pivot around bottom center for natural squash & stretch
+        const centerX = this.x + this.w / 2;
+        const bottomY = this.y + this.h;
+        ctx.translate(centerX, bottomY);
+        ctx.scale(this.facing * this.scaleX, this.scaleY);
+
+        const halfW = this.w / 2;
+        const totalH = this.h;
+
+        // Cybernetic Jetpack / Energy Cell
+        ctx.fillStyle = '#00f0ff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(-halfW - 3, -totalH * 0.75, 5, totalH * 0.45);
+
+        // Core Chassis
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#1e2438';
+        ctx.fillRect(-halfW + 2, -totalH + 12, this.w - 4, totalH - 14);
+
+        // Reinforced Chest Plate
+        ctx.fillStyle = '#2f3b5c';
+        ctx.fillRect(-halfW + 4, -totalH + 16, this.w - 8, 14);
+
+        // Helmet / Head
+        ctx.fillStyle = '#eaf2f8';
+        ctx.beginPath();
+        ctx.roundRect(-halfW + 2, -totalH, this.w - 4, 15, 3);
+        ctx.fill();
+
+        // Neon Visor
+        ctx.fillStyle = '#00f0ff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 8;
+        ctx.fillRect(0, -totalH + 4, halfW + 1, 6);
+        ctx.shadowBlur = 0;
+
+        // Procedural Running Legs Animation
+        const legOffset = Math.sin(this.walkAnimTimer) * 7;
+        ctx.fillStyle = '#0f1424';
+        if (this.isGrounded && Math.abs(this.vx) > 10) {
+          // Left leg
+          ctx.fillRect(-halfW + 4, -8, 6, 8 + legOffset);
+          // Right leg
+          ctx.fillRect(halfW - 10, -8, 6, 8 - legOffset);
+        } else if (!this.isGrounded) {
+          // Airborne Tuck
+          ctx.fillRect(-halfW + 4, -10, 6, 7);
+          ctx.fillRect(halfW - 10, -12, 6, 9);
+        } else {
+          // Ground Standing
+          ctx.fillRect(-halfW + 4, -6, 6, 6);
+          ctx.fillRect(halfW - 10, -6, 6, 6);
+        }
+
+        ctx.restore();
+      }
+    }
+
+    class PatrollingEnemy {
+      constructor(x, y, minX, maxX) {
+        this.x = x;
+        this.y = y;
+        this.minX = minX;
+        this.maxX = maxX;
+        this.w = 32;
+        this.h = 28;
+        this.speed = 75;
+        this.vx = this.speed;
+        this.alive = true;
+        this.animTimer = Math.random() * Math.PI;
+      }
+
+      update(dt) {
+        if (!this.alive) return;
+        this.x += this.vx * dt;
+        if (this.x <= this.minX) {
+          this.x = this.minX;
+          this.vx = this.speed;
+        } else if (this.x + this.w >= this.maxX) {
+          this.x = this.maxX - this.w;
+          this.vx = -this.speed;
+        }
+        this.animTimer += dt * 6;
+      }
+
+      draw(ctx) {
+        if (!this.alive) return;
+        ctx.save();
+        const centerX = this.x + this.w / 2;
+        const centerY = this.y + this.h / 2;
+        const bob = Math.sin(this.animTimer) * 2;
+
+        ctx.translate(centerX, centerY + bob);
+
+        // Cyber Drone Chassis
+        ctx.fillStyle = '#ff2a6d';
+        ctx.shadowColor = '#ff2a6d';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.roundRect(-this.w / 2, -this.h / 2 + 3, this.w, this.h - 6, 5);
+        ctx.fill();
+
+        // Dark Cockpit
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#140c24';
+        ctx.fillRect(-this.w / 2 + 4, -this.h / 2 + 6, this.w - 8, this.h - 12);
+
+        // Hostile Scanner Eye
+        const eyeOffset = Math.sign(this.vx) * 4;
+        ctx.fillStyle = '#05d9e8';
+        ctx.shadowColor = '#05d9e8';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(eyeOffset, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    class MovingPlatform {
+      constructor(x, y, w, h, targetX, speed) {
+        this.startX = x;
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.targetX = targetX;
+        this.speed = speed;
+        this.minX = Math.min(x, targetX);
+        this.maxX = Math.max(x, targetX);
+        this.vx = speed * Math.sign(targetX - x);
+      }
+
+      update(dt) {
+        this.x += this.vx * dt;
+        if (this.x <= this.minX) {
+          this.x = this.minX;
+          this.vx = Math.abs(this.speed);
+        } else if (this.x + this.w >= this.maxX + this.w) {
+          this.x = this.maxX;
+          this.vx = -Math.abs(this.speed);
+        }
+      }
+
+      draw(ctx) {
+        ctx.save();
+        ctx.fillStyle = '#22304e';
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.roundRect(this.x, this.y, this.w, this.h, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        // Warning Hazard Stripes
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#00f0ff';
+        for (let px = this.x + 8; px < this.x + this.w - 8; px += 20) {
+          ctx.fillRect(px, this.y + 4, 8, this.h - 8);
+        }
+        ctx.restore();
+      }
+    }
+
+    class Coin {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.w = 18;
+        this.h = 18;
+        this.collected = false;
+        this.rotPhase = Math.random() * Math.PI * 2;
+      }
+
+      update(dt) {
+        if (this.collected) return;
+        this.rotPhase += dt * 4;
+      }
+
+      draw(ctx) {
+        if (this.collected) return;
+        ctx.save();
+        const centerX = this.x + this.w / 2;
+        const centerY = this.y + this.h / 2 + Math.sin(this.rotPhase * 0.7) * 3;
+        const scaleX = Math.cos(this.rotPhase);
+
+        ctx.translate(centerX, centerY);
+        ctx.scale(scaleX, 1);
+
+        // Golden Energy Orb
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Core Sparkle
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#fffdf0';
+        ctx.beginPath();
+        ctx.arc(0, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    // --- Structured Level Geometry Specification ---
+    function buildLevel() {
+      const level = {
+        width: 3800, // Over 3.9x viewport width
+        height: 600,
+        solids: [],
+        oneWayPlatforms: [],
+        movingPlatforms: [],
+        spikes: [],
+        enemies: [],
+        coins: [],
+        portal: { x: 3660, y: 380, w: 40, h: 70 }
+      };
+
+      const addSolid = (x, y, w, h) => level.solids.push({ x, y, w, h });
+      const addOneWay = (x, y, w, h) => level.oneWayPlatforms.push({ x, y, w, h });
+      const addSpike = (x, y, w, h = 18) => level.spikes.push({ x, y, w, h });
+      const addCoin = (x, y) => level.coins.push(new Coin(x, y));
+      const addEnemy = (x, y, minX, maxX) => level.enemies.push(new PatrollingEnemy(x, y, minX, maxX));
+
+      // Zone 1: Starting Hub (0 -> 700)
+      addSolid(0, 480, 520, 120);
+      addCoin(180, 440);
+      addCoin(260, 410);
+      addCoin(340, 440);
+
+      // Elevated beginner ledges
+      addSolid(380, 390, 100, 20);
+      addCoin(430, 350);
+
+      // One-way progression transition
+      addOneWay(560, 430, 120, 14);
+      addCoin(620, 390);
+
+      // Zone 2: Hazard Chasm & Drop-Through Stacks (700 -> 1400)
+      addSolid(720, 480, 380, 120);
+      addEnemy(800, 452, 730, 1080);
+      addCoin(850, 440);
+      addCoin(950, 440);
+
+      // One-way vertical shelves (Down+Jump drop-through practice)
+      addOneWay(820, 380, 110, 14);
+      addOneWay(850, 290, 110, 14);
+      addCoin(895, 250);
+
+      // Spike Trench 1
+      addSolid(1100, 520, 160, 80);
+      addSpike(1100, 502, 160, 18);
+
+      // Stepping Stone Pillars
+      addSolid(1300, 450, 90, 150);
+      addCoin(1345, 400);
+
+      // Zone 3: Moving Platforms over Bottomless Void (1400 -> 2300)
+      addSolid(1440, 420, 110, 180);
+      addCoin(1495, 370);
+
+      // Oscillating Platform 1
+      level.movingPlatforms.push(new MovingPlatform(1600, 410, 110, 18, 1820, 110));
+      addCoin(1650, 350);
+      addCoin(1770, 330);
+
+      // Intermediary Chasm Pillar
+      addSolid(1980, 390, 120, 210);
+      addEnemy(1990, 362, 1985, 2090);
+      addCoin(2040, 330);
+
+      // Oscillating Platform 2
+      level.movingPlatforms.push(new MovingPlatform(2150, 380, 110, 18, 2380, 130));
+      addCoin(2200, 310);
+      addCoin(2320, 310);
+
+      // Zone 4: Corner Slip Overhangs & Precision Leaps (2400 -> 3100)
+      addSolid(2540, 460, 260, 140);
+      addCoin(2600, 420);
+      addCoin(2700, 420);
+
+      // Precision Floating Block (Tests Head-Corner Slip / Rounding)
+      addSolid(2660, 310, 120, 24);
+      addOneWay(2640, 220, 160, 14);
+      addCoin(2720, 175);
+
+      // Wide Spike Array
+      addSolid(2800, 510, 240, 90);
+      addSpike(2800, 492, 240, 18);
+
+      // Stepped Perches above spikes
+      addOneWay(2830, 410, 80, 14);
+      addOneWay(2950, 350, 80, 14);
+      addCoin(2870, 370);
+      addCoin(2990, 310);
+
+      // Zone 5: Final Fort & Gateway Runway (3100 -> 3800)
+      addSolid(3100, 470, 240, 130);
+      addEnemy(3140, 442, 3110, 3320);
+      addCoin(3180, 430);
+      addCoin(3260, 430);
+
+      // High Bastion
+      addSolid(3380, 440, 90, 160);
+      addCoin(3425, 390);
+
+      // Goal Runway
+      addSolid(3520, 450, 280, 150);
+      addCoin(3570, 410);
+      addCoin(3620, 410);
+
+      return level;
+    }
+
+    // --- Main Game Director (FSM, Loop, Camera, Pipeline) ---
+    class Game {
+      constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+
+        // Finite State Machine
+        this.STATES = {
+          TITLE: 'TITLE_SCREEN',
+          PLAYING: 'PLAYING',
+          GAME_OVER: 'GAME_OVER',
+          VICTORY: 'VICTORY'
+        };
+        this.state = this.STATES.TITLE;
+
+        // Subsystems
+        this.input = new InputHandler();
+        this.particles = new ParticleEngine();
+        this.level = buildLevel();
+        this.player = new Player(80, 380);
+
+        // Smooth Lerp Camera with Trauma Shake
+        this.camera = {
+          x: 0,
+          y: 0,
+          w: this.canvas.width,
+          h: this.canvas.height,
+          lerpSpeed: 6.5,
+          shakeTimer: 0,
+          shakeMagnitude: 0
+        };
+
+        // Score & State Tracking
+        this.score = 0;
+        this.coinsCollected = 0;
+        this.totalCoins = this.level.coins.length;
+        this.lives = 3;
+        this.gameTime = 0;
+
+        // Framerate Clamped Time Delta
+        this.lastTime = performance.now();
+
+        // Parallax Starfield Generator
+        this.stars = [];
+        for (let i = 0; i < 90; i++) {
+          this.stars.push({
+            x: Math.random() * this.canvas.width * 2,
+            y: Math.random() * this.canvas.height,
+            size: Math.random() * 2 + 0.8,
+            speed: Math.random() * 0.25 + 0.05,
+            alpha: Math.random() * 0.7 + 0.3
+          });
+        }
+
+        // Cache HUD Elements
+        this.hudScore = document.getElementById('hud-score');
+        this.hudCoins = document.getElementById('hud-coins');
+        this.hudLivesContainer = document.getElementById('hud-lives');
+
+        this.updateHUD();
+
+        // Single Unbroken Lifecycle Loop
+        requestAnimationFrame((t) => this.mainLoop(t));
+      }
+
+      restartLevel(fullReset = false) {
+        if (fullReset) {
+          this.lives = 3;
+          this.score = 0;
+          this.coinsCollected = 0;
+          this.gameTime = 0;
+        }
+
+        this.level = buildLevel();
+        this.totalCoins = this.level.coins.length;
+        this.player.reset();
+        this.particles.clear();
+        this.camera.x = 0;
+        this.camera.y = 0;
+        this.updateHUD();
+      }
+
+      triggerScreenShake(magnitude = 8, duration = 0.25) {
+        this.camera.shakeMagnitude = magnitude;
+        this.camera.shakeTimer = duration;
+      }
+
+      handlePlayerHit() {
+        sound.playDamage();
+        this.triggerScreenShake(12, 0.35);
+        this.particles.spawnBurst(this.player.x + this.player.w / 2, this.player.y + this.player.h / 2, '#ff2a6d', 24, 1.4, 5);
+
+        this.lives--;
+        this.updateHUD();
+
+        if (this.lives <= 0) {
+          this.state = this.STATES.GAME_OVER;
+          sound.playGameOver();
+        } else {
+          // Soft checkpoint respawn
+          this.player.x = Math.max(80, this.player.x - 220);
+          this.player.y = 300;
+          this.player.vx = 0;
+          this.player.vy = 0;
+          this.player.invulnerableTimer = 1.6;
+        }
+      }
+
+      updateHUD() {
+        this.hudScore.textContent = String(this.score).padStart(5, '0');
+        this.hudCoins.textContent = `${this.coinsCollected} / ${this.totalCoins}`;
+
+        const hearts = this.hudLivesContainer.querySelectorAll('.heart-icon');
+        hearts.forEach((h, index) => {
+          if (index < this.lives) {
+            h.classList.remove('lost');
+          } else {
+            h.classList.add('lost');
+          }
+        });
+      }
+
+      update(dt) {
+        switch (this.state) {
+          case this.STATES.TITLE:
+            if (this.input.keys.anyKey || this.input.keys.jump) {
+              this.state = this.STATES.PLAYING;
+              this.restartLevel(true);
+            }
+            break;
+
+          case this.STATES.PLAYING:
+            if (this.input.keys.restart) {
+              this.restartLevel(true);
+              return;
+            }
+
+            this.gameTime += dt;
+
+            // 1. Moving Platforms
+            for (let i = 0; i < this.level.movingPlatforms.length; i++) {
+              this.level.movingPlatforms[i].update(dt);
+            }
+
+            // 2. Enemies
+            for (let i = 0; i < this.level.enemies.length; i++) {
+              this.level.enemies[i].update(dt);
+            }
+
+            // 3. Coins
+            for (let i = 0; i < this.level.coins.length; i++) {
+              this.level.coins[i].update(dt);
+            }
+
+            // 4. Player Physics & Decoupled AABB Kinematics
+            this.player.update(dt, this.input, this.level, this.particles);
+
+            // 5. Enemy Collisions (Stomp Rebound vs Lateral Damage)
+            for (let i = 0; i < this.level.enemies.length; i++) {
+              const enemy = this.level.enemies[i];
+              if (!enemy.alive) continue;
+
+              if (aabbOverlap(this.player, enemy)) {
+                // Top stomp condition: downward velocity and feet above enemy center
+                if (this.player.vy > 0 && (this.player.y + this.player.h - this.player.vy * dt) <= enemy.y + enemy.h * 0.6) {
+                  enemy.alive = false;
+                  this.player.vy = -430; // Vertical stomp rebound
+                  this.score += 250;
+                  this.updateHUD();
+                  sound.playStomp();
+                  this.triggerScreenShake(7, 0.2);
+                  this.particles.spawnBurst(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, '#ff2a6d', 20, 1.2, 4);
+                } else if (this.player.invulnerableTimer <= 0) {
+                  this.handlePlayerHit();
+                  break;
+                }
+              }
+            }
+
+            // 6. Spike Hazards
+            if (this.player.invulnerableTimer <= 0) {
+              for (let i = 0; i < this.level.spikes.length; i++) {
+                const sp = this.level.spikes[i];
+                if (aabbOverlap(this.player, sp)) {
+                  this.handlePlayerHit();
+                  break;
+                }
+              }
+            }
+
+            // 7. Pit Fall Check
+            if (this.player.dead) {
+              this.handlePlayerHit();
+              if (this.lives > 0) {
+                this.player.dead = false;
+              }
+            }
+
+            // 8. Coin Collection
+            for (let i = 0; i < this.level.coins.length; i++) {
+              const coin = this.level.coins[i];
+              if (!coin.collected && aabbOverlap(this.player, coin)) {
+                coin.collected = true;
+                this.coinsCollected++;
+                this.score += 100;
+                this.updateHUD();
+                sound.playCoin();
+                this.particles.spawnBurst(coin.x + coin.w / 2, coin.y + coin.h / 2, '#ffd700', 14, 0.9, 3);
+              }
+            }
+
+            // 9. Goal Portal Victory Check
+            if (aabbOverlap(this.player, this.level.portal)) {
+              this.state = this.STATES.VICTORY;
+              this.score += 1000 + (this.lives * 500);
+              this.updateHUD();
+              sound.playVictory();
+              this.particles.spawnBurst(this.level.portal.x + 20, this.level.portal.y + 35, '#00f0ff', 60, 2.2, 6);
+            }
+
+            // 10. Smooth Lerp Camera with Horizontal Lookahead
+            const lookahead = this.player.facing * 80;
+            const targetCamX = (this.player.x + this.player.w / 2 + lookahead) - this.camera.w / 2;
+            const targetCamY = (this.player.y + this.player.h / 2) - this.camera.h / 2 - 20;
+
+            const clampedTargetX = Math.max(0, Math.min(this.level.width - this.camera.w, targetCamX));
+            const clampedTargetY = Math.max(0, Math.min(this.level.height - this.camera.h, targetCamY));
+
+            this.camera.x += (clampedTargetX - this.camera.x) * (1 - Math.exp(-this.camera.lerpSpeed * dt));
+            this.camera.y += (clampedTargetY - this.camera.y) * (1 - Math.exp(-this.camera.lerpSpeed * dt));
+
+            if (this.camera.shakeTimer > 0) {
+              this.camera.shakeTimer -= dt;
+            }
+
+            // 11. Particle Engine Update
+            this.particles.update(dt);
+            break;
+
+          case this.STATES.GAME_OVER:
+          case this.STATES.VICTORY:
+            this.particles.update(dt);
+            if (this.input.keys.restart || this.input.keys.jumpPressed || this.input.keys.anyKey) {
+              this.state = this.STATES.PLAYING;
+              this.restartLevel(true);
+            }
+            break;
+        }
+
+        this.input.resetTransient();
+      }
+
+      draw() {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Screen Shake calculation
+        let shakeX = 0;
+        let shakeY = 0;
+        if (this.camera.shakeTimer > 0) {
+          shakeX = (Math.random() - 0.5) * 2 * this.camera.shakeMagnitude;
+          shakeY = (Math.random() - 0.5) * 2 * this.camera.shakeMagnitude;
+        }
+
+        // Parallax Backdrop
+        this.drawParallaxBackground(ctx);
+
+        // Camera World Space Layer
+        ctx.save();
+        ctx.translate(-Math.round(this.camera.x + shakeX), -Math.round(this.camera.y + shakeY));
+
+        // Solid Platforms
+        for (let i = 0; i < this.level.solids.length; i++) {
+          const s = this.level.solids[i];
+          if (s.x + s.w < this.camera.x - 50 || s.x > this.camera.x + this.camera.w + 50) continue;
+
+          ctx.fillStyle = '#0e1428';
+          ctx.fillRect(s.x, s.y, s.w, s.h);
+
+          // Glowing Neon Border
+          ctx.fillStyle = '#00f0ff';
+          ctx.fillRect(s.x, s.y, s.w, 3);
+
+          ctx.strokeStyle = 'rgba(0, 240, 255, 0.12)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(s.x + 2, s.y + 4, s.w - 4, s.h - 6);
+        }
+
+        // One-Way Drop-Through Platforms
+        for (let i = 0; i < this.level.oneWayPlatforms.length; i++) {
+          const ow = this.level.oneWayPlatforms[i];
+          if (ow.x + ow.w < this.camera.x - 50 || ow.x > this.camera.x + this.camera.w + 50) continue;
+
+          ctx.fillStyle = 'rgba(0, 240, 255, 0.18)';
+          ctx.fillRect(ow.x, ow.y, ow.w, ow.h);
+
+          ctx.fillStyle = '#00f0ff';
+          ctx.shadowColor = '#00f0ff';
+          ctx.shadowBlur = 6;
+          ctx.fillRect(ow.x, ow.y, ow.w, 2);
+          ctx.shadowBlur = 0;
+
+          // Holographic upward indicator chevrons
+          ctx.fillStyle = 'rgba(0, 240, 255, 0.45)';
+          for (let ax = ow.x + 15; ax < ow.x + ow.w - 10; ax += 24) {
+            ctx.fillRect(ax, ow.y + 5, 6, 2);
+            ctx.fillRect(ax + 2, ow.y + 3, 2, 2);
+          }
+        }
+
+        // Moving Platforms
+        for (let i = 0; i < this.level.movingPlatforms.length; i++) {
+          this.level.movingPlatforms[i].draw(ctx);
+        }
+
+        // Spikes
+        for (let i = 0; i < this.level.spikes.length; i++) {
+          const sp = this.level.spikes[i];
+          const numTeeth = Math.floor(sp.w / 14);
+          ctx.fillStyle = '#ff2a6d';
+          ctx.shadowColor = '#ff2a6d';
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          for (let t = 0; t < numTeeth; t++) {
+            const tx = sp.x + t * 14;
+            ctx.moveTo(tx, sp.y + sp.h);
+            ctx.lineTo(tx + 7, sp.y);
+            ctx.lineTo(tx + 14, sp.y + sp.h);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+
+        // Coins
+        for (let i = 0; i < this.level.coins.length; i++) {
+          this.level.coins[i].draw(ctx);
+        }
+
+        // Exit Portal
+        this.drawExitPortal(ctx, this.level.portal);
+
+        // Enemies
+        for (let i = 0; i < this.level.enemies.length; i++) {
+          this.level.enemies[i].draw(ctx);
+        }
+
+        // Player
+        this.player.draw(ctx);
+
+        // Particle System
+        this.particles.draw(ctx);
+
+        ctx.restore();
+
+        // Screen-Space Overlays (FSM)
+        if (this.state === this.STATES.TITLE) {
+          this.drawTitleScreen(ctx);
+        } else if (this.state === this.STATES.GAME_OVER) {
+          this.drawGameOverScreen(ctx);
+        } else if (this.state === this.STATES.VICTORY) {
+          this.drawVictoryScreen(ctx);
+        }
+      }
+
+      drawParallaxBackground(ctx) {
+        const grad = ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+        grad.addColorStop(0, '#060814');
+        grad.addColorStop(0.65, '#0b1026');
+        grad.addColorStop(1, '#1b1238');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Parallax Layer 1: Distant Stars
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        for (let i = 0; i < this.stars.length; i++) {
+          const s = this.stars[i];
+          const sx = (s.x - this.camera.x * s.speed) % (this.canvas.width * 1.5);
+          const drawX = sx < 0 ? sx + this.canvas.width * 1.5 : sx;
+          ctx.globalAlpha = s.alpha * (0.6 + Math.sin(this.gameTime * 3 + i) * 0.4);
+          ctx.beginPath();
+          ctx.arc(drawX, s.y, s.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Parallax Layer 2: Distant Neon City Skyline
+        ctx.save();
+        ctx.fillStyle = '#0a0d20';
+        const cityOffset = -(this.camera.x * 0.2) % 400;
+        for (let bx = cityOffset - 400; bx < this.canvas.width + 400; bx += 70) {
+          const h = 120 + Math.sin(bx * 0.05) * 50;
+          ctx.fillRect(bx, this.canvas.height - h, 60, h);
+          ctx.fillStyle = '#00f0ff';
+          ctx.fillRect(bx + 26, this.canvas.height - h - 3, 8, 3);
+          ctx.fillStyle = '#0a0d20';
+        }
+        ctx.restore();
+
+        // Parallax Layer 3: Midground Industrial Beams
+        ctx.save();
+        ctx.fillStyle = 'rgba(16, 23, 48, 0.75)';
+        const pillarOffset = -(this.camera.x * 0.4) % 300;
+        for (let px = pillarOffset - 300; px < this.canvas.width + 300; px += 150) {
+          ctx.fillRect(px, this.canvas.height - 180, 24, 180);
+          ctx.fillStyle = 'rgba(0, 240, 255, 0.15)';
+          ctx.fillRect(px + 10, this.canvas.height - 180, 4, 180);
+          ctx.fillStyle = 'rgba(16, 23, 48, 0.75)';
+        }
+        ctx.restore();
+      }
+
+      drawExitPortal(ctx, portal) {
+        ctx.save();
+        const centerX = portal.x + portal.w / 2;
+        const centerY = portal.y + portal.h / 2;
+        const t = performance.now() * 0.003;
+
+        ctx.translate(centerX, centerY);
+        ctx.strokeStyle = '#00f0ff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 18;
+        ctx.lineWidth = 3;
+
+        for (let r = 0; r < 3; r++) {
+          const radius = 22 + r * 10 + Math.sin(t + r) * 4;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, radius * 0.65, radius, t * (r % 2 === 0 ? 1 : -1), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 10, 18, -t, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      drawTitleScreen(ctx) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(5, 7, 18, 0.82)';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#00f0ff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 18;
+        ctx.font = '900 52px monospace';
+        ctx.fillText('CYBER HOPPER', this.canvas.width / 2, this.canvas.height / 2 - 50);
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ff2a6d';
+        ctx.font = '700 17px monospace';
+        ctx.letterSpacing = '4px';
+        ctx.fillText('HIGH-RESPONSE 2D PLATFORMER ENGINE', this.canvas.width / 2, this.canvas.height / 2 - 10);
+
+        if (Math.floor(Date.now() / 500) % 2 === 0) {
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '700 18px monospace';
+          ctx.fillText('PRESS [SPACE] OR ANY KEY TO INITIALIZE', this.canvas.width / 2, this.canvas.height / 2 + 70);
+        }
+
+        ctx.fillStyle = '#8c9bb0';
+        ctx.font = '14px monospace';
+        ctx.fillText('Featuring Decoupled AABB • Coyote Time • Jump Buffering • Corner Slip', this.canvas.width / 2, this.canvas.height / 2 + 120);
+
+        ctx.restore();
+      }
+
+      drawGameOverScreen(ctx) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 6, 18, 0.88)';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ff2a6d';
+        ctx.shadowColor = '#ff2a6d';
+        ctx.shadowBlur = 20;
+        ctx.font = '900 54px monospace';
+        ctx.fillText('CRITICAL SYSTEM FAILURE', this.canvas.width / 2, this.canvas.height / 2 - 40);
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#e0f8ff';
+        ctx.font = '700 20px monospace';
+        ctx.fillText(`FINAL SCORE: ${this.score}`, this.canvas.width / 2, this.canvas.height / 2 + 20);
+
+        if (Math.floor(Date.now() / 450) % 2 === 0) {
+          ctx.fillStyle = '#00f0ff';
+          ctx.font = '700 18px monospace';
+          ctx.fillText('PRESS [R] OR [SPACE] TO REBOOT SYSTEM', this.canvas.width / 2, this.canvas.height / 2 + 80);
+        }
+        ctx.restore();
+      }
+
+      drawVictoryScreen(ctx) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(4, 18, 24, 0.88)';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#00f0ff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 24;
+        ctx.font = '900 56px monospace';
+        ctx.fillText('SECTOR SECURED', this.canvas.width / 2, this.canvas.height / 2 - 50);
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '700 22px monospace';
+        ctx.fillText(`MISSION ACCOMPLISHED • SCORE: ${this.score}`, this.canvas.width / 2, this.canvas.height / 2 + 10);
+
+        ctx.fillStyle = '#a0c4ff';
+        ctx.font = '16px monospace';
+        ctx.fillText(`ORBS COLLECTED: ${this.coinsCollected} / ${this.totalCoins} • SHIELDS REMAINING: ${this.lives}`, this.canvas.width / 2, this.canvas.height / 2 + 50);
+
+        if (Math.floor(Date.now() / 450) % 2 === 0) {
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '700 18px monospace';
+          ctx.fillText('PRESS [R] OR [SPACE] TO REPLAY MISSION', this.canvas.width / 2, this.canvas.height / 2 + 100);
+        }
+        ctx.restore();
+      }
+
+      // Delta-time integration loop with dt <= 0.1s clamp
+      mainLoop(timestamp) {
+        const rawDt = (timestamp - this.lastTime) / 1000.0;
+        this.lastTime = timestamp;
+
+        const dt = Math.min(rawDt, 0.1);
+
+        this.update(dt);
+        this.draw();
+
+        requestAnimationFrame((t) => this.mainLoop(t));
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      new Game();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>紫禁天朝 · 完整皇宫</title>
+    <meta name="description" content="可俯瞰、可游览、可进入内景的完整皇宫 3D 交互项目（Three.js）" />
+    <link rel="stylesheet" href="./src/shared/base.css" />
+
+    <!--
+      import map：仅做模块解析声明（非 UI 逻辑、非样式），路径全部相对。
+      本地 vendored three r169 的 addons（OrbitControls / EffectComposer / UnrealBloomPass …）
+      以裸标识符 'three' 导入，缺此表浏览器无法解析。下游统一用法：
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./public/vendor/three/three.module.js",
+          "three/addons/": "./public/vendor/three/addons/",
+          "three/examples/jsm/": "./public/vendor/three/addons/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <!-- 唯一画布容器：由 src/main.js 挂载 renderer（主 Agent/t2 负责） -->
+    <div id="app"></div>
+
+    <!-- 加载层：仅提供结构与 id 钩子，状态与交互逻辑归 G（src/ui/）、加载进度归 core（src/core/） -->
+    <div id="loading-layer" role="status" aria-live="polite">
+      <div class="loading-panel">
+        <p class="loading-seal" aria-hidden="true">宫</p>
+        <h1 class="loading-title">紫禁天朝</h1>
+        <p class="loading-stage" id="loading-stage">正在准备场景…</p>
+        <div class="loading-track" aria-hidden="true">
+          <span class="loading-fill" id="loading-progress"></span>
+        </div>
+        <p class="loading-note" id="loading-note">加载完成后可用 1–8 切换视角，F 进入第一人称，Esc 释放指针锁。</p>
+        <div class="loading-error" id="loading-error" hidden>
+          <p class="loading-error-text" id="loading-error-text">资源加载失败。</p>
+          <button class="loading-retry" type="button" id="loading-retry">重试</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

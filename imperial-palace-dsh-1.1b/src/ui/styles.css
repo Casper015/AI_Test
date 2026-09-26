@@ -1,0 +1,531 @@
+/**
+ * src/ui/styles.css —— G 区 UI 皮肤（计划 §3.1）。
+ *
+ * 归属：t9 ui-engineer。数值只通过 CSS 变量引用，变量由 `src/ui/tokens.js` 从 `CONFIG.UI` 注入：
+ *   --palace-space-*（4/8/12/16/24/32 阶梯）、--palace-radius（4px）、--palace-transition（180ms）、
+ *   面板底色/暗金边/朱红印章/字体族全部来自 config，本文件不重复写死设计数值（只写结构性数值：
+ *   百分比、z-index 顺序、1px 描边等）。
+ *
+ * 结构约定（`src/ui/index.js` 构建）：
+ *   #palace-ui[data-palace-ui]               根层：pointer-events:none（只有面板自身接收事件）
+ *     [data-ui-panel="brand|hud|views|zones|tour|minimap|env|help|loading|info|labels|toast"]
+ *   隐藏义务（CONTRACTS §11.3 第 1 条）：`#palace-ui[hidden]` 或 `.is-hidden` 时全部不可见且不可命中。
+ */
+
+#palace-ui {
+  position: fixed;
+  inset: 0;
+  z-index: var(--palace-z-hud);
+  pointer-events: none;
+  font-family: var(--palace-font-body);
+  font-size: var(--palace-font-body-size);
+  line-height: var(--palace-line-height);
+  color: var(--palace-title-color);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+#palace-ui[hidden],
+#palace-ui.is-hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+#palace-ui * {
+  box-sizing: border-box;
+}
+
+#palace-ui .palace-col {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: var(--palace-space-sm);
+  max-width: min(38vw, 360px);
+}
+
+#palace-ui .palace-col--tl {
+  top: var(--palace-space-md);
+  left: var(--palace-space-md);
+  align-items: flex-start;
+}
+
+#palace-ui .palace-col--tr {
+  top: var(--palace-space-md);
+  right: var(--palace-space-md);
+  align-items: stretch;
+  /* 单列可滚动：视口再小也只是滚动，绝不与其它面板重叠（1440×900 实测修正） */
+  bottom: var(--palace-space-md);
+  max-height: calc(100vh - var(--palace-space-xl));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-right: var(--palace-space-xxs);
+}
+
+#palace-ui .palace-col--bl {
+  bottom: var(--palace-space-md);
+  left: var(--palace-space-md);
+  align-items: flex-start;
+}
+
+/* core 的 ?stats=1 诊断面板固定在左下角（pointer-events:none）：躲开它，避免目视重叠 */
+#palace-ui[data-stats-overlay="1"] .palace-col--bl {
+  bottom: calc(var(--palace-space-xl) * 4 + var(--palace-space-md));
+}
+
+#palace-ui .palace-col--br {
+  bottom: var(--palace-space-md);
+  right: var(--palace-space-md);
+  align-items: flex-end;
+}
+
+#palace-ui .palace-col--bc {
+  bottom: var(--palace-space-md);
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  max-width: min(64vw, 560px);
+}
+
+/* ---------------------------------------------------------------- 面板 */
+
+#palace-ui .palace-panel {
+  pointer-events: auto;
+  background: var(--palace-panel-bg);
+  border: var(--palace-border-width) solid var(--palace-panel-border);
+  border-radius: var(--palace-radius);
+  box-shadow: var(--palace-panel-shadow);
+  padding: var(--palace-space-sm);
+  backdrop-filter: blur(2px);
+  transition: opacity var(--palace-transition) ease, transform var(--palace-transition) ease;
+}
+
+#palace-ui .palace-panel--compact {
+  padding: var(--palace-space-xs) var(--palace-space-sm);
+}
+
+#palace-ui .palace-panel__title {
+  display: flex;
+  align-items: center;
+  gap: var(--palace-space-xs);
+  margin: 0 0 var(--palace-space-xs);
+  font-family: var(--palace-font-title);
+  font-size: var(--palace-font-section-size);
+  font-weight: 600;
+  letter-spacing: var(--palace-letter-spacing);
+  color: var(--palace-title-color);
+}
+
+#palace-ui .palace-panel__title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--palace-panel-border), transparent);
+}
+
+#palace-ui .palace-hint {
+  font-size: var(--palace-font-caption-size);
+  color: rgba(240, 236, 225, 0.68);
+}
+
+/* ---------------------------------------------------------------- 品牌 */
+
+#palace-ui .palace-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--palace-space-sm);
+  pointer-events: auto;
+  padding: var(--palace-space-xs) var(--palace-space-sm);
+  background: var(--palace-panel-bg);
+  border: var(--palace-border-width) solid var(--palace-panel-border);
+  border-radius: var(--palace-radius);
+}
+
+#palace-ui .palace-brand__name {
+  font-family: var(--palace-font-title);
+  font-size: var(--palace-font-title-size);
+  letter-spacing: calc(var(--palace-letter-spacing) * 6);
+  margin: 0;
+}
+
+#palace-ui .palace-brand__seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--palace-space-lg);
+  height: var(--palace-space-lg);
+  border: var(--palace-border-width) solid var(--palace-seal);
+  border-radius: var(--palace-radius);
+  background: rgba(150, 40, 34, 0.32);
+  color: var(--palace-title-color);
+  font-family: var(--palace-font-title);
+  font-size: var(--palace-font-section-size);
+}
+
+#palace-ui .palace-brand__sub {
+  font-size: var(--palace-font-caption-size);
+  color: rgba(240, 236, 225, 0.66);
+}
+
+/* ---------------------------------------------------------------- HUD */
+
+#palace-ui .palace-hud {
+  pointer-events: auto;
+  font-size: var(--palace-font-caption-size);
+  display: grid;
+  gap: var(--palace-space-xxs);
+  min-width: 208px;
+}
+
+#palace-ui .palace-hud__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--palace-space-sm);
+}
+
+#palace-ui .palace-hud__key {
+  color: rgba(240, 236, 225, 0.62);
+}
+
+#palace-ui .palace-hud__value {
+  color: var(--palace-accent);
+}
+
+/* ---------------------------------------------------------------- 按钮 */
+
+#palace-ui .palace-btn {
+  pointer-events: auto;
+  appearance: none;
+  min-height: var(--palace-touch-target);
+  min-width: var(--palace-touch-target);
+  padding: var(--palace-space-xs) var(--palace-space-sm);
+  margin: 0;
+  font-family: var(--palace-font-body);
+  font-size: var(--palace-font-caption-size);
+  color: var(--palace-title-color);
+  background: rgba(240, 236, 225, 0.06);
+  border: var(--palace-border-width) solid rgba(223, 161, 18, 0.28);
+  border-radius: var(--palace-radius);
+  cursor: pointer;
+  transition: background var(--palace-transition) ease, border-color var(--palace-transition) ease, color var(--palace-transition) ease;
+  text-align: center;
+  white-space: nowrap;
+}
+
+#palace-ui .palace-btn:hover {
+  background: rgba(223, 161, 18, 0.18);
+  border-color: rgba(223, 161, 18, 0.65);
+}
+
+#palace-ui .palace-btn:focus-visible {
+  outline: 2px solid var(--palace-accent);
+  outline-offset: 1px;
+}
+
+#palace-ui .palace-btn.is-active {
+  background: rgba(150, 40, 34, 0.55);
+  border-color: var(--palace-accent);
+  color: #fff8e6;
+}
+
+#palace-ui .palace-btn--primary {
+  border-color: rgba(223, 161, 18, 0.6);
+  background: rgba(223, 161, 18, 0.16);
+}
+
+#palace-ui .palace-btn--seal {
+  border-color: var(--palace-seal);
+  background: rgba(150, 40, 34, 0.42);
+}
+
+#palace-ui .palace-btn--ghost {
+  background: transparent;
+  border-color: rgba(240, 236, 225, 0.24);
+}
+
+#palace-ui .palace-btn__index {
+  display: inline-block;
+  min-width: var(--palace-space-md);
+  margin-right: var(--palace-space-xxs);
+  color: var(--palace-accent);
+  font-family: var(--palace-font-title);
+}
+
+#palace-ui .palace-btn[disabled] {
+  opacity: 0.42;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------- 网格 */
+
+#palace-ui .palace-grid {
+  display: grid;
+  gap: var(--palace-space-xs);
+}
+
+#palace-ui .palace-grid--views {
+  grid-template-columns: repeat(2, minmax(96px, 1fr));
+}
+
+#palace-ui .palace-grid--zones {
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
+}
+
+#palace-ui .palace-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--palace-space-xs);
+  align-items: center;
+}
+
+/* ---------------------------------------------------------------- 建筑信息 */
+
+#palace-ui .palace-info {
+  pointer-events: auto;
+  min-width: 260px;
+  max-width: 380px;
+}
+
+#palace-ui .palace-info__name {
+  font-family: var(--palace-font-title);
+  font-size: var(--palace-font-section-size);
+  margin: 0 0 var(--palace-space-xxs);
+}
+
+#palace-ui .palace-info__tag {
+  display: inline-block;
+  margin-left: var(--palace-space-xs);
+  padding: 0 var(--palace-space-xs);
+  border: var(--palace-border-width) solid var(--palace-panel-border);
+  border-radius: var(--palace-radius);
+  font-size: var(--palace-font-caption-size);
+  color: var(--palace-accent);
+}
+
+#palace-ui .palace-info__tag--no {
+  border-color: rgba(240, 236, 225, 0.3);
+  color: rgba(240, 236, 225, 0.72);
+}
+
+#palace-ui .palace-info__text {
+  margin: 0 0 var(--palace-space-xs);
+  font-size: var(--palace-font-caption-size);
+  color: rgba(240, 236, 225, 0.86);
+}
+
+/* ---------------------------------------------------------------- 标签层 */
+
+#palace-ui .palace-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* 位于面板之下：标签永远不会盖住 HUD/面板文字（面板底色半透明，标签透过时仍可辨） */
+  z-index: 1;
+}
+
+#palace-ui .palace-col {
+  z-index: 2;
+}
+
+#palace-ui .palace-label {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 0 var(--palace-space-xs);
+  border: var(--palace-border-width) solid rgba(223, 161, 18, 0.4);
+  border-radius: var(--palace-radius);
+  background: rgba(18, 17, 16, 0.78);
+  font-size: var(--palace-font-caption-size);
+  white-space: nowrap;
+  transition: opacity var(--palace-transition) ease;
+}
+
+#palace-ui .palace-label.is-selected {
+  border-color: var(--palace-accent);
+  color: #fff8e6;
+}
+
+#palace-ui .palace-label.is-hovered {
+  border-color: var(--palace-seal);
+}
+
+/* ---------------------------------------------------------------- 小地图 */
+
+#palace-ui .palace-minimap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--palace-space-xs);
+  align-items: center;
+}
+
+#palace-ui .palace-minimap__canvas {
+  display: block;
+  border: var(--palace-border-width) solid var(--palace-panel-border);
+  border-radius: var(--palace-radius);
+  cursor: crosshair;
+  touch-action: manipulation;
+}
+
+#palace-ui .palace-minimap__note {
+  font-size: var(--palace-font-caption-size);
+  color: rgba(240, 236, 225, 0.66);
+}
+
+/* ---------------------------------------------------------------- 导览 */
+
+#palace-ui .palace-tour__text {
+  margin: 0 0 var(--palace-space-xs);
+  font-size: var(--palace-font-caption-size);
+  color: rgba(240, 236, 225, 0.88);
+  max-width: 300px;
+}
+
+#palace-ui .palace-tour__dots {
+  display: flex;
+  gap: var(--palace-space-xxs);
+  margin-bottom: var(--palace-space-xs);
+}
+
+#palace-ui .palace-tour__dot {
+  width: var(--palace-space-xs);
+  height: var(--palace-space-xs);
+  border-radius: 50%;
+  border: var(--palace-border-width) solid rgba(223, 161, 18, 0.5);
+}
+
+#palace-ui .palace-tour__dot.is-done {
+  background: rgba(223, 161, 18, 0.5);
+}
+
+#palace-ui .palace-tour__dot.is-current {
+  background: var(--palace-accent);
+  border-color: var(--palace-accent);
+}
+
+/* ---------------------------------------------------------------- Toast */
+
+#palace-ui .palace-toast {
+  pointer-events: none;
+  max-width: min(56vw, 480px);
+  padding: var(--palace-space-xs) var(--palace-space-sm);
+  border: var(--palace-border-width) solid var(--palace-panel-border);
+  border-radius: var(--palace-radius);
+  background: rgba(26, 25, 23, 0.9);
+  font-size: var(--palace-font-caption-size);
+  opacity: 0;
+  transition: opacity var(--palace-transition) ease;
+}
+
+#palace-ui .palace-toast.is-visible {
+  opacity: 1;
+}
+
+#palace-ui .palace-toast__title {
+  color: var(--palace-accent);
+  font-family: var(--palace-font-title);
+}
+
+/* ---------------------------------------------------------------- 加载 / 失败 */
+
+#palace-ui .palace-loading__bar {
+  height: var(--palace-space-xs);
+  border: var(--palace-border-width) solid var(--palace-panel-border);
+  border-radius: var(--palace-radius);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+#palace-ui .palace-loading__fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--palace-accent), var(--palace-seal));
+  transition: width var(--palace-transition) ease;
+}
+
+#palace-ui .palace-loading__error {
+  color: #ffd9d2;
+}
+
+/* ---------------------------------------------------------------- 操作提示 */
+
+/* 默认折叠（面板高度收敛，避免与其它面板抢空间）；H 键或按钮展开 */
+#palace-ui .palace-help__body[hidden] {
+  display: none;
+}
+
+#palace-ui .palace-help__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--palace-space-xxs);
+  font-size: var(--palace-font-caption-size);
+}
+
+#palace-ui .palace-help__key {
+  display: inline-block;
+  min-width: 64px;
+  color: var(--palace-accent);
+  font-family: var(--palace-font-title);
+}
+
+#palace-ui .palace-help__touch {
+  margin: var(--palace-space-xs) 0 0;
+  color: rgba(240, 236, 225, 0.72);
+}
+
+/* ---------------------------------------------------------------- 窄屏 */
+
+@media (max-width: 1080px) {
+  #palace-ui .palace-col {
+    max-width: min(46vw, 320px);
+  }
+  #palace-ui .palace-grid--views {
+    grid-template-columns: repeat(2, minmax(64px, 1fr));
+  }
+  #palace-ui .palace-btn {
+    font-size: var(--palace-font-caption-size);
+    padding: var(--palace-space-xxs) var(--palace-space-xs);
+  }
+}
+
+@media (max-width: 720px) {
+  #palace-ui {
+    font-size: var(--palace-font-caption-size);
+  }
+  #palace-ui[data-narrow="1"] .palace-col--trl,
+  #palace-ui .palace-col {
+    max-width: min(64vw, 300px);
+  }
+  #palace-ui .palace-brand__name {
+    font-size: var(--palace-font-section-size);
+    letter-spacing: var(--palace-letter-spacing);
+  }
+  #palace-ui .palace-grid--views,
+  #palace-ui .palace-grid--zones {
+    grid-template-columns: repeat(2, minmax(56px, 1fr));
+  }
+  #palace-ui .palace-viewswitcher__label,
+  #palace-ui .palace-hud__key {
+    display: none;
+  }
+  #palace-ui .palace-minimap__canvas {
+    width: 132px;
+    height: 132px;
+  }
+  #palace-ui .palace-tour__text,
+  #palace-ui .palace-info__text {
+    max-width: 52vw;
+  }
+}
+
+/* 触屏：按钮加大命中区，面板可滚动，避免误触 */
+@media (pointer: coarse) {
+  #palace-ui .palace-btn {
+    min-height: calc(var(--palace-touch-target) + var(--palace-space-xs));
+  }
+  #palace-ui .palace-panel {
+    max-height: 44vh;
+    overflow: auto;
+  }
+}

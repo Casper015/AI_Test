@@ -1,0 +1,180 @@
+/*
+ * 紫禁天朝 · 启动壳样式（仅：页面骨架 + 加载层）
+ * -----------------------------------------------------------------------------
+ * 归属：t1 foundation-lead（src/shared/）。数值全部对应 src/shared/config.js：
+ *   UI.spacingScale = 4/8/12/16/24/32、UI.radius = 4px、UI.transitionMs = 180ms、
+ *   UI.panel.background / borderColor / titleColor / accentColor / sealColor、
+ *   UI.typography.titleFamily / bodyFamily。
+ * 边界：这里只负责"首帧加载层"与全屏画布骨架，不含任何 HUD/面板/小地图/视角切换器样式；
+ *   完整 UI 皮肤归 G（src/ui/），G 可覆盖这些类名但需保持同一套间距与圆角规范。
+ */
+
+:root {
+  --ip-space-xxs: 4px;
+  --ip-space-xs: 8px;
+  --ip-space-sm: 12px;
+  --ip-space-md: 16px;
+  --ip-space-lg: 24px;
+  --ip-space-xl: 32px;
+  --ip-radius: 4px;
+  --ip-transition: 180ms;
+  --ip-color-gold: #dfa112;
+  --ip-color-red: #962822;
+  --ip-color-warm-white: #f0ece1;
+  --ip-color-teal: #1c4e40;
+  --ip-color-paving: #575652;
+  --ip-color-brick: #1a1917;
+  --ip-color-gilt: #ffc83b;
+  --ip-panel-bg: rgba(26, 25, 23, 0.82);
+  --ip-panel-border: rgba(223, 161, 18, 0.45);
+  --ip-title-font: "Songti SC", "Noto Serif SC", "STSong", serif;
+  --ip-body-font: "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--ip-color-brick);
+  color: var(--ip-color-warm-white);
+  font-family: var(--ip-body-font);
+  overflow: hidden;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  display: block;
+}
+
+#app canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ------------------------------ 加载层 ------------------------------ */
+
+#loading-layer {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(150, 40, 34, 0.35), rgba(26, 25, 23, 0.96) 62%),
+    var(--ip-color-brick);
+  transition: opacity var(--ip-transition) ease;
+  z-index: 40;
+}
+
+#loading-layer[hidden],
+#loading-layer.is-hidden {
+  display: none;
+}
+
+.loading-panel {
+  min-width: 320px;
+  max-width: 78vw;
+  padding: var(--ip-space-xl) var(--ip-space-lg);
+  text-align: center;
+  background: var(--ip-panel-bg);
+  border: 1px solid var(--ip-panel-border);
+  border-radius: var(--ip-radius);
+}
+
+.loading-seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ip-space-xl);
+  height: var(--ip-space-xl);
+  margin: 0 auto var(--ip-space-sm);
+  color: var(--ip-color-warm-white);
+  background: var(--ip-color-red);
+  border-radius: var(--ip-radius);
+  font-family: var(--ip-title-font);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.loading-title {
+  margin: 0 0 var(--ip-space-xs);
+  font-family: var(--ip-title-font);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--ip-color-warm-white);
+}
+
+.loading-stage {
+  margin: 0 0 var(--ip-space-md);
+  font-size: 14px;
+  color: rgba(240, 236, 225, 0.78);
+}
+
+.loading-track {
+  width: 100%;
+  height: 4px;
+  margin-bottom: var(--ip-space-md);
+  background: rgba(240, 236, 225, 0.14);
+  border-radius: var(--ip-radius);
+  overflow: hidden;
+}
+
+.loading-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--ip-color-gold), var(--ip-color-gilt));
+  transition: width var(--ip-transition) ease;
+}
+
+.loading-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(240, 236, 225, 0.6);
+}
+
+.loading-error {
+  margin-top: var(--ip-space-md);
+  padding-top: var(--ip-space-sm);
+  border-top: 1px solid rgba(223, 161, 18, 0.28);
+}
+
+.loading-error-text {
+  margin: 0 0 var(--ip-space-xs);
+  font-size: 13px;
+  color: #f0c4b4;
+}
+
+.loading-retry {
+  min-height: 32px;
+  padding: 0 var(--ip-space-md);
+  color: var(--ip-color-brick);
+  background: var(--ip-color-gilt);
+  border: 1px solid var(--ip-color-gold);
+  border-radius: var(--ip-radius);
+  font-family: var(--ip-body-font);
+  font-size: 13px;
+  cursor: pointer;
+  transition: filter var(--ip-transition) ease;
+}
+
+.loading-retry:hover {
+  filter: brightness(1.08);
+}
+
+@media (max-width: 720px) {
+  .loading-panel {
+    min-width: 0;
+    width: 82vw;
+    padding: var(--ip-space-lg) var(--ip-space-md);
+  }
+}

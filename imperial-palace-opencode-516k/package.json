@@ -1,0 +1,13 @@
+{
+  "name": "imperial-palace-opencode-516k",
+  "version": "0.9.0",
+  "private": true,
+  "type": "module",
+  "description": "紫禁天朝 · 完整皇宫 3D 交互项目（Three.js，本地内置依赖，无需 npm install）",
+  "scripts": {
+    "serve": "bash scripts/serve.sh 8123",
+    "build": "node scripts/build.mjs",
+    "test": "node tests/layout.test.mjs && node tests/kit.test.mjs && node tests/zones.test.mjs",
+    "shot": "node scripts/shot.mjs"
+  }
+}

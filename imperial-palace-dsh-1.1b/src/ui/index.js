@@ -1,0 +1,724 @@
+/**
+ * G 区 UI 装配（计划 §6.2、§3.1 UI 规范）。
+ *
+ * 全部 DOM 由本模块在 `#app` 内的 `#palace-ui` 层里构建（不改 `index.html`，不引入 UI 框架）：
+ *   HUD · 八视角切换器 · 七分区跳转 · 建筑信息面板 · 中轴导览控件 · 小地图 ·
+ *   加载进度/失败与重试 · 操作提示 · 三时辰 · 质量选项 · 回到全城 · 建筑标签层 · 提示条
+ *
+ * 三条硬约束：
+ *   1. **状态只读**：所有交互都经 `interaction.requester` 发 §7.2 请求事件，UI 不缓存任何视图状态；
+ *   2. **隐藏义务**（CONTRACTS §11.3）：`?ui=0` 或 `?shot=1` → 根层 `hidden` + `pointer-events:none`
+ *      + `interaction.setPickEnabled(false)`（隐藏时完全不参与命中检测）；
+ *   3. 每帧更新（标签定位、小地图重绘、提示条淡出）由传入的 `update(dt)` 驱动，不自建循环。
+ */
+
+import * as THREE from 'three';
+import { CONFIG, UI, EVENTS } from '../shared/config.js';
+import * as LAYOUT from '../shared/layout.js';
+import { VIEW_LABELS, ZONE_BUTTONS, TIME_PRESETS, TIME_LABELS, QUALITY_ORDER, QUALITY_LABELS } from '../interaction/requests.js';
+import { helpKeyList, TOUCH_SUPPORT_NOTE } from '../interaction/keymap.js';
+import { h, append, clear, button, setOwnerDocument } from './dom.js';
+import { cssVariables, TRANSITION_MS, MINIMAP, assertTokens } from './tokens.js';
+import { createInteraction } from '../interaction/index.js';
+import { planLabels } from './labels.js';
+import { planMinimap, drawMinimap, zoneAreaAt } from './minimap.js';
+
+const STYLE_ID = 'palace-ui-styles';
+const TOKEN_STYLE_ID = 'palace-ui-tokens';
+
+/** 注入样式表（幂等）。使用相对模块 URL，产物内不出现绝对路径。 */
+export function ensureStyles({ doc = typeof document !== 'undefined' ? document : null } = {}) {
+  if (!doc?.head) return false;
+  setOwnerDocument(doc);
+  if (!doc.getElementById(TOKEN_STYLE_ID)) {
+    const style = h('style', { id: TOKEN_STYLE_ID, text: `:root{${Object.entries(cssVariables())
+      .map(([key, value]) => `${key}:${value}`)
+      .join(';')}}` });
+    doc.head.appendChild(style);
+  }
+  if (!doc.getElementById(STYLE_ID)) {
+    const link = h('link', { id: STYLE_ID, attrs: { rel: 'stylesheet' } });
+    link.href = new URL('./styles.css', import.meta.url).href;
+    doc.head.appendChild(link);
+  }
+  return true;
+}
+
+/**
+ * 创建 UI。
+ * @param {{
+ *   api: object, interaction: object, container?: object|null, query?: object,
+ *   config?: object, layout?: object, document?: object|null, window?: object|null
+ * }} params
+ */
+export function createUI({
+  api,
+  interaction,
+  container = typeof document !== 'undefined' ? document.getElementById('app') ?? document.body : null,
+  query = {},
+  config = CONFIG,
+  layout = LAYOUT,
+  document: doc = typeof document !== 'undefined' ? document : null,
+  window: win = typeof window !== 'undefined' ? window : null,
+} = {}) {
+  if (!api || !interaction) throw new Error('createUI 需要 core API 与 interaction 句柄');
+  if (!doc?.createElement) throw new Error('createUI 需要 DOM 环境');
+  const { events, store, rig } = api;
+  setOwnerDocument(doc);
+  const spacingProblems = assertTokens(Object.values(UI.spacing));
+  if (spacingProblems.length > 0) throw new Error(`UI 间距违反 §3.1：${spacingProblems.join('；')}`);
+
+  ensureStyles({ doc });
+
+  const host = container ?? doc.body;
+  const refs = { labels: new Map(), toastTimer: 0, minimapAccum: 0, lastSnapshot: null };
+  const disposers = [];
+
+  /* ------------------------------------------------------------------ 根层 */
+  const root = h('div', { id: 'palace-ui', attrs: { 'data-palace-ui': 'root', role: 'application', 'aria-label': '紫禁天朝操作面板' } });
+
+  const colTL = h('div', { class: 'palace-col palace-col--tl' });
+  const colTR = h('div', { class: 'palace-col palace-col--tr', attrs: { 'data-ui-region': 'sidebar' } });
+  const colBL = h('div', { class: 'palace-col palace-col--bl' });
+  const colBC = h('div', { class: 'palace-col palace-col--bc' });
+  const labelLayer = h('div', { class: 'palace-labels', attrs: { 'data-ui-panel': 'labels' } });
+  append(root, [colTL, colTR, colBL, colBC, labelLayer]);
+  host.appendChild(root);
+
+  /* ------------------------------------------------------------------ 品牌 + HUD */
+  const brand = h('div', { class: 'palace-brand', attrs: { 'data-ui-panel': 'brand' } }, [
+    h('span', { class: 'palace-brand__seal', text: '宫' }),
+    h('div', {}, [h('h1', { class: 'palace-brand__name', text: '紫禁天朝' }), h('div', { class: 'palace-brand__sub', text: '明清官式 · 完整宫城沙盘' })]),
+  ]);
+  const hudRows = {
+    view: h('span', { class: 'palace-hud__value', text: '—' }),
+    zone: h('span', { class: 'palace-hud__value', text: '—' }),
+    time: h('span', { class: 'palace-hud__value', text: '—' }),
+    quality: h('span', { class: 'palace-hud__value', text: '—' }),
+    position: h('span', { class: 'palace-hud__value', text: '—' }),
+    load: h('span', { class: 'palace-hud__value', text: '—' }),
+  };
+  const hudRow = (label, value) => h('div', { class: 'palace-hud__row' }, [h('span', { class: 'palace-hud__key', text: label }), value]);
+  const hud = h('div', { class: 'palace-panel palace-hud', attrs: { 'data-ui-panel': 'hud' } }, [
+    hudRow('视角', hudRows.view),
+    hudRow('分区', hudRows.zone),
+    hudRow('时辰', hudRows.time),
+    hudRow('质量', hudRows.quality),
+    hudRow('位置', hudRows.position),
+    hudRow('加载', hudRows.load),
+  ]);
+  append(colTL, [brand, hud]);
+
+  /* ------------------------------------------------------------------ 八视角切换器 */
+  const viewButtons = new Map();
+  const viewGrid = h('div', { class: 'palace-grid palace-grid--views' });
+  config.CAMERA.viewModes.forEach((entry) => {
+    const label = h('span', { class: 'palace-viewswitcher__label', text: entry.label });
+    const btn = button('', {
+      variant: 'default',
+      title: `${entry.index} · ${entry.label}（键盘 ${entry.index}）`,
+      attrs: { 'data-view-mode': entry.mode, 'data-view-index': String(entry.index) },
+      on: { click: () => requestViewFromUser(entry.mode, 'view-button') },
+    });
+    append(btn, [h('span', { class: 'palace-btn__index', text: String(entry.index) }), label]);
+    viewButtons.set(entry.mode, btn);
+    viewGrid.appendChild(btn);
+  });
+  const viewPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'views' } }, [
+    h('h2', { class: 'palace-panel__title', text: '视角（1–8）' }),
+    viewGrid,
+    h('div', { class: 'palace-hint', text: '键盘 1–8、按钮与 F 走同一条请求事件' }),
+  ]);
+
+  /* ------------------------------------------------------------------ 七分区跳转 */
+  const zoneButtons = new Map();
+  const zoneGrid = h('div', { class: 'palace-grid palace-grid--zones' });
+  ZONE_BUTTONS.forEach((entry) => {
+    const btn = button(entry.label, {
+      title: `${entry.label}（平滑过渡）`,
+      attrs: { 'data-zone': entry.id },
+      on: {
+        click: () => {
+          tourTakeover('zone-button');
+          if (entry.buildingId) interaction.requester.focusBuilding(entry.buildingId);
+          else interaction.requester.zone(entry.area);
+        },
+      },
+    });
+    zoneButtons.set(entry.id, btn);
+    zoneGrid.appendChild(btn);
+  });
+  const resetButton = button('回到全城', {
+    variant: 'primary',
+    title: '回到全城鸟瞰（键盘 R）',
+    attrs: { 'data-action': 'reset' },
+    on: {
+      click: () => {
+        tourTakeover('reset-button');
+        interaction.requester.reset();
+      },
+    },
+  });
+  const zonePanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'zones' } }, [
+    h('h2', { class: 'palace-panel__title', text: '分区' }),
+    zoneGrid,
+    h('div', { class: 'palace-row' }, [resetButton]),
+  ]);
+
+  /* ------------------------------------------------------------------ 三时辰 / 质量档 */
+  const timeButtons = new Map();
+  const timeRow = h('div', { class: 'palace-row' });
+  TIME_PRESETS.forEach((preset) => {
+    const btn = button(TIME_LABELS[preset] ?? preset, {
+      attrs: { 'data-time-preset': preset },
+      on: { click: () => interaction.requester.timePreset(preset) },
+    });
+    timeButtons.set(preset, btn);
+    timeRow.appendChild(btn);
+  });
+  const qualityButtons = new Map();
+  const qualityRow = h('div', { class: 'palace-row' });
+  QUALITY_ORDER.forEach((tier) => {
+    const btn = button(QUALITY_LABELS[tier] ?? tier, {
+      attrs: { 'data-quality-tier': tier },
+      on: { click: () => interaction.requester.quality(tier) },
+    });
+    qualityButtons.set(tier, btn);
+    qualityRow.appendChild(btn);
+  });
+  const envPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'env' } }, [
+    h('h2', { class: 'palace-panel__title', text: '时辰 / 质量' }),
+    h('div', { class: 'palace-hint', text: '时辰' }),
+    timeRow,
+    h('div', { class: 'palace-hint', text: '质量（键盘 Y 轮转）' }),
+    qualityRow,
+  ]);
+
+  /* ------------------------------------------------------------------ 中轴导览 */
+  const tourText = h('p', { class: 'palace-tour__text', text: '中轴导览：南桥 → 南城门 → 礼仪广场 → 主殿 → 金銮殿 → 内廷门 → 寝殿 → 御花园' });
+  const tourDots = h('div', { class: 'palace-tour__dots', attrs: { 'data-ui-part': 'tour-dots' } });
+  const tourButtons = {
+    start: button('开始', { variant: 'primary', on: { click: () => interaction.tour.start(0) } }),
+    pause: button('暂停', { on: { click: () => interaction.tour.pause('ui') } }),
+    resume: button('继续', { on: { click: () => interaction.tour.resume() } }),
+    stop: button('退出', { variant: 'ghost', on: { click: () => interaction.tour.stop() } }),
+    next: button('下一点', { variant: 'ghost', on: { click: () => interaction.tour.next() } }),
+  };
+  const tourPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'tour' } }, [
+    h('h2', { class: 'palace-panel__title', text: '中轴导览' }),
+    tourDots,
+    tourText,
+    h('div', { class: 'palace-row' }, [tourButtons.start, tourButtons.pause, tourButtons.resume, tourButtons.next, tourButtons.stop]),
+    h('div', { class: 'palace-hint', text: '导览中手动操作相机（拖动/滚轮/切视角）会自动暂停' }),
+  ]);
+
+  /* ------------------------------------------------------------------ 小地图 */
+  const minimapCanvas = h('canvas', {
+    class: 'palace-minimap__canvas',
+    attrs: { 'data-ui-part': 'minimap', width: String(MINIMAP.size), height: String(MINIMAP.size), role: 'img' },
+  });
+  minimapCanvas.width = MINIMAP.size;
+  minimapCanvas.height = MINIMAP.size;
+  const minimapNote = h('div', { class: 'palace-minimap__note', text: '点按分区定位 · 金点 = 当前位置' });
+  const minimapPanel = h('div', { class: 'palace-panel palace-minimap', attrs: { 'data-ui-panel': 'minimap' } }, [
+    h('h2', { class: 'palace-panel__title', text: '小地图' }),
+    minimapCanvas,
+    minimapNote,
+  ]);
+  minimapCanvas.addEventListener?.('click', (event) => {
+    const rect = minimapCanvas.getBoundingClientRect?.() ?? { left: 0, top: 0, width: MINIMAP.size, height: MINIMAP.size };
+    const scaleX = MINIMAP.size / Math.max(1, rect.width);
+    const scaleY = MINIMAP.size / Math.max(1, rect.height);
+    const plan = currentMinimapPlan();
+    const area = zoneAreaAt(plan, ((event.clientX ?? 0) - rect.left) * scaleX, ((event.clientY ?? 0) - rect.top) * scaleY);
+    tourTakeover('minimap');
+    if (area === 'city') interaction.requester.reset();
+    else interaction.requester.zone(area);
+  });
+
+  append(colBL, [minimapPanel, tourPanel]);
+
+  /* ------------------------------------------------------------------ 操作提示 */
+  const helpList = h('ul', { class: 'palace-help__list' });
+  helpKeyList().forEach((row) => {
+    helpList.appendChild(h('li', {}, [h('span', { class: 'palace-help__key', text: row.code }), h('span', { text: row.label })]));
+  });
+  const helpBody = h('div', { class: 'palace-help__body', attrs: { 'data-ui-part': 'help-body' } }, [helpList, h('p', { class: 'palace-help__touch', text: TOUCH_SUPPORT_NOTE, attrs: { 'data-ui-part': 'help-touch' } })]);
+  const helpPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'help' } }, [
+    h('h2', { class: 'palace-panel__title', text: '操作提示' }),
+    helpBody,
+  ]);
+  const helpToggle = button('收起提示', { variant: 'ghost', attrs: { 'data-action': 'toggle-help' }, on: { click: () => toggleHelp() } });
+  helpPanel.insertBefore(helpToggle, helpBody);
+
+  /* ------------------------------------------------------------------ 加载 / 失败 / 重试 */
+  const loadTitle = h('span', { class: 'palace-loading__stage', text: '准备中' });
+  const loadFill = h('div', { class: 'palace-loading__fill', attrs: { 'data-ui-part': 'loading-fill' } });
+  const loadBar = h('div', { class: 'palace-loading__bar' }, [loadFill]);
+  const loadError = h('div', { class: 'palace-loading__error', text: '', attrs: { 'data-ui-part': 'loading-error' } });
+  const retryButton = button(UI.loading.failureRetryLabel, {
+    variant: 'seal',
+    attrs: { 'data-action': 'retry' },
+    on: {
+      click: () => {
+        loadError.textContent = '正在重试…';
+        Promise.resolve(api.retryFailedZones?.()).catch((error) => {
+          loadError.textContent = `重试失败：${error?.message ?? error}`;
+        });
+      },
+    },
+  });
+  retryButton.hidden = true;
+  const loadingPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'loading' } }, [
+    h('h2', { class: 'palace-panel__title' }, [loadTitle]),
+    loadBar,
+    loadError,
+    h('div', { class: 'palace-row' }, [retryButton]),
+  ]);
+
+  /* ------------------------------------------------------------------ 建筑信息面板 */
+  const infoName = h('h2', { class: 'palace-info__name', text: '' });
+  const infoVisit = h('span', { class: 'palace-info__tag', text: '' });
+  const infoUsage = h('p', { class: 'palace-info__text', text: '' });
+  const infoMeta = h('p', { class: 'palace-info__text', text: '' });
+  const infoNear = button('近景', { on: { click: () => store.state.selectedBuildingId && interaction.requester.focusBuilding(store.state.selectedBuildingId) } });
+  const infoInterior = button('进入内景', {
+    variant: 'primary',
+    on: {
+      click: () => {
+        const id = store.state.selectedBuildingId;
+        const info = id ? interaction.catalog.info(id) : null;
+        if (!info?.visitable) return;
+        // 室内机位按区域选择：B 金銮殿 / C 寝殿（与 main.js 的 ?view=interior&zone= 同一机制）
+        store.patch({}, { source: 'ui', view: { area: info.zone } });
+        interaction.requester.viewMode('interior');
+      },
+    },
+  });
+  const infoFp = button('走过去（第一人称）', {
+    variant: 'ghost',
+    on: {
+      click: () => {
+        tourTakeover('fp-button');
+        interaction.requester.viewMode('fp');
+      },
+    },
+  });
+  const infoClose = button('关闭', { variant: 'ghost', on: { click: () => interaction.select(null, 'panel') } });
+  const infoPanel = h('div', { class: 'palace-panel palace-info', attrs: { 'data-ui-panel': 'info' } }, [
+    h('div', { class: 'palace-row' }, [infoName, infoVisit]),
+    infoUsage,
+    infoMeta,
+    h('div', { class: 'palace-row' }, [infoFp, infoNear, infoInterior, infoClose]),
+  ]);
+  infoPanel.hidden = true;
+
+  /* ------------------------------------------------------------------ 提示条 */
+  const toast = h('div', { class: 'palace-toast', attrs: { 'data-ui-panel': 'toast', role: 'status' } }, [
+    h('div', { class: 'palace-toast__title', text: '' }),
+    h('div', { class: 'palace-toast__detail', text: '' }),
+  ]);
+  const toastTitle = toast.firstChild;
+  const toastDetail = toast.lastChild;
+
+  /* ------------------------------------------------------------------ 右侧列装配（单列可滚动：任何视口都不重叠） */
+  append(colTR, [viewPanel, zonePanel, envPanel, loadingPanel, helpPanel]);
+  append(colBC, [toast, infoPanel]);
+
+  /* ------------------------------------------------------------------ 交互辅助 */
+  function tourTakeover(reason) {
+    interaction.tour.notifyTakeover(reason);
+  }
+
+  function requestViewFromUser(mode, source) {
+    tourTakeover(source);
+    interaction.requester.viewMode(mode);
+  }
+
+  function toggleHelp(force = null) {
+    const next = force === null ? !helpBody.hidden : !force;
+    helpBody.hidden = next;
+    helpToggle.textContent = next ? '展开提示' : '收起提示';
+    helpToggle.classList.toggle('is-active', !next);
+    return !next;
+  }
+
+  function showToast(hint) {
+    if (!hint) return;
+    toastTitle.textContent = hint.title ?? '';
+    toastDetail.textContent = hint.detail ?? '';
+    toast.classList.add('is-visible');
+    refs.toastTimer = Math.max(1.2, (TRANSITION_MS * 20) / 1000);
+  }
+
+  function infoTextFor(info) {
+    if (!info) return null;
+    return {
+      name: info.name,
+      visit: info.visitable ? '可进入内景' : '不可进入',
+      usage: info.usage ? `用途：${info.usage}` : '',
+      meta: [info.kind ? `形制：${info.kind}` : '', info.zone ? `分区：${info.zone}` : '', info.courtyard ? `院落：${info.courtyard}` : ''].filter(Boolean).join(' · '),
+      info: info.info ?? '',
+    };
+  }
+
+  /* ------------------------------------------------------------------ 小地图 / 标签 */
+  let minimapPlan = null;
+  function currentMinimapPlan() {
+    return (
+      minimapPlan ??
+      planMinimap({
+        layout,
+        cameraPosition: { x: rig.position.x, z: rig.position.z },
+        cameraYawDeg: rig.describe().azimuthDeg,
+        currentArea: layout.zoneAt(rig.position.x, rig.position.z) ?? null,
+        config,
+      })
+    );
+  }
+
+  const projectorTmp = new THREE.Vector3();
+  function makeProjector() {
+    const rect = container?.getBoundingClientRect?.() ?? { left: 0, top: 0, width: rig.viewport?.width ?? 1440, height: rig.viewport?.height ?? 900 };
+    const camera = rig.camera;
+    return (x, y, z) => {
+      projectorTmp.set(x, y, z).project(camera);
+      const visible = projectorTmp.z > -1 && projectorTmp.z < 1;
+      return {
+        x: (projectorTmp.x * 0.5 + 0.5) * (rect.width ?? 1440),
+        y: (-projectorTmp.y * 0.5 + 0.5) * (rect.height ?? 900),
+        visible,
+        depth: projectorTmp.z,
+      };
+    };
+  }
+
+  /** 面板矩形（用于把标签挡在面板之外；面板尺寸变化由 tick 重测，代价可忽略）。 */
+  function collectExclusionRects() {
+    const rects = [];
+    for (const el of [colTL, colTR, colBL, colBC]) {
+      const nodes = el.childNodes ?? [];
+      for (const node of nodes) {
+        if (node.nodeType !== 1 || node.hidden) continue;
+        const rect = node.getBoundingClientRect?.();
+        if (rect && rect.width > 0 && rect.height > 0) rects.push({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+      }
+    }
+    return rects;
+  }
+
+  function syncLabels(state) {
+    // 隐藏态（ui=0 / shot=1）：不生成任何标签元素内容（§11.3 隐藏义务，不只是 CSS 透明度）
+    if (!visible) {
+      for (const el of refs.labels.values()) {
+        el.hidden = true;
+        el.classList.remove('is-selected', 'is-hovered');
+      }
+      return { items: [], hidden: 0, considered: 0, excluded: 0 };
+    }
+    const rect = container?.getBoundingClientRect?.() ?? { width: rig.viewport?.width ?? 1440, height: rig.viewport?.height ?? 900 };
+    const plan = planLabels({
+      buildings: interaction.catalog.pickables.map((p) => ({ id: p.id, name: p.name, zone: p.zone, bounds: p.bounds })),
+      cameraPosition: { x: rig.position.x, y: rig.position.y, z: rig.position.z },
+      project: makeProjector(),
+      viewport: { width: rect.width ?? 1440, height: rect.height ?? 900 },
+      selectedId: state.selectedBuildingId,
+      hoveredId: state.hoveredBuildingId,
+      mode: state.viewMode,
+      config,
+      excludeRects: collectExclusionRects(),
+    });
+    const seen = new Set();
+    for (const item of plan.items) {
+      seen.add(item.id);
+      let el = refs.labels.get(item.id);
+      if (!el) {
+        el = h('div', { class: 'palace-label', attrs: { 'data-label-building': item.id } });
+        refs.labels.set(item.id, el);
+        labelLayer.appendChild(el);
+      }
+      el.textContent = item.name;
+      el.style.left = `${item.x}px`;
+      el.style.top = `${item.y}px`;
+      el.hidden = false;
+      el.classList.toggle('is-selected', item.selected);
+      el.classList.toggle('is-hovered', item.hovered);
+    }
+    for (const [id, el] of refs.labels) {
+      if (!seen.has(id)) {
+        el.hidden = true;
+        el.classList.remove('is-selected', 'is-hovered');
+      }
+    }
+    return plan;
+  }
+
+  function drawMinimapNow() {
+    minimapPlan = planMinimap({
+      layout,
+      cameraPosition: { x: rig.position.x, z: rig.position.z },
+      cameraYawDeg: rig.describe().azimuthDeg,
+      currentArea: layout.zoneAt(rig.position.x, rig.position.z) ?? null,
+      config,
+    });
+    const ctx2d = minimapCanvas.getContext?.('2d') ?? null;
+    refs.minimapDrawn = drawMinimap(ctx2d, minimapPlan, { colors: config.COLORS });
+    // 文案双向更新：离开宫城 → 提示在外场地；回到城内 → 恢复常规提示
+    if (refs.minimapDrawn) {
+      const narrow = root.dataset.narrow === '1';
+      minimapNote.textContent = minimapPlan.marker.inside
+        ? narrow
+          ? '点按分区定位（窄屏）'
+          : '点按分区定位 · 金点 = 当前位置'
+        : '当前位置在宫城之外（外场地）';
+    }
+    return minimapPlan;
+  }
+
+  /** 分区按钮的激活态取决于相机所在分区 → 随 tick 同步（否则切区后按钮会停在旧状态）。 */
+  function syncZoneButtons(currentArea) {
+    for (const [id, btn] of zoneButtons) {
+      const entry = ZONE_BUTTONS.find((z) => z.id === id);
+      const active = entry.area ? entry.area === currentArea : store.state.selectedBuildingId === entry.buildingId;
+      btn.classList.toggle('is-active', !!active);
+    }
+  }
+
+  /** 每帧易变量（相机位置相关）：HUD 位置/分区、分区按钮激活态、小地图、标签 —— 与 state 无关。 */
+  function syncVolatile() {
+    const currentArea = layout.zoneAt(rig.position.x, rig.position.z) ?? null;
+    hudRows.position.textContent = `${rig.position.x.toFixed(0)}, ${rig.position.z.toFixed(0)}`;
+    hudRows.zone.textContent = currentArea ?? '—';
+    syncZoneButtons(currentArea);
+    drawMinimapNow();
+    syncLabels(store.state);
+  }
+
+  /* ------------------------------------------------------------------ 状态同步 */
+  function applySnapshot(snapshot) {
+    refs.lastSnapshot = snapshot;
+    const { state } = snapshot;
+    hudRows.view.textContent = `${state.viewMode} · ${VIEW_LABELS[state.viewMode] ?? ''}${rig.isFp ? '（第一人称）' : ''}`;
+    hudRows.zone.textContent = layout.zoneAt(rig.position.x, rig.position.z) ?? '—';
+    hudRows.time.textContent = TIME_LABELS[state.timePreset] ?? state.timePreset;
+    hudRows.quality.textContent = QUALITY_LABELS[state.quality] ?? state.quality;
+    hudRows.position.textContent = `${rig.position.x.toFixed(0)}, ${rig.position.z.toFixed(0)}`;
+    for (const [mode, btn] of viewButtons) btn.classList.toggle('is-active', mode === state.viewMode);
+    for (const [preset, btn] of timeButtons) btn.classList.toggle('is-active', preset === state.timePreset);
+    for (const [tier, btn] of qualityButtons) btn.classList.toggle('is-active', tier === state.quality);
+    const currentArea = layout.zoneAt(rig.position.x, rig.position.z);
+    syncZoneButtons(currentArea ?? null);
+    const tour = snapshot.tour;
+    tourButtons.start.disabled = tour.active;
+    tourButtons.pause.disabled = !tour.active || tour.paused;
+    tourButtons.resume.disabled = !tour.active || !tour.paused;
+    tourButtons.next.disabled = !tour.active;
+    tourButtons.stop.disabled = !tour.active;
+    tourText.textContent = tour.name ? `第 ${tour.index + 1}/${tour.total} 点 · ${tour.name}：${tour.narration}` : '中轴导览：南桥 → 城门 → 广场 → 主殿 → 内廷 → 花园';
+    clear(tourDots);
+    for (let i = 0; i < tour.total; i += 1) {
+      tourDots.appendChild(h('span', { class: `palace-tour__dot${i === tour.index ? ' is-current' : i < tour.index ? ' is-done' : ''}` }));
+    }
+    const info = snapshot.selected ? infoTextFor(snapshot.selected) : null;
+    infoPanel.hidden = !info;
+    if (info) {
+      infoName.textContent = info.name;
+      infoVisit.textContent = info.visit;
+      infoVisit.className = `palace-info__tag${info.visitable ? '' : ' palace-info__tag--no'}`;
+      infoUsage.textContent = info.usage;
+      infoMeta.textContent = [info.meta, info.info].filter(Boolean).join(' · ');
+      infoInterior.disabled = !info.visitable;
+    }
+    infoPanel.dataset.selected = state.selectedBuildingId ?? '';
+    syncLabels(state);
+  }
+
+  /* ------------------------------------------------------------------ 事件订阅 */
+  disposers.push(interaction.onState(applySnapshot));
+  disposers.push(interaction.onHint(showToast));
+  disposers.push(
+    interaction.onCommand((name) => {
+      if (name === 'toggleHelp') toggleHelp();
+      else if (name === 'toggleMinimap') {
+        minimapPanel.hidden = !minimapPanel.hidden;
+        minimapNote.textContent = minimapPanel.hidden ? '小地图已收起（按 M 展开）' : '点按分区定位 · 金点 = 当前位置';
+      }
+    }),
+  );
+
+  const onProgress = (payload) => {
+    const progress = typeof payload?.progress === 'number' ? payload.progress : null;
+    loadTitle.textContent = `${payload?.stage ?? '加载'}${payload?.total ? `（${payload.loaded}/${payload.total}）` : ''}`;
+    if (progress !== null) loadFill.style.width = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
+    hudRows.load.textContent = `${payload?.stage ?? '加载'} ${progress === null ? '' : `${Math.round(progress * 100)}%`}`;
+  };
+  const onAssetFailure = (payload) => {
+    loadError.textContent = `资源失败：${payload?.url ?? ''} ${payload?.error ?? ''}${payload?.retriable ? '（可重试）' : '（不可重试）'}`;
+    retryButton.hidden = payload?.retriable === false;
+  };
+  const onZoneFailure = (payload) => {
+    loadError.textContent = `区域装载失败：${payload?.zone ?? ''} ${payload?.error ?? ''}`;
+    retryButton.hidden = false;
+    showToast({ title: `区域 ${payload?.zone ?? ''} 装载失败`, detail: '可在右下角面板点「重试」重新装载。' });
+  };
+  disposers.push(events.on(EVENTS.assetsProgress, onProgress));
+  disposers.push(events.on(EVENTS.assetsFailed, onAssetFailure));
+  disposers.push(events.on(EVENTS.zoneFailed, onZoneFailure));
+  disposers.push(events.on(EVENTS.zoneLoaded, (payload) => {
+    loadError.textContent = '';
+    retryButton.hidden = true;
+    hudRows.load.textContent = `区域 ${payload?.zone ?? ''} 就绪`;
+  }));
+
+  /* ------------------------------------------------------------------ 窄屏 */
+  function applyResponsive() {
+    const width = win?.innerWidth ?? 1440;
+    root.dataset.narrow = width <= UI.breakpoints.narrow ? '1' : '0';
+    root.dataset.medium = width <= UI.breakpoints.medium ? '1' : '0';
+    if (root.dataset.narrow === '1') {
+      toggleHelp(false);
+      minimapNote.textContent = '点按分区定位（窄屏）';
+    }
+    return width;
+  }
+  if (win?.addEventListener) {
+    const onResize = () => applyResponsive();
+    win.addEventListener('resize', onResize);
+    disposers.push(() => win.removeEventListener('resize', onResize));
+  }
+
+  /* ------------------------------------------------------------------ 可见性 */
+  let visible = true;
+  function setVisible(value, { pick = null } = {}) {
+    visible = value !== false;
+    root.hidden = !visible;
+    root.classList.toggle('is-hidden', !visible);
+    root.style.pointerEvents = visible ? '' : 'none';
+    if (pick !== null) interaction.setPickEnabled(pick);
+    else if (!visible) interaction.setPickEnabled(false);
+    else interaction.setPickEnabled(true);
+    if (visible) {
+      applySnapshot(interaction.snapshot());
+      syncVolatile();
+    } else {
+      syncLabels(store.state); // 立即清空标签层（不依赖 CSS）
+    }
+    return visible;
+  }
+
+  const forcedHidden = query?.ui === false || query?.shot === true;
+  if (forcedHidden) setVisible(false);
+  // core 的 ?stats=1 诊断面板在左下角：给左下列让位（样式表用 data-stats-overlay 处理）
+  root.dataset.statsOverlay = api.query?.stats ? '1' : '0';
+  // 操作提示默认折叠（任何宽度）：面板高度收敛，展开状态由 H 键/按钮控制
+  helpBody.hidden = true;
+  helpToggle.textContent = '展开提示';
+
+  applyResponsive();
+  applySnapshot(interaction.snapshot());
+  drawMinimapNow();
+
+  return {
+    root,
+    refs,
+    /** 每帧更新：提示条淡出 + HUD 位置/分区 + 标签定位 + 小地图重绘（节流到 UI 过渡时长量级）。 */
+    update(dt = 1 / 60) {
+      refs.updates = (refs.updates ?? 0) + 1;
+      if (!visible) return false;
+      if (refs.toastTimer > 0) {
+        refs.toastTimer -= dt;
+        if (refs.toastTimer <= 0) toast.classList.remove('is-visible');
+      }
+      refs.minimapAccum += dt;
+      const interval = Math.max(0.05, (TRANSITION_MS * 2) / 1000);
+      if (refs.minimapAccum >= interval) {
+        refs.minimapAccum = 0;
+        syncVolatile();
+      }
+      return true;
+    },
+    setVisible,
+    get visible() {
+      return visible;
+    },
+    toggleHelp,
+    showToast,
+    /** 诊断：DOM 结构摘要（V2/自动化走查可直接断言数量）。 */
+    stats() {
+      return {
+        visible,
+        forcedHidden,
+        narrow: root.dataset.narrow === '1',
+        viewButtons: viewButtons.size,
+        zoneButtons: zoneButtons.size,
+        timeButtons: timeButtons.size,
+        qualityButtons: qualityButtons.size,
+        labels: [...refs.labels.values()].filter((el) => !el.hidden).length,
+        updates: refs.updates ?? 0,
+        labelPool: refs.labels.size,
+        minimapDrawn: !!refs.minimapDrawn,
+        panels: [...(root.querySelectorAll?.('[data-ui-panel]') ?? [])].map((el) => el.dataset?.uiPanel ?? el.getAttribute?.('data-ui-panel')),
+        spacingProblems,
+      };
+    },
+    dispose() {
+      for (const off of disposers.splice(0)) off?.();
+      root.remove?.();
+    },
+  };
+}
+
+/**
+ * 一行接入（t14 在 `bootstrap()` 里调用即可）：
+ *   const iface = mountInterface(window.__PALACE__, { container: document.getElementById('app') });
+ * 之后唯一动画循环里可选调用 `iface.update(dt, elapsed)`（不调用也行：交互经 recordFrame 包装自驱动）。
+ */
+export function mountInterface(palaceApi = null, options = {}) {
+  const api = palaceApi ?? (typeof window !== 'undefined' ? window.__PALACE__ : null);
+  if (!api) throw new Error('mountInterface 需要 window.__PALACE__（core 装配完成后调用）');
+  const doc = options.document ?? (typeof document !== 'undefined' ? document : null);
+  if (!doc) throw new Error('mountInterface 需要 DOM 环境（浏览器内调用）');
+  const container = options.container ?? doc.getElementById('app') ?? doc.body;
+  const query = options.query ?? api.query ?? {};
+  const win = options.window ?? (typeof window !== 'undefined' ? window : null);
+  let uiRef = null; // 先建 interaction，再建 ui：tick 里通过闭包引用后者
+  const interaction = options.interaction ?? createInteraction({
+    api,
+    container,
+    config: options.config ?? CONFIG,
+    layout: options.layout ?? LAYOUT,
+    window: win,
+    document: doc,
+    options: {
+      renderSystem: options.renderSystem ?? true,
+      source: options.source ?? 'ui',
+      onTick: (dt, elapsed) => uiRef?.update(dt, elapsed),
+    },
+  });
+  const ui = createUI({ api, interaction, container, query, config: options.config ?? CONFIG, layout: options.layout ?? LAYOUT, document: doc, window: win });
+  uiRef = ui;
+  const handle = {
+    api,
+    interaction,
+    ui,
+    update(dt = 1 / 60, elapsed = 0) {
+      interaction.update(dt, elapsed);
+      ui.update(dt);
+      return handle;
+    },
+    setVisible(value) {
+      return ui.setVisible(value);
+    },
+    stats() {
+      return { ui: ui.stats(), interaction: interaction.stats(), query: { ui: query?.ui, shot: query?.shot, view: query?.view ?? null } };
+    },
+    dispose() {
+      ui.dispose();
+      interaction.dispose();
+    },
+  };
+  if (win) win.__PALACE_UI__ = handle;
+  return handle;
+}
+
+export default createUI;

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鹈鹕骑车 · Pelican on a Bike</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #cfeeff; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<script>
+// ===================== 配置 =====================
+const VW = 1200, VH = 750;          // 虚拟画布
+const LOOP = 120;                    // 一个踩踏循环的帧数 (2s @60fps)
+const GY = 600;                      // 地面
+const WHEEL_R = 62;
+const R_AX = { x: 468, y: GY - WHEEL_R };
+const F_AX = { x: 742, y: GY - WHEEL_R };
+const BB   = { x: 585, y: 545 };     // 中轴
+const CRANK_R = 30;
+const WHEEL_RATIO = 2.259;           // 每踩一圈车轮转的圈数 (与路面滚动严格匹配)
+const HIP = { x: 550, y: 468 };
+const HEAD = { x: 598, y: 316 };
+const SHOULDER = { x: 534, y: 390 };
+
+// ===================== 调色板 =====================
+const SKY_TOP = '#bfe9ff', SKY_BOT = '#fff4cf';
+const HILL_FAR = '#d3edbb', HILL_NEAR = '#a8d98d';
+const ROAD = '#f0e6d2', DASH = '#9c8a6a', CURB = '#f8b26a';
+const GRASS = '#bde29a';
+const OUTLINE = '#463f33';
+const BODY_C = '#fffdf4', BODY_SH = '#e4e7e2';
+const BEAK_C = '#ff8a3d', BEAK_D = '#e56f22', POUCH_C = '#ffbd66';
+const MOUTH_C = '#7a3b34';
+const LEG_C = '#ff9e4f', FOOT_C = '#ffa53f';
+const TIRE = '#4a4e69', RIM = '#ffffff', HUB = '#ff8552';
+const SPOKES = ['#ff5d8f', '#ffc93c', '#17b3a6', '#7b6cf6', '#ff8552', '#3ec6f0'];
+const SCARF_C = '#ff5d8f', SCARF_C2 = '#ffc93c';
+const SUN_C = '#ffe47a';
+
+let t = 0;
+let fc = 0;
+let sunRot = 0;
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  frameRate(60);
+}
+
+function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+
+function draw() {
+  t = (t + 1) % LOOP;
+  fc++;
+  sunRot = t * (2 * TAU / 10 / LOOP);
+  const th = (t / LOOP) * TAU;                 // 曲柄相位
+  const bob = Math.sin(2 * th) * 3;            // 车身起伏
+  const pitch = Math.sin(th) * 0.012;
+
+  // 适配窗口(cover)
+  const s = Math.max(width / VW, height / VH);
+  background(207, 238, 255);
+  push();
+  translate(width / 2 - VW * s / 2, height / 2 - VH * s / 2);
+  scale(s);
+
+  drawSky();
+  drawHills();
+  drawClouds();
+  drawRoad();
+
+  // 整车 + 鹈鹕 (一起上下起伏)
+  push();
+  translate(0, bob);
+  translate(600, 540); rotate(pitch); translate(-600, -540);
+  drawShadowGround();
+  drawSpeedLines(th);
+  drawFarParts(th);
+  drawWheel(R_AX.x, R_AX.y, WHEEL_R, th * WHEEL_RATIO);
+  drawWheel(F_AX.x, F_AX.y, WHEEL_R, th * WHEEL_RATIO);
+  drawFrame(th);
+  drawNearCranksAndLegs(th);
+  drawPelicanBody(th);
+  drawNearWing(th);
+  drawScarf(th);
+  drawHeadGroup(th);
+  drawDust();
+  pop();
+
+  drawFlowers();
+  pop();
+}
+
+// ===================== 背景 =====================
+function drawSky() {
+  const ctx = drawingContext;
+  const g = ctx.createLinearGradient(0, 0, 0, GY);
+  g.addColorStop(0, SKY_TOP); g.addColorStop(1, SKY_BOT);
+  ctx.fillStyle = g; ctx.fillRect(-200, -200, VW + 400, GY + 200);
+  // 太阳 + 旋转光芒
+  push();
+  translate(185, 130);
+  rotate(sunRot);
+  fill(255, 230, 130, 90); noStroke();
+  for (let i = 0; i < 10; i++) {
+    rotate(TAU / 10);
+    triangle(0, -78, -8, -108, 8, -108);
+  }
+  pop();
+  fill(SUN_C); circle(185, 130, 104);
+  fill(255, 248, 200); circle(172, 118, 66);
+}
+
+function hillY(x, layer) {
+  if (layer === 0) return 498 + 26 * Math.sin(TAU * x / 240) + 12 * Math.sin(TAU * x / 120 + 1.7);
+  return 528 + 22 * Math.sin(TAU * x / 160 + 2.4) + 10 * Math.sin(TAU * x / 80 + 0.6);
+}
+function drawHills() {
+  const o0 = t * 2, o1 = t * 2.667;
+  noStroke();
+  fill(HILL_FAR);
+  beginShape(); vertex(-200, GY);
+  for (let x = -200; x <= VW + 200; x += 20) vertex(x, hillY(x + o0, 0));
+  vertex(VW + 200, GY); endShape(CLOSE);
+  fill(HILL_NEAR);
+  beginShape(); vertex(-200, GY);
+  for (let x = -200; x <= VW + 200; x += 20) vertex(x, hillY(x + o1, 1));
+  vertex(VW + 200, GY); endShape(CLOSE);
+  // 远处小树(随近层山丘滚动)
+  for (let i = 0; i < 8; i++) {
+    let bx = ((i * 160 + o1 * 0.9) % (VW + 240)) - 120;
+    let by = hillY(bx + o1, 1) + 4;
+    fill('#8cc46f'); triangle(bx, by - 34, bx - 13, by, bx + 13, by);
+    triangle(bx, by - 48, bx - 10, by - 20, bx + 10, by - 20);
+  }
+}
+
+const CLOUDS = [[430, 96, 0.95], [720, 168, 0.66], [1000, 78, 1.15], [1420, 132, 0.85]];
+function drawClouds() {
+  for (const c of CLOUDS) {
+    let x = ((c[0] - t * 0.75) % (VW + 320) + (VW + 320)) % (VW + 320) - 160;
+    puff(x, c[1], c[2]);
+  }
+}
+function puff(x, y, sc) {
+  push(); translate(x, y); scale(sc);
+  noStroke(); fill(255, 255, 255, 235);
+  circle(0, 0, 46); circle(34, -14, 60); circle(74, 2, 44);
+  rect(0, 4, 76, 26, 13);
+  fill(236, 246, 252, 200); rect(2, 18, 72, 12, 6);
+  pop();
+}
+
+function drawRoad() {
+  noStroke(); fill(ROAD); rect(-200, GY, VW + 400, 46);
+  fill(CURB); rect(-200, GY, VW + 400, 5);
+  fill(DASH);
+  const off = t * (880 / LOOP);
+  for (let x = -80 - (off % 80); x < VW + 80; x += 80) rect(x, GY + 26, 40, 7, 3);
+  fill(GRASS); rect(-200, GY + 46, VW + 400, VH - GY - 46 + 200);
+}
+
+function drawFlowers() {
+  const off = t * (880 / LOOP);
+  noStroke();
+  for (let i = 0; i < 24; i++) {
+    let x = ((i * 110 - off) % (VW + 220) + (VW + 220)) % (VW + 220) - 110;
+    let y = GY + 56 + (i % 3) * 34;
+    fill('#7fb95c'); rect(x - 1.5, y - 14, 3, 15, 1);
+    fill(['#ff5d8f', '#ffc93c', '#ffffff', '#7b6cf6'][i % 4]);
+    circle(x, y - 18, 11);
+    fill('#ffe08a'); circle(x, y - 18, 4);
+  }
+}
+
+// ===================== 阴影 / 速度线 / 尘土 =====================
+function drawShadowGround() {
+  noStroke(); fill(70, 60, 40, 38);
+  ellipse((R_AX.x + F_AX.x) / 2, GY + 4, 330, 22);
+}
+function drawSpeedLines() {
+  strokeCap(ROUND); strokeWeight(4);
+  for (let i = 0; i < 4; i++) {
+    let frac = (t * 9 + i * 67.5) % 270;
+    let a = 120 * Math.sin(Math.PI * frac / 270);
+    let x = 372 - frac * 0.55;
+    stroke(color(150, 190, 215, a));
+    line(x, 330 + i * 48, x - 42, 330 + i * 48);
+  }
+  noStroke();
+}
+function drawDust() {
+  noStroke();
+  for (let i = 0; i < 5; i++) {
+    let age = ((t + i * 24) % 48) / 48;
+    fill(160, 150, 132, (1 - age) * 95);
+    circle(R_AX.x - 30 - age * 72, GY - 4 - age * 24 + sin(i * 2.1) * 5, 7 + age * 15);
+  }
+}
+
+// ===================== 自行车 =====================
+function drawWheel(x, y, r, ang) {
+  push(); translate(x, y);
+  noFill(); stroke(TIRE); strokeWeight(15); circle(0, 0, (r - 7) * 2);
+  stroke(RIM); strokeWeight(5); circle(0, 0, (r - 17) * 2);
+  push(); rotate(ang); strokeWeight(2.6);
+  for (let i = 0; i < 12; i++) {
+    stroke(SPOKES[i % 6]);
+    const a = (i / 12) * TAU;
+    line(0, 0, Math.cos(a) * (r - 18), Math.sin(a) * (r - 18));
+  }
+  pop();
+  noStroke(); fill(HUB); circle(0, 0, 15);
+  fill(RIM); circle(0, 0, 6);
+  pop();
+}
+
+function tube(x1, y1, x2, y2, c, w) {
+  stroke(c); strokeWeight(w); strokeCap(ROUND); line(x1, y1, x2, y2);
+}
+function drawFrame(th) {
+  tube(585, 545, R_AX.x, R_AX.y, '#7b6cf6', 8);          // 后下叉
+  tube(530, 458, R_AX.x, R_AX.y, '#7b6cf6', 8);          // 后上叉
+  tube(585, 545, 530, 458, '#ff5d8f', 10);               // 立管
+  tube(530, 458, 698, 452, '#17b3a6', 10);               // 上管
+  tube(585, 545, 698, 452, '#ffc93c', 10);               // 下管
+  tube(698, 456, 704, 430, '#ff8552', 10);               // 头管
+  tube(698, 458, F_AX.x, F_AX.y, '#ff8552', 9);          // 前叉
+  // 链条
+  tube(571, 539, R_AX.x + 2, R_AX.y - 9, '#8a8a8a', 3.5);
+  tube(571, 551, R_AX.x + 2, R_AX.y + 5, '#8a8a8a', 3.5);
+  noStroke(); fill('#9aa0ae'); circle(R_AX.x, R_AX.y, 18);
+  // 牙盘(随曲柄转)
+  push(); translate(585, 545); rotate((t / LOOP) * TAU);
+  fill('#ffd23f'); stroke('#d9a91f'); strokeWeight(2); circle(0, 0, 32);
+  stroke('#d9a91f'); for (let i = 0; i < 5; i++) { rotate(TAU / 5); line(0, 0, 13, 0); }
+  noStroke(); fill('#f4f1e8'); circle(0, 0, 9);
+  pop();
+  // 车座
+  push(); translate(527, 452); rotate(-0.08);
+  noStroke(); fill('#158f84'); rect(-26, -8, 52, 13, 6);
+  fill('#0e6e66'); rect(-26, 0, 52, 5, 2.5);
+  pop();
+  // 车把 + 铃
+  tube(704, 432, 707, 414, '#c9c2b2', 7);
+  noStroke(); fill(OUTLINE);
+  push(); translate(707, 413); rotate(0.5);
+  fill('#ff8552'); rect(-4, -16, 9, 20, 4); pop();
+  fill('#ffd23f'); circle(716, 408, 13);
+  fill('#e8b92a'); circle(716, 408, 5);
+  // 曲柄轴心
+}
+function pedalPos(ph) {
+  return { x: BB.x + CRANK_R * Math.cos(ph), y: BB.y + CRANK_R * Math.sin(ph) };
+}
+function drawCrankArm(ph, c) {
+  const p = pedalPos(ph);
+  stroke(c); strokeWeight(7); strokeCap(ROUND);
+  line(BB.x, BB.y, p.x, p.y);
+  push(); translate(p.x, p.y); rotate(-0.18 * Math.sin(ph));
+  noStroke(); fill(OUTLINE); rect(-11, -5, 22, 10, 3);
+  fill('#ff8552'); rect(-10, -4, 20, 8, 2.5);
+  pop();
+}
+
+// ===================== 鹈鹕 =====================
+function webbedFoot() {
+  beginShape();
+  vertex(-5, -4); vertex(26, -7); vertex(21, -1); vertex(29, 2);
+  vertex(22, 5); vertex(25, 11); vertex(3, 8); vertex(-5, 4);
+  endShape(CLOSE);
+}
+function ikKnee(hx, hy, fx, fy, l1, l2) {
+  const dx = fx - hx, dy = fy - hy;
+  let d = Math.sqrt(dx * dx + dy * dy);
+  d = Math.min(d, l1 + l2 - 0.5);
+  const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
+  const h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+  const mx = hx + dx * a / d, my = hy + dy * a / d;
+  let k1x = mx - dy / d * h, k1y = my + dx / d * h;
+  let k2x = mx + dy / d * h, k2y = my - dx / d * h;
+  return (k1y < k2y) ? { x: k1x, y: k1y } : { x: k2x, y: k2y };
+}
+function drawLeg(ph, footC, legC, alpha) {
+  const p = pedalPos(ph);
+  const fx = p.x, fy = p.y - 6;
+  const k = ikKnee(HIP.x, HIP.y, fx, fy, 66, 66);
+  let fa = ph + HALF_PI; if (Math.sin(ph) > 0) fa += Math.PI;
+  strokeWeight(15); strokeCap(ROUND); stroke(OUTLINE);
+  line(HIP.x, HIP.y, k.x, k.y); line(k.x, k.y, fx, fy);
+  strokeWeight(11); stroke(legC);
+  line(HIP.x, HIP.y, k.x, k.y); line(k.x, k.y, fx, fy);
+  push(); translate(fx, fy + 2); rotate(fa);
+  stroke(OUTLINE); strokeWeight(3); fill(alpha ? color(200, 130, 70) : footC);
+  webbedFoot(); pop();
+}
+
+function drawFarParts(th) {
+  drawNearWingAt(522, 360, 0.85, 0.18 + 0.3 * Math.sin(th + 0.6 + Math.PI), '#d5dad5', true);
+  drawLeg(th + Math.PI, null, '#d97e2e', true);
+  drawCrankArm(th + Math.PI, '#77705f');
+}
+function drawNearCranksAndLegs(th) {
+  drawCrankArm(th, '#565044');
+  drawLeg(th, FOOT_C, LEG_C, false);
+}
+
+function drawPelicanBody(th) {
+  push(); translate(HIP.x, HIP.y); rotate(-0.05 * Math.sin(th)); translate(-HIP.x, -HIP.y);
+  // 脖颈(粗描边两层 = 伪轮廓, 画在身体下层)
+  strokeCap(ROUND);
+  stroke(OUTLINE); strokeWeight(52);
+  noFill(); beginShape(); vertex(556, 402);
+  bezierVertex(560, 366, 574, 342, 597, 326); endShape();
+  stroke(BODY_C); strokeWeight(44);
+  beginShape(); vertex(556, 402);
+  bezierVertex(560, 366, 574, 342, 597, 326); endShape();
+  // 尾羽
+  stroke(OUTLINE); strokeWeight(3); fill(BODY_C);
+  beginShape();
+  vertex(448, 396); vertex(398, 372); vertex(404, 392);
+  vertex(392, 402); vertex(442, 436); endShape(CLOSE);
+  // 身体
+  push(); translate(505, 418); rotate(-0.1);
+  fill(BODY_C); stroke(OUTLINE); strokeWeight(3.5);
+  ellipse(0, 0, 176, 136);
+  noStroke(); fill(BODY_SH);
+  ellipse(6, 30, 150, 84);
+  fill(255, 250, 235); ellipse(-8, -14, 120, 74);
+  pop();
+  pop();
+}
+
+function drawHeadGroup(th) {
+  const hx = HEAD.x, hy = HEAD.y + Math.sin(2 * th + 0.7) * 2.4;
+  push(); translate(hx, hy);
+  // 张嘴 Panting: 上喙抬起量 + 喉囊晃动
+  const up = 0.13 + 0.09 * (0.5 + 0.5 * Math.sin(2 * th));
+  const jig = Math.sin(2 * th + 1.9) * 5;
+  // 口腔(楔形, 跟随上喙开合)
+  const tipX = 24 + 149 * Math.cos(up), tipYb = -2 - 149 * Math.sin(up);
+  fill(MOUTH_C); noStroke();
+  beginShape();
+  vertex(26, -1); vertex(tipX - 6, tipYb + 4); vertex(tipX - 6, 13); vertex(26, 9);
+  endShape(CLOSE);
+  // 下喙 + 喉囊
+  stroke(OUTLINE); strokeWeight(3); fill(POUCH_C);
+  beginShape();
+  vertex(22, 4); vertex(148, 12); vertex(142, 19);
+  quadraticVertex(82, 54 + jig, 16, 44 + jig * 0.6);
+  quadraticVertex(-8, 36, 2, 10);
+  endShape(CLOSE);
+  // 上喙
+  push(); translate(24, -2); rotate(-up);
+  fill(BEAK_C); stroke(OUTLINE); strokeWeight(3);
+  beginShape();
+  vertex(-4, -9); vertex(120, -8);
+  quadraticVertex(152, -7, 150, 0);
+  vertex(120, 5); vertex(-4, 5); endShape(CLOSE);
+  stroke(BEAK_D); strokeWeight(2.5); noFill();
+  line(10, -2, 138, -1.5);
+  stroke(OUTLINE); strokeWeight(2.5);
+  line(26, -8, 26, 4);
+  pop();
+  pop();
+
+  push(); translate(hx, hy);
+  // 头
+  fill(BODY_C); stroke(OUTLINE); strokeWeight(3.5);
+  circle(0, -4, 66);
+  fill(255, 250, 235); noStroke(); circle(-6, -14, 30);
+  // 呆毛
+  stroke(OUTLINE); strokeWeight(3); noFill(); strokeCap(ROUND); stroke(BODY_SH);
+  beginShape(); vertex(-22, -28); quadraticVertex(-30, -44, -22, -50); endShape();
+  beginShape(); vertex(-13, -32); quadraticVertex(-16, -50, -6, -54); endShape();
+  stroke(OUTLINE);
+  // 眼睛 + 眨眼
+  const blink = (fc % 480) > 473;
+  noStroke(); fill('#2f3542');
+  if (blink) {
+    fill(BODY_C); rect(8, -18, 24, 22);
+    stroke('#2f3542'); strokeWeight(3); line(11, -6, 29, -8); noStroke();
+  } else {
+    circle(19, -8, 13);
+    fill(255); circle(22, -11, 4.4);
+  }
+  // 眉毛(滑稽)
+  noFill(); stroke(OUTLINE); strokeWeight(3.5); strokeCap(ROUND);
+  line(10, -22, 30, -26);
+  // 腮红
+  noStroke(); fill(255, 140, 150, 90);
+  ellipse(6, 6, 14, 9);
+  pop();
+}
+
+function drawNearWingAt(sx, sy, sc, ang, c, far) {
+  push();
+  translate(sx, sy); scale(sc); rotate(ang);
+  fill(c); stroke(OUTLINE); strokeWeight(far ? 2.5 : 3.5);
+  beginShape();
+  vertex(8, -14);
+  bezierVertex(-40, -56, -104, -70, -142, -48);
+  quadraticVertex(-114, -20, -106, -20);
+  quadraticVertex(-98, -34, -78, -20);
+  quadraticVertex(-66, -34, -48, -14);
+  quadraticVertex(-16, 8, 8, 26);
+  endShape(CLOSE);
+  noFill(); stroke(far ? '#c4cac6' : '#d8d5c8'); strokeWeight(3);
+  bezier(-10, 2, -50, -28, -92, -42, -124, -36);
+  bezier(-6, 12, -34, -10, -62, -18, -86, -16);
+  pop();
+}
+function drawNearWing(th) {
+  drawNearWingAt(528, 368, 1, 0.18 + 0.3 * Math.sin(th + 0.6), BODY_C, false);
+}
+
+function drawScarf(th) {
+  const ox = 574, oy = 352;
+  const amp = 6 + 2.5 * Math.sin(th);
+  const pts = [[ox, oy]];
+  for (let i = 1; i <= 4; i++) {
+    pts.push([ox - 26 * i, oy + 6 * i + amp * Math.sin(th + i * 0.95)]);
+  }
+  strokeCap(ROUND);
+  stroke(OUTLINE); strokeWeight(17);
+  for (let i = 0; i < pts.length - 1; i++) line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]);
+  for (let i = 0; i < pts.length - 1; i++) {
+    stroke(i < pts.length - 3 ? SCARF_C : SCARF_C2); strokeWeight(11);
+    line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]);
+  }
+  stroke(OUTLINE); strokeWeight(15); line(ox - 10, oy - 6, ox + 8, oy + 4);
+  stroke(SCARF_C); strokeWeight(10); line(ox - 10, oy - 6, ox + 8, oy + 4);
+}
+
+// ===================== 按键 =====================
+function keyPressed() {
+  if (key === 's' || key === 'S') saveCanvas('pelican-bike', 'png');
+  if (key === 'g' || key === 'G') saveGif('pelican-bike-loop', 4);
+  if (key === ' ') { if (isLooping()) noLoop(); else loop(); }
+}
+</script>
+</body>
+</html>

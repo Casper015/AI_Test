@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>紫禁天朝 · 完整皇宫 3D</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f16;
+    font-family: "Songti SC", "STSong", "Noto Serif SC", "Hiragino Mincho ProN", serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  #ui { position: fixed; inset: 0; pointer-events: none; }
+  #ui > * { pointer-events: auto; }
+  #loading { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column;
+    gap: 16px; align-items: center; justify-content: center; background: #0b0f16;
+    transition: opacity 600ms ease; }
+  #loading.done { opacity: 0; pointer-events: none; }
+  #loading h1 { margin: 0; font-size: 26px; letter-spacing: .36em; color: #e8d9b4; font-weight: 600; }
+  #loading .sub { font-size: 12px; letter-spacing: .28em; color: #8a8266; }
+  #loading-track { width: 260px; height: 3px; background: rgba(255,255,255,.12); border-radius: 4px; overflow: hidden; }
+  #loading-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #962822, #dfa112); transition: width 240ms ease; }
+  #loading-text { font-size: 12px; letter-spacing: .2em; color: #a89f86; }
+  #stats { position: fixed; right: 16px; bottom: 14px; z-index: 40; font-size: 11px;
+    letter-spacing: .12em; color: rgba(220,214,196,.6); font-family: ui-monospace, monospace; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./public/vendor/three/three.module.js",
+    "three/addons/": "./public/vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="ui"></div>
+<div id="stats"></div>
+<div id="loading">
+  <h1>紫禁天朝</h1>
+  <div class="sub">IMPERIAL PALACE · 3D</div>
+  <div id="loading-track"><div id="loading-bar"></div></div>
+  <div id="loading-text">正在营建全城灰盒…</div>
+</div>
+<script>window.__diag=[];function __report(m){window.__diag.push(String(m));var d=document.getElementById("diagtext")||document.createElement("pre");d.id="diagtext";d.textContent=window.__diag.join("\n");document.body.appendChild(d);}window.addEventListener("error",e=>{__report("ERR:"+(e.message||e.error)+"\n"+(e.error&&e.error.stack||""))});window.addEventListener("unhandledrejection",e=>{__report("REJ:"+(e.reason&&(e.reason.message||e.reason))+"\n"+(e.reason&&e.reason.stack||""))});</script>
+<script>if (/[?&]shot=1/.test(location.search)) { var l = document.getElementById("loading"); if (l) l.style.display = "none"; }</script>
+<link rel="modulepreload" href="./src/main.js">
+<link rel="modulepreload" href="./src/core/renderer.js">
+<link rel="modulepreload" href="./src/core/environment.js">
+<link rel="modulepreload" href="./src/core/state.js">
+<link rel="modulepreload" href="./src/core/registry.js">
+<link rel="modulepreload" href="./src/core/camera.js">
+<link rel="modulepreload" href="./src/core/terrain.js">
+<link rel="modulepreload" href="./src/core/loader.js">
+<link rel="modulepreload" href="./src/shared/config.js">
+<link rel="modulepreload" href="./src/shared/layout.js">
+<link rel="modulepreload" href="./src/shared/events.js">
+<link rel="modulepreload" href="./src/shared/rng.js">
+<link rel="modulepreload" href="./src/kit/index.js">
+<link rel="modulepreload" href="./src/kit/materials.js">
+<link rel="modulepreload" href="./src/kit/merge.js">
+<link rel="modulepreload" href="./src/kit/details.js">
+<link rel="modulepreload" href="./src/kit/assets.js">
+<link rel="modulepreload" href="./src/zones/_builder.js">
+<link rel="modulepreload" href="./src/zones/forecourt.js">
+<link rel="modulepreload" href="./src/zones/inner-palace.js">
+<link rel="modulepreload" href="./src/zones/west-courts.js">
+<link rel="modulepreload" href="./src/zones/east-courts.js">
+<link rel="modulepreload" href="./src/zones/garden-boundary.js">
+<link rel="modulepreload" href="./src/zones/_greybox.js">
+<link rel="modulepreload" href="./src/ui/index.js">
+<link rel="modulepreload" href="./src/interaction/index.js">
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>紫禁天朝 · 构件样板（A）</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f16;
+    font-family: "Songti SC", "STSong", "Noto Serif SC", "Hiragino Mincho ProN", serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  #hud { position: fixed; left: 16px; top: 14px; padding: 10px 14px; border: 1px solid rgba(223,161,18,.35);
+    border-radius: 4px; background: rgba(11,15,22,.72); color: #e8d9b4; font-size: 12px;
+    letter-spacing: .14em; line-height: 1.8; }
+  #hud b { color: #dfa112; font-weight: 600; }
+  #stats { position: fixed; right: 16px; bottom: 14px; z-index: 40; font-size: 11px;
+    letter-spacing: .12em; color: rgba(220,214,196,.72); font-family: ui-monospace, monospace; }
+  #statsdata { position: fixed; left: 16px; bottom: 14px; margin: 0; max-width: 52ch; font-size: 10px;
+    color: rgba(220,214,196,.55); font-family: ui-monospace, monospace; white-space: pre-wrap; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./public/vendor/three/three.module.js",
+    "three/addons/": "./public/vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="hud">紫禁天朝 · 标准院落样板<br><b>殿堂 · 宫墙 · 门 · 回廊 · 白台阶 · 铺地 · 树 · 灯</b><br>拖动旋转 / 滚轮缩放 · 加 <code>?stats=1</code> 显示统计</div>
+<div id="stats"></div>
+<pre id="statsdata"></pre>
+<script>window.__diag=[];function __report(m){window.__diag.push(String(m));var d=document.getElementById("diagtext")||document.createElement("pre");d.id="diagtext";d.textContent=window.__diag.join("\n");document.body.appendChild(d);}window.addEventListener("error",e=>{__report("ERR:"+(e.message||e.error)+"\n"+(e.error&&e.error.stack||""))});window.addEventListener("unhandledrejection",e=>{__report("REJ:"+(e.reason&&(e.reason.message||e.reason))+"\n"+(e.reason&&e.reason.stack||""))});</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as config from './src/shared/config.js';
+import { rngFor } from './src/shared/rng.js';
+import { createKit } from './src/kit/index.js';
+
+const params = new URLSearchParams(location.search);
+const kit = createKit({ THREE, config, rng: rngFor('kit-preview') });
+const M = kit.materials;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(config.SKY.golden.top);
+scene.fog = new THREE.Fog(config.SKY.golden.fog, 260, 900);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.5, 2000);
+camera.position.set(58, 46, 74);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 6, 4);
+controls.enableDamping = true;
+controls.maxPolarAngle = 1.36;
+controls.minDistance = 24;
+controls.maxDistance = 260;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+
+const sun = new THREE.DirectionalLight(config.SKY.golden.sun, 2.1);
+sun.position.set(-70, 110, 60);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -90;
+sun.shadow.camera.right = 90;
+sun.shadow.camera.top = 90;
+sun.shadow.camera.bottom = -90;
+sun.shadow.camera.far = 400;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(config.SKY.golden.hemi, config.SKY.golden.ground, 0.85));
+
+const world = new THREE.Group();
+scene.add(world);
+
+function place(obj, x, z, rot = 0) {
+  obj.position.set(x, 0, z);
+  obj.rotation.y = (rot * Math.PI) / 180;
+  world.add(obj);
+  return obj;
+}
+
+// 铺地：御道中缝 + 院落方砖 + 广场
+world.add(kit.slabRect({ x: 0, z: 2, w: 30, d: 100, kind: 'axis' }));
+world.add(kit.slabRect({ x: 0, z: 24, w: 66, d: 48, kind: 'court' }));
+world.add(kit.slabRect({ x: 0, z: 70, w: 92, d: 42, kind: 'plaza' }));
+
+// 主体：七开间单檐大殿（含台基与白石台阶），正面朝南对着院门
+const hall = kit.building({ id: 'preview.hall', kind: 'hall', name: '样板殿', x: 0, z: 80, w: 34, d: 18, bays: 7, rot: 0, tier: 'major', terrace: true });
+world.add(hall.group);
+// 丹陛御道：独立白石台阶
+place(kit.stairs({ x: 0, z: 0, w: 10, height: 1.8, steps: 5, stepD: 1.4 }), 0, 60);
+
+// 院门（三开间板门）与宫墙
+world.add(kit.building({ id: 'preview.gate', kind: 'courtyardGate', name: '样板门', x: 0, z: -40, w: 24, d: 10, bays: 3, rot: 0, tier: 'major' }).group);
+world.add(kit.wall({ x: 0, z: -40, len: 42, axis: 'x' }));
+world.add(kit.wall({ x: -66, z: -40, len: 42, axis: 'x' }));
+world.add(kit.wall({ x: 66, z: -40, len: 42, axis: 'x' }));
+world.add(kit.wall({ x: -54, z: -20, len: 40, axis: 'z' }));
+world.add(kit.wall({ x: 54, z: -20, len: 40, axis: 'z' }));
+world.add(kit.wall({ x: -33, z: 6, len: 42, axis: 'x' }));
+world.add(kit.wall({ x: 33, z: 6, len: 42, axis: 'x' }));
+
+// 回廊：东西两侧
+const corW = kit.corridor({ x: 0, z: 0, len: 62, w: 5.4, h: 4.2 });
+corW.rotation.y = Math.PI / 2;
+corW.position.set(-36, 0, 28);
+world.add(corW);
+const corE = kit.corridor({ x: 0, z: 0, len: 62, w: 5.4, h: 4.2 });
+corE.rotation.y = Math.PI / 2;
+corE.position.set(36, 0, 28);
+world.add(corE);
+
+// 摆件与绿化（构件自带世界坐标）
+world.add(kit.props({ kind: 'censer', id: 'preview.censer', x: 0, z: 56 }));
+world.add(kit.props({ kind: 'lantern', list: [{ x: -16, z: 44 }, { x: 16, z: 44 }, { x: -16, z: 6 }, { x: 16, z: 6 }] }));
+world.add(kit.props({ kind: 'stoneLamp', id: 'preview.lamp', list: [{ x: -26, z: 32 }, { x: 26, z: 32 }] }));
+world.add(kit.props({ kind: 'stoneRail', list: [{ x: 0, z: 52, len: 24, axis: 'x' }], y: 0 }));
+world.add(kit.props({ kind: 'lion', at: [-13, 46, 0] }));
+world.add(kit.props({ kind: 'lion', at: [13, 46, 0] }));
+world.add(kit.props({ kind: 'rockery', list: [{ x: -48, z: 48, s: 2.4 }, { x: -39, z: 51, s: 1.6 }] }));
+world.add(kit.props({ kind: 'pond', x: 44, z: 54, r: 9, seed: 3 }));
+world.add(kit.props({ kind: 'banner', at: [-28, -6] }));
+world.add(kit.props({ kind: 'banner', at: [28, -6] }));
+
+world.add(kit.treeCluster([
+  { x: -46, z: 6, s: 1.1 }, { x: -48, z: 20, s: 0.9 }, { x: 46, z: 8, s: 1.05 }, { x: 48, z: 22, s: 0.95 }
+], 'pine'));
+world.add(kit.treeCluster([
+  { x: -44, z: 34, s: 1.1, r: 0.4 }, { x: 46, z: 38, s: 1.15, r: 0.9 }, { x: 42, z: -14, s: 0.9, r: 1.4 }
+], 'broad'));
+world.add(kit.treeCluster([
+  { x: -32, z: 56, s: 1 }, { x: 31, z: 58, s: 1.05 }
+], 'willow'));
+world.add(kit.tree('willow', 30, 44, 1.1));
+
+let calls = 0;
+let tris = 0;
+let meshes = 0;
+let anchors = 0;
+let hallTriangles = 0;
+world.traverse((o) => {
+  if (o.userData && o.userData.lightAnchors) anchors += o.userData.lightAnchors.length;
+  if (o.isMesh) {
+    meshes++;
+    if (o.geometry && o.geometry.attributes.position) {
+      tris += (o.geometry.attributes.position.count / 3) * (o.isInstancedMesh ? o.count : 1);
+    }
+  }
+});
+hall.group.traverse((o) => {
+  if (o.isMesh && o.geometry && o.geometry.attributes.position) {
+    hallTriangles += (o.geometry.attributes.position.count / 3) * (o.isInstancedMesh ? o.count : 1);
+  }
+});
+const summary = {
+  kit: 'A v1.0',
+  style: config.STYLE_VERSION,
+  meshes,
+  triangles: Math.round(tris),
+  registry: kit.registry.length,
+  anchors,
+  hallMeshes: hall.group.children.length,
+  hallTriangles: Math.round(hallTriangles)
+};
+const stat = document.getElementById('stats');
+const statData = document.getElementById('statsdata');
+
+function resize() {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+addEventListener('resize', resize);
+
+function publishStats(fps) {
+  if (params.get('stats') !== '1') return;
+  calls = renderer.info.render.calls;
+  const visible = renderer.info.render.triangles;
+  stat.textContent = `${fps ?? '—'} fps · ${calls} calls · ${(visible / 1000).toFixed(0)}k tri · mesh ${meshes}`;
+  statData.textContent = JSON.stringify({ ...summary, fps: fps ?? null, calls, visibleTriangles: visible }, null, 1);
+  window.__KIT_PREVIEW__ = { ...summary, fps: fps ?? null, calls, visibleTriangles: visible };
+}
+
+let frames = 0;
+let acc = 0;
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.06);
+  controls.update();
+  renderer.render(scene, camera);
+  frames++;
+  acc += dt;
+  if (acc > 0.5) {
+    publishStats(Math.round(frames / acc));
+    frames = 0;
+    acc = 0;
+  }
+});
+renderer.render(scene, camera);
+publishStats(null);
+</script>
+</body>
+</html>

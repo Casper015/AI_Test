@@ -1,0 +1,50 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>鹈鹕的迷你自行车</title><style>*{box-sizing:border-box}body{margin:0;background:#fff8e9;display:grid;place-items:center;min-height:100svh}svg{display:block;width:min(100vw,1200px);height:auto;max-height:100svh}</style><svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-label="一只可爱的鹈鹕骑着彩色迷你自行车，循环矢量动画">
+<defs>
+ <pattern id="road" width="220" height="30" patternUnits="userSpaceOnUse"><path d="M20 16h70" stroke="#ead4a5" stroke-width="5" stroke-linecap="round"/></pattern>
+ <g id="wheel"><circle r="79" fill="#fff9e9" stroke="#273d4c" stroke-width="13"/><circle r="65" fill="#d4f2ed" stroke="#fff" stroke-width="5"/><g stroke="#59bdbb" stroke-width="4"><path d="M-63 0H63M0-63V63M-45-45 45 45M-45 45 45-45"/><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1.6s" repeatCount="indefinite"/></g><circle r="10" fill="#273d4c"/><g><path d="M0-79a79 79 0 0 1 33 7" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1.6s" repeatCount="indefinite"/></g></g>
+ <g id="foot"><path d="M-14-11Q-3-23 9-11L33 1 23 7 9 4 0 10-9 4-24 4Z" fill="#ffb03d" stroke="#c47727" stroke-width="3" stroke-linejoin="round"/><path d="M-22 13H28" stroke="#273d4c" stroke-width="7" stroke-linecap="round"/></g>
+</defs>
+<rect width="1200" height="800" fill="#fff8e9"/>
+<circle cx="965" cy="152" r="63" fill="#ffdc68"/>
+<g fill="#d3eeeb"><path d="M88 196c0-19 17-33 36-29 5-38 66-44 76-3 30-11 49 9 46 32Z"/><path d="M805 292c0-16 17-26 29-22 8-28 48-30 56 1 26-6 38 6 37 21Z"/></g>
+<g fill="none" stroke="#bccfcc" stroke-width="4" stroke-linecap="round"><path d="m317 160 11-5 11 5m34 20 8-4 8 4"/></g>
+<text x="76" y="92" fill="#244654" font-family="Arial,sans-serif" font-size="16" font-weight="700" letter-spacing="5">LITTLE WHEELS, BIG ADVENTURE</text>
+<path d="M0 637Q290 606 559 638T1200 624V800H0Z" fill="#f6e8c6"/>
+<g><rect x="0" y="659" width="1440" height="30" fill="url(#road)"/><animateTransform attributeName="transform" type="translate" from="0 0" to="-220 0" dur="1.6s" repeatCount="indefinite"/></g>
+<ellipse cx="581" cy="641" rx="249" ry="16" fill="#233d4a" opacity=".09"><animate attributeName="rx" values="249;240;249" dur=".8s" repeatCount="indefinite"/></ellipse>
+<!-- BICYCLE -->
+<use href="#wheel" x="399" y="553"/><use href="#wheel" x="764" y="553"/>
+<!-- far leg -->
+<g stroke="#cb822c" stroke-width="12" fill="none" stroke-linecap="round"><path d="M538 414 561 477 540 526"><animate attributeName="d" values="M538 414 558 475 540 526;M538 414 602 466 578 488;M538 414 601 500 616 526;M538 414 558 515 578 564;M538 414 558 475 540 526" dur="1.6s" repeatCount="indefinite"/></path></g>
+<g transform="translate(578 526)"><g><animateTransform attributeName="transform" type="rotate" from="180" to="540" dur="1.6s" repeatCount="indefinite"/><g transform="translate(38 0)"><g><animateTransform attributeName="transform" type="rotate" from="-180" to="-540" dur="1.6s" repeatCount="indefinite"/><use href="#foot" opacity=".85"/></g></g></g></g>
+<g stroke-linejoin="round" stroke-linecap="round" fill="none"><path d="m399 553 94-136 85 109Z" stroke="#e96889" stroke-width="16"/><path d="m493 417 209-7-124 116" stroke="#ef799a" stroke-width="16"/><path d="m702 410 62 143" stroke="#29aaa9" stroke-width="17"/><path d="m578 526-94-143" stroke="#ed7293" stroke-width="13"/><path d="m702 410-15-66 41-16" stroke="#29aaa9" stroke-width="13"/><path d="m717 331 32-8" stroke="#273d4c" stroke-width="15"/><path d="m478 388-7-24" stroke="#273d4c" stroke-width="10"/><path d="M443 366h58" stroke="#273d4c" stroke-width="19"/></g>
+<circle cx="578" cy="526" r="23" fill="#ffcf50" stroke="#273d4c" stroke-width="5"/>
+<g transform="translate(578 526)"><g><path d="M-38 0H38" stroke="#273d4c" stroke-width="8" stroke-linecap="round"/><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1.6s" repeatCount="indefinite"/></g></g>
+<!-- near leg follows crank -->
+<path d="M550 410 603 474 616 526" fill="none" stroke="#efa237" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"><animate attributeName="d" values="M550 410 603 474 616 526;M550 410 590 514 578 564;M550 410 526 480 540 526;M550 410 562 458 578 488;M550 410 603 474 616 526" dur="1.6s" repeatCount="indefinite"/></path>
+<g transform="translate(578 526)"><g><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1.6s" repeatCount="indefinite"/><g transform="translate(38 0)"><g><animateTransform attributeName="transform" type="rotate" from="0" to="-360" dur="1.6s" repeatCount="indefinite"/><use href="#foot"/></g></g></g></g>
+<!-- PELICAN -->
+<g><animateTransform attributeName="transform" type="translate" values="0 0;0 -7;0 0" dur=".8s" repeatCount="indefinite"/>
+ <!-- far wing -->
+ <g transform="translate(545 315)"><g><animateTransform attributeName="transform" type="rotate" values="-7;8;-7" dur="1.6s" repeatCount="indefinite"/><path d="M0 0Q90-51 151-21L120-8 145 2 112 12 128 24Q56 42 0 0" fill="#d5e3e3" stroke="#a3bcbc" stroke-width="4"/></g></g>
+ <!-- tail and body -->
+ <path d="m419 345-53-30 11 34-33-7q12 42 77 51" fill="#fdfefe" stroke="#bacdce" stroke-width="4" stroke-linejoin="round"/>
+ <path d="M416 321Q438 287 498 303L560 327Q582 304 575 259Q565 224 582 191Q600 155 640 165Q686 176 677 218Q673 248 641 261Q640 297 650 325Q670 367 623 398Q582 432 499 416Q425 406 412 365Q405 341 416 321Z" fill="#fffefd" stroke="#b8cdce" stroke-width="4"/>
+ <path d="M420 365Q459 404 522 400Q590 412 642 370Q625 417 551 420Q449 427 420 365" fill="#e4eeee"/>
+ <!-- crest -->
+ <path d="M596 173q-25-24-11-32 9 5 20 25-8-34 7-35 11 12 8 33" fill="#fffefd" stroke="#b8cdce" stroke-width="4" stroke-linecap="round"/>
+ <!-- pouch / open beak -->
+ <path d="M655 222Q715 264 811 242Q778 312 704 284Q665 268 651 233Z" fill="#ffb541" stroke="#dc8c28" stroke-width="4"/>
+ <path d="M657 218 815 239Q731 259 666 237Z" fill="#813c36"/>
+ <path d="M652 213Q701 201 818 226Q837 233 815 239L658 226Z" fill="#ff953a" stroke="#dc7b2c" stroke-width="4" stroke-linejoin="round"/>
+ <path d="M684 218q66-2 112 11" stroke="#ffca62" stroke-width="5" fill="none" stroke-linecap="round"/>
+ <!-- face -->
+ <ellipse cx="637" cy="201" rx="11" ry="15" fill="#263e4b"><animate attributeName="ry" values="15;15;1;15;15" keyTimes="0;.45;.47;.49;1" dur="4.8s" repeatCount="indefinite"/></ellipse><circle cx="640" cy="197" r="3.7" fill="white"/>
+ <path d="M626 177q10-6 20 0" stroke="#263e4b" stroke-width="4" fill="none" stroke-linecap="round"/>
+ <ellipse cx="620" cy="229" rx="15" ry="10" fill="#ffb5a0" opacity=".8"/>
+ <!-- near wing slightly spread -->
+ <g transform="translate(514 334)"><g><animateTransform attributeName="transform" type="rotate" values="-5;9;-5" dur="1.6s" repeatCount="indefinite"/><path d="M12-12Q-23-38-79-13Q-122 7-142 38Q-121 44-102 29Q-119 50-102 51Q-84 50-69 38Q-78 57-60 52Q-8 44 17 14Q27 0 12-12Z" fill="#f8fcfc" stroke="#aabfc2" stroke-width="4" stroke-linejoin="round"/><path d="M-9 3Q-46 3-87 29" stroke="#d7e4e4" stroke-width="5" fill="none" stroke-linecap="round"/></g></g>
+</g>
+<g fill="none" stroke="#89c7c2" stroke-width="5" stroke-linecap="round"><path d="M299 391h-45m29 23h-56m90 23h-31"><animate attributeName="opacity" values=".25;.9;.25" dur=".8s" repeatCount="indefinite"/></path></g>
+<text x="600" y="744" text-anchor="middle" fill="#647d7e" font-family="Arial,sans-serif" font-size="14" letter-spacing="4">JUST KEEP PEDALING</text>
+</svg>

@@ -1,0 +1,19 @@
+{
+  "name": "imperial-palace-dsh-1.1b",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "紫禁天朝 · 完整皇宫 Three.js 3D 交互项目（零 npm 依赖，唯一依赖为本地 public/vendor/three r169）",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "scripts": {
+    "serve": "bash scripts/serve.sh",
+    "build": "node scripts/build.mjs",
+    "test": "node tests/run.mjs",
+    "shot": "node work/shot.mjs"
+  }
+}

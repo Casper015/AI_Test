@@ -1,0 +1,330 @@
+=========================================================
+ G1 基线独立验证（verifier / t5）
+ node v26.10.0 · three r169 · KIT 1.0.0
+ root /Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3
+=========================================================
+
+=== 1 工厂集合与 API 面（CONTRACTS §3.4 冻结名称） ===
+  [PASS] 1.1 CONTRACTS §3.4 全部冻结名称存在且可调用 — 11 构件 + 5 摆件 + 2 包装 + materials
+  · 额外（不冲突）摆件工厂：screenWall, water, paving
+  [PASS] 1.2 kit.instance / kit.lod 可用（instance(mesh,count) / lod(levels)） — instance.length=4 lod.length=2
+
+=== 2 材质：令牌驱动、role 可用性、颜色出处可追溯 ===
+  [PASS] 2.1 全部 COLOR_ROLES 角色可按 kit.materials[role] 取到材质 — 21 个角色，缺失 0
+  [PASS] 2.2 每个 config.MATERIALS 材质的 color 等于该 colorRole 的 config 色值（零漂移） — 9 个基材质逐色比对一致
+  [PASS] 2.3 材质共享缓存：同 id 只生成一份，贴图在预算区间内 — materials=23 textures=6 @1024px ≈24MB
+  [PASS] 2.4 role 与 materialId 指向同一份材质对象（不是副本） — materials[roofPrimary] === materials[glazeTile]
+
+=== 3 源码纪律：无散落硬编码色值、无网络资源 ===
+  [PASS] 3.1 src/kit/** 非注释代码零 `#rrggbb` 字面量（颜色唯一来源 config） — 9 文件扫描，命中 0
+  [PASS] 3.2 src/kit/** 非注释代码零 http(s) 网络地址（无热链/无必需网络资源） — 命中 0
+  [PASS] 3.3 public/assets/ 无任何运行时资源文件（程序化路线自洽） — 非 README 文件 0 个
+  [PASS] 3.4 全仓无外部模型/HDR/图片素材引用（不可能混入未适配的异风格素材） — 32 个 src/**/*.js 扫描，外部素材引用命中 0
+  · TextureLoader 仅作为 core 的通用能力存在于 src/core/loader.js（无素材可加载：public/assets 为空、运行时 0 次网络请求，不影响本项结论）
+
+=== 4 以 layout 为唯一输入的 67 槽位构建（区域作者的正常路径） ===
+  [PASS] 4.1 67 槽位全部可用文档化构件工厂 + layout 字段构建成功（零抛错） — 67/67 成功
+  [PASS] 4.2 逐槽位 |kit.eaveHeightAbsolute − layout.eaveHeight| ≤ 6mm（模数与 layout 同源） — 最大偏差 2.00mm（67 槽）
+  [PASS] 4.3 kit 世界包围盒完全覆盖槽位占地（无内缩；台基 = 槽位 w×d） — 最大内缩量 -0.1800m（四边取最大）
+  [PASS] 4.4 侧向外扩 = 出檐令牌量级（≤ grade3 出檐 ×1.1；角部起翘/外挑在内） — 侧向外扩 0.18–2.05m（出檐 grade1 1.92m / grade3 2.88m）
+  [PASS] 4.5 正面外扩 ≤ 出檐 + 自动台阶跑长（由 config 令牌推导） — 最大正面外扩 10.65m ≤ 允许 13.37m
+  [PASS] 4.7 整槽展开用法 `kit[kind]({...slot, quality})` 同样 67/67 成功，且复现 t3 公布的 192,420 / 最大 11,652 — 整槽展开：near 合计 192420、最大 11652、失败 0；显式字段子集（不含 slot.door）：合计 192468、最大 11676（差 48 面全部来自 params.door 门洞几何）
+  [PASS] 4.6 单栋三角面 ≤ 预算 2.4 万；67 槽近景合计 ≤ 150 万 — 近景合计 192468（预算 1500000）· 单栋最大 11676（预算 24000）
+
+=== 5 屋顶形制：庑殿 = 长正脊 + 四面坡（几何取样 + geometry 模块级） ===
+  · geometry.buildRoof(42×24) 各类型：{"doubleEaveHip":{"slopes":4,"ridgeLength":36,"apex":false},"hip":{"slopes":4,"ridgeLength":36,"apex":false},"gableHip":{"slopes":4,"ridgeLength":36,"apex":false},"gable":{"slopes":2,"ridgeLength":84,"apex":false},"pyramidal":{"slopes":4,"ridgeLength":null,"apex":true}}
+  [PASS] 5.1 庑殿/歇山/重檐 = 4 面坡 + 非零长正脊；攒尖 = 顶点无正脊；硬山 = 2 面坡 — hip slopes=4/ridge=36m；pyramidal apex=true/ridge=null
+  [PASS] 5.2 B-gate-front（grade2 单檐 hip）顶带是长脊线：x 向 ≫ z 向，长度 = (w−d) 收脊（±10%） — 顶带 48.769×0.769m（比值 63.4），期望正脊 48.00m
+  [PASS] 5.3 B-hall-main（grade3 重檐庑殿）上层为长正脊：顶带宽度 = 正脊长 + 脊断面宽（±0.1m） — 顶带 xExtent=27.09m = ridge.length 25.919999999999987m + 脊断面宽 1.17m；zExtent=1.17m（比值 23.2）
+  [PASS] 5.4 重檐另有下层腰檐 4 坡与下层正脊（apronRise>0，lowerRoof/lowerRidge 部件存在） — apronRise=2.22 上层 slopes=4 部件=lowerRoof+lowerRidge
+  [PASS] 5.5 攒尖顶正确区分：顶点汇聚（x/z 均 ≈0）且 metrics.ridge 为空 — B-pavilion-gate-west: 顶带 0×0m，ridge=null
+  [PASS] 5.6 风格/参数守卫真实生效：白名单违规、未知屋顶、未知等级、缺尺寸全部抛错（无静默放行开关） — 5 个反例全部抛错
+
+=== 6 LOD：三档、距离来自 config 令牌、三角面单调下降 ===
+  [PASS] 6.1 工厂默认返回 THREE.LOD 且为三档（近/中/远） — isLOD=true levels=3
+  [PASS] 6.2 档位距离 = config.BUDGET.lod × 质量档 lodBias — 实测 [0,90,300] vs 期望 [0,90,300]
+  [PASS] 6.3 三角面单调下降（near > mid > far），远景仍有轮廓几何 — near 11652 → mid 6540 → far 108
+  [PASS] 6.4 params.lod 单档输出可用（区域合批前置条件） — detail=near isGroup=true
+
+=== 7 合批与实例化：绘制调用确实下降（全城尺度） ===
+  [PASS] 7.1 全城 67 槽 mergeZone 后绘制调用大幅下降 — 绘制调用 1335 → 38（97.2% 下降）；stats={"before":1335,"after":38,"reduction":0.9715355805243445,"levels":3,"buckets":76,"mergedMeshes":2931,"instanced":0}
+  [PASS] 7.2 合批不改变可见三角面（几何守恒） — 合并前 192468 → 合并后 192468
+  [PASS] 7.3 合批结果 ≤ 主场景预算 350 — 38 / 350（分区预算 B70/C50/D40/E40/F80）
+  [PASS] 7.4 实例化：64 棵树 = 1 个 InstancedMesh / 1 次绘制调用 — count=64 drawCalls=1 tri=2048
+
+=== 8 three 单例、资产登记与许可 ===
+  [PASS] 8.1 kit.THREE === ctx.THREE 且与浏览器 import map 同一份 three r169 — kit.THREE.REVISION=169，bare 'three' REVISION=169
+  [PASS] 8.2 工厂产物是同一份 THREE 的 Group/Mesh/Material（无第二份 three 混入） — group instanceof Group=true；mesh=32 个，material.type=MeshPhysicalMaterial
+  [PASS] 8.3 config.ASSETS.requiredFields 与登记结构一致；运行时 0 次网络请求；9 字段校验零问题 — requiredFields=9 networkRequests=0 validate={"ok":true,"checked":29,"problems":0}
+  [PASS] 8.4 docs/ASSET_CREDITS.md 明确声明无第三方素材并给出 9 字段登记表 — 5084 字符；声明 + 9 字段表头存在
+  [PASS] 8.5 core 注入路径可用：ctx.kit === kit、ctx.THREE === kit.THREE、切片只含本区槽位 — B 区切片 12 槽（layout 中 B 区 12 槽），槽位含 x/z/baseY=true
+
+=== 9 G0 前置：灰盒覆盖 ≥54 槽位与院落轮廓 ===
+  [PASS] 9.1 灰盒注册建筑数 = layout.SLOTS 67（≥54 门槛）且覆盖全部 5 个区域 — 67/67 栋，区域 {B,C,D,E,F}
+  [PASS] 9.2 layout 注册表数量可机器核对（槽位/院落/墙/连接/视角/灯位） — SLOTS=67 COURTYARDS=14 WALLS=60 CONNECTORS=32 VIEWPOINTS=20 LIGHT_ANCHORS=49
+  [PASS] 9.3 灰盒障碍构成与 layout.OBSTACLES 逐 sourceType 一致（67 建筑 + 4 宫墙 + 8 水面 + 2 假山 = 81） — 灰盒 {"building":67,"wall":4,"water":8,"rockery":2} vs layout {"building":67,"wall":4,"water":8,"rockery":2}；灰盒 drawCalls=39 tri=6344
+  [DEBT→t20（契约明确归属）+ 各区域/ t9（碰撞）] D-5 56 段院墙（layout.WALLS kind=courtWall）既不在 layout.OBSTACLES，灰盒 colliders 也未登记 → 第一人称不会被院墙阻挡 — layout.OBSTACLES 只有 4 段宫墙（OB-WALL-CITY-*）+ 8 水面 + 2 假山 + 67 建筑；CONTRACTS §6.3 只承诺"宫墙四段"，56 段院墙的碰撞归属未写清
+  [PASS] 9.4 灰盒视角/灯位登记与 layout 一一对应（≥1 zone + 1 fp-spawn，B/C 另加 interior） — viewpoints=20 lightAnchors=49
+  · G0 门槛 config.LAYOUT_CONSTRAINTS.minSlotCount=54；灰盒覆盖 67 > 门槛
+  [PASS] 9.5 14 院落轮廓完整：每院四面院墙都在院界上、至少一处门洞、wallIds 与 WALLS 一一对应 — 14 院落共 56 面院墙、49 个门洞；无门洞院落 0、其它问题 0
+
+=== 11 风格基线：STYLE_GUIDE 表格值 vs config 令牌 vs kit 实例材质 ===
+  [PASS] 11.1 STYLE_GUIDE §2/§3 的色板/模数/旧化/材质光泽数值与 config 令牌逐值一致 — 比对 47 组；不一致 0
+  · kit 实例材质 roughness 相对 config 基础值的偏移：{"glazeTile":0.04,"giltMetal":0.04,"plasterRed":0.04,"paintingTeal":0.04,"stoneWhite":0.04,"pavingStone":0.04,"interiorBrick":0.04,"waterSurface":0}（= WEATHERING.roughnessBias 0.04，materials.js 已声明"统一轻度旧化"）
+  [PASS] 11.2 材质光泽规范一致（只有鎏金 metalness ≥ 0.9；其余 metalness ≤ 0.06）；roughness 偏移统一 — giltMetal.metalness=0.92；琉璃瓦 metalness=0.06 + clearcoat=0.55（"有清漆感的非纯金属"）
+
+=== 12 文档化参数探测：CONTRACTS §3.4 列出的 params 是否足够摆位 ===
+  · 仅用 §3.4 列出的 params 构建 C-hall-bed-main：position=(0,0,0)，layout 槽位应为 (0,0,168) → 仅文档参数会落到原点，必须在契约里补 x/z/baseY（登记为 D-1）
+  [PASS] 12.1 显式传入 layout 槽位的 x/z/baseY 后，工厂位置确定且与槽位一致（实现侧无隐式状态） — position=(0,0,168)，期望 (0,0,168)；重复构建位置一致
+  [DEBT→t20（CONTRACTS 补全，t1 系列归属）] D-1 CONTRACTS §3.4 未列出工厂必需/常用 params：x/z/baseY、lod 单档用法、返回类型 THREE.LOD、mergeZone 合批义务、materials 共享所有权、props 工厂与 role 引用 — 区域作者若只读 CONTRACTS §3.4，会漏掉本验证确认必需的 x/z/baseY（否则 67 栋全部落在原点）；实现侧全部支持并已实测通过（§4/§6/§7）
+  [DEBT→t3（docs/handoff-kit.md 修订）] D-2 docs/handoff-kit.md §1 依赖冲突条仍写“默认放行 + createKit({strictRoofGrade:true}) 才抛错”，与实现（始终抛错、无该开关）及 CONTRACTS §4.2 冲突 — 实测 src/kit/index.js 无 strictRoofGrade 参数，normalizeParams 对 grade-roof 不匹配一律 errors.push → 工厂抛错；该行会误导区域作者以为违规可取默认值
+  [DEBT→t3 / t20] D-3 docs/handoff-kit.md 版本戳仍为 CONTRACTS v1.0.0 / CONFIG 1.0.0；docs/ASSET_CREDITS.md 亦标 CONFIG_VERSION 1.0.0 — 当前有效组合为 CONTRACTS v1.0.1 ⇄ CONFIG 1.0.1 ⇄ LAYOUT 1.0.0 ⇄ STYLE_BASELINE v1.0.0，版本戳未同步
+  [DEBT→t20（约定）+ t3（可选 params.plinth/stairs=false）] D-4 未文档化：terraceH>0.2 的构件会自动附带台明 + 正面台阶（B-hall-main 自动台阶使 worldBounds 南向超出槽位 10.31m） — kit 无 plinth/stairs 抑制开关；layout.TERRACES 已为 B 主殿登记三层台基（z −168…−64），区域作者若同时用 kit.terrace + kit.hall 会出现台明/台阶三层重叠
+
+=== 13 真实区域消费实证：已交付区域是否只靠文档化 kit 就能达标 ===
+  · B: 建筑 12 · 绘制调用 64/70 · 三角面 80900 · kit 材质网格 64/64 · 契约问题 0
+  · C: 建筑 12 · 绘制调用 48/50 · 三角面 48260 · kit 材质网格 48/48 · 契约问题 0
+  · D: 未交付（src/zones/west-courts.js）
+  · E: 未交付（src/zones/east-courts.js）
+  · F: 建筑 14 · 绘制调用 66/80 · 三角面 56416 · kit 材质网格 66/66 · 契约问题 0
+  [PASS] 13.1 已交付区域全部通过契约校验，且 ≥95% 网格使用 kit 共享材质（未自建私有素材库） — 已交付 B/C/F；未交付 D/E
+  [PASS] 13.2 已交付区域源码零硬编码色值、零自建材质（统一资源库真实生效） — 3 个区域文件扫描，命中 0
+
+---------------------------------------------------------
+ 检查项 46 项：PASS 46 / FAIL 0，另有 DEBT 5 项（归属其它任务）
+  △ [t20（契约明确归属）+ 各区域/ t9（碰撞）] D-5 56 段院墙（layout.WALLS kind=courtWall）既不在 layout.OBSTACLES，灰盒 colliders 也未登记 → 第一人称不会被院墙阻挡
+  △ [t20（CONTRACTS 补全，t1 系列归属）] D-1 CONTRACTS §3.4 未列出工厂必需/常用 params：x/z/baseY、lod 单档用法、返回类型 THREE.LOD、mergeZone 合批义务、materials 共享所有权、props 工厂与 role 引用
+  △ [t3（docs/handoff-kit.md 修订）] D-2 docs/handoff-kit.md §1 依赖冲突条仍写“默认放行 + createKit({strictRoofGrade:true}) 才抛错”，与实现（始终抛错、无该开关）及 CONTRACTS §4.2 冲突
+  △ [t3 / t20] D-3 docs/handoff-kit.md 版本戳仍为 CONTRACTS v1.0.0 / CONFIG 1.0.0；docs/ASSET_CREDITS.md 亦标 CONFIG_VERSION 1.0.0
+  △ [t20（约定）+ t3（可选 params.plinth/stairs=false）] D-4 未文档化：terraceH>0.2 的构件会自动附带台明 + 正面台阶（B-hall-main 自动台阶使 worldBounds 南向超出槽位 10.31m）
+---------------------------------------------------------
+{
+  "node": "v26.10.0",
+  "three": "169",
+  "kitVersion": "1.0.0",
+  "checks": [
+    {
+      "id": "1.1 CONTRACTS §3.4 全部冻结名称存在且可调用",
+      "ok": true
+    },
+    {
+      "id": "1.2 kit.instance / kit.lod 可用（instance(mesh,count) / lod(levels)）",
+      "ok": true
+    },
+    {
+      "id": "2.1 全部 COLOR_ROLES 角色可按 kit.materials[role] 取到材质",
+      "ok": true
+    },
+    {
+      "id": "2.2 每个 config.MATERIALS 材质的 color 等于该 colorRole 的 config 色值（零漂移）",
+      "ok": true
+    },
+    {
+      "id": "2.3 材质共享缓存：同 id 只生成一份，贴图在预算区间内",
+      "ok": true
+    },
+    {
+      "id": "2.4 role 与 materialId 指向同一份材质对象（不是副本）",
+      "ok": true
+    },
+    {
+      "id": "3.1 src/kit/** 非注释代码零 `#rrggbb` 字面量（颜色唯一来源 config）",
+      "ok": true
+    },
+    {
+      "id": "3.2 src/kit/** 非注释代码零 http(s) 网络地址（无热链/无必需网络资源）",
+      "ok": true
+    },
+    {
+      "id": "3.3 public/assets/ 无任何运行时资源文件（程序化路线自洽）",
+      "ok": true
+    },
+    {
+      "id": "3.4 全仓无外部模型/HDR/图片素材引用（不可能混入未适配的异风格素材）",
+      "ok": true
+    },
+    {
+      "id": "4.1 67 槽位全部可用文档化构件工厂 + layout 字段构建成功（零抛错）",
+      "ok": true
+    },
+    {
+      "id": "4.2 逐槽位 |kit.eaveHeightAbsolute − layout.eaveHeight| ≤ 6mm（模数与 layout 同源）",
+      "ok": true
+    },
+    {
+      "id": "4.3 kit 世界包围盒完全覆盖槽位占地（无内缩；台基 = 槽位 w×d）",
+      "ok": true
+    },
+    {
+      "id": "4.4 侧向外扩 = 出檐令牌量级（≤ grade3 出檐 ×1.1；角部起翘/外挑在内）",
+      "ok": true
+    },
+    {
+      "id": "4.5 正面外扩 ≤ 出檐 + 自动台阶跑长（由 config 令牌推导）",
+      "ok": true
+    },
+    {
+      "id": "4.7 整槽展开用法 `kit[kind]({...slot, quality})` 同样 67/67 成功，且复现 t3 公布的 192,420 / 最大 11,652",
+      "ok": true
+    },
+    {
+      "id": "4.6 单栋三角面 ≤ 预算 2.4 万；67 槽近景合计 ≤ 150 万",
+      "ok": true
+    },
+    {
+      "id": "5.1 庑殿/歇山/重檐 = 4 面坡 + 非零长正脊；攒尖 = 顶点无正脊；硬山 = 2 面坡",
+      "ok": true
+    },
+    {
+      "id": "5.2 B-gate-front（grade2 单檐 hip）顶带是长脊线：x 向 ≫ z 向，长度 = (w−d) 收脊（±10%）",
+      "ok": true
+    },
+    {
+      "id": "5.3 B-hall-main（grade3 重檐庑殿）上层为长正脊：顶带宽度 = 正脊长 + 脊断面宽（±0.1m）",
+      "ok": true
+    },
+    {
+      "id": "5.4 重檐另有下层腰檐 4 坡与下层正脊（apronRise>0，lowerRoof/lowerRidge 部件存在）",
+      "ok": true
+    },
+    {
+      "id": "5.5 攒尖顶正确区分：顶点汇聚（x/z 均 ≈0）且 metrics.ridge 为空",
+      "ok": true
+    },
+    {
+      "id": "5.6 风格/参数守卫真实生效：白名单违规、未知屋顶、未知等级、缺尺寸全部抛错（无静默放行开关）",
+      "ok": true
+    },
+    {
+      "id": "6.1 工厂默认返回 THREE.LOD 且为三档（近/中/远）",
+      "ok": true
+    },
+    {
+      "id": "6.2 档位距离 = config.BUDGET.lod × 质量档 lodBias",
+      "ok": true
+    },
+    {
+      "id": "6.3 三角面单调下降（near > mid > far），远景仍有轮廓几何",
+      "ok": true
+    },
+    {
+      "id": "6.4 params.lod 单档输出可用（区域合批前置条件）",
+      "ok": true
+    },
+    {
+      "id": "7.1 全城 67 槽 mergeZone 后绘制调用大幅下降",
+      "ok": true
+    },
+    {
+      "id": "7.2 合批不改变可见三角面（几何守恒）",
+      "ok": true
+    },
+    {
+      "id": "7.3 合批结果 ≤ 主场景预算 350",
+      "ok": true
+    },
+    {
+      "id": "7.4 实例化：64 棵树 = 1 个 InstancedMesh / 1 次绘制调用",
+      "ok": true
+    },
+    {
+      "id": "8.1 kit.THREE === ctx.THREE 且与浏览器 import map 同一份 three r169",
+      "ok": true
+    },
+    {
+      "id": "8.2 工厂产物是同一份 THREE 的 Group/Mesh/Material（无第二份 three 混入）",
+      "ok": true
+    },
+    {
+      "id": "8.3 config.ASSETS.requiredFields 与登记结构一致；运行时 0 次网络请求；9 字段校验零问题",
+      "ok": true
+    },
+    {
+      "id": "8.4 docs/ASSET_CREDITS.md 明确声明无第三方素材并给出 9 字段登记表",
+      "ok": true
+    },
+    {
+      "id": "8.5 core 注入路径可用：ctx.kit === kit、ctx.THREE === kit.THREE、切片只含本区槽位",
+      "ok": true
+    },
+    {
+      "id": "9.1 灰盒注册建筑数 = layout.SLOTS 67（≥54 门槛）且覆盖全部 5 个区域",
+      "ok": true
+    },
+    {
+      "id": "9.2 layout 注册表数量可机器核对（槽位/院落/墙/连接/视角/灯位）",
+      "ok": true
+    },
+    {
+      "id": "9.3 灰盒障碍构成与 layout.OBSTACLES 逐 sourceType 一致（67 建筑 + 4 宫墙 + 8 水面 + 2 假山 = 81）",
+      "ok": true
+    },
+    {
+      "id": "9.4 灰盒视角/灯位登记与 layout 一一对应（≥1 zone + 1 fp-spawn，B/C 另加 interior）",
+      "ok": true
+    },
+    {
+      "id": "9.5 14 院落轮廓完整：每院四面院墙都在院界上、至少一处门洞、wallIds 与 WALLS 一一对应",
+      "ok": true
+    },
+    {
+      "id": "11.1 STYLE_GUIDE §2/§3 的色板/模数/旧化/材质光泽数值与 config 令牌逐值一致",
+      "ok": true
+    },
+    {
+      "id": "11.2 材质光泽规范一致（只有鎏金 metalness ≥ 0.9；其余 metalness ≤ 0.06）；roughness 偏移统一",
+      "ok": true
+    },
+    {
+      "id": "12.1 显式传入 layout 槽位的 x/z/baseY 后，工厂位置确定且与槽位一致（实现侧无隐式状态）",
+      "ok": true
+    },
+    {
+      "id": "13.1 已交付区域全部通过契约校验，且 ≥95% 网格使用 kit 共享材质（未自建私有素材库）",
+      "ok": true
+    },
+    {
+      "id": "13.2 已交付区域源码零硬编码色值、零自建材质（统一资源库真实生效）",
+      "ok": true
+    }
+  ],
+  "debts": [
+    {
+      "id": "D-5 56 段院墙（layout.WALLS kind=courtWall）既不在 layout.OBSTACLES，灰盒 colliders 也未登记 → 第一人称不会被院墙阻挡",
+      "detail": "layout.OBSTACLES 只有 4 段宫墙（OB-WALL-CITY-*）+ 8 水面 + 2 假山 + 67 建筑；CONTRACTS §6.3 只承诺\"宫墙四段\"，56 段院墙的碰撞归属未写清",
+      "owner": "t20（契约明确归属）+ 各区域/ t9（碰撞）"
+    },
+    {
+      "id": "D-1 CONTRACTS §3.4 未列出工厂必需/常用 params：x/z/baseY、lod 单档用法、返回类型 THREE.LOD、mergeZone 合批义务、materials 共享所有权、props 工厂与 role 引用",
+      "detail": "区域作者若只读 CONTRACTS §3.4，会漏掉本验证确认必需的 x/z/baseY（否则 67 栋全部落在原点）；实现侧全部支持并已实测通过（§4/§6/§7）",
+      "owner": "t20（CONTRACTS 补全，t1 系列归属）"
+    },
+    {
+      "id": "D-2 docs/handoff-kit.md §1 依赖冲突条仍写“默认放行 + createKit({strictRoofGrade:true}) 才抛错”，与实现（始终抛错、无该开关）及 CONTRACTS §4.2 冲突",
+      "detail": "实测 src/kit/index.js 无 strictRoofGrade 参数，normalizeParams 对 grade-roof 不匹配一律 errors.push → 工厂抛错；该行会误导区域作者以为违规可取默认值",
+      "owner": "t3（docs/handoff-kit.md 修订）"
+    },
+    {
+      "id": "D-3 docs/handoff-kit.md 版本戳仍为 CONTRACTS v1.0.0 / CONFIG 1.0.0；docs/ASSET_CREDITS.md 亦标 CONFIG_VERSION 1.0.0",
+      "detail": "当前有效组合为 CONTRACTS v1.0.1 ⇄ CONFIG 1.0.1 ⇄ LAYOUT 1.0.0 ⇄ STYLE_BASELINE v1.0.0，版本戳未同步",
+      "owner": "t3 / t20"
+    },
+    {
+      "id": "D-4 未文档化：terraceH>0.2 的构件会自动附带台明 + 正面台阶（B-hall-main 自动台阶使 worldBounds 南向超出槽位 10.31m）",
+      "detail": "kit 无 plinth/stairs 抑制开关；layout.TERRACES 已为 B 主殿登记三层台基（z −168…−64），区域作者若同时用 kit.terrace + kit.hall 会出现台明/台阶三层重叠",
+      "owner": "t20（约定）+ t3（可选 params.plinth/stairs=false）"
+    }
+  ],
+  "counts": {
+    "slots": 67,
+    "courtyards": 14,
+    "cityDrawCallsBefore": 1335,
+    "cityDrawCallsAfter": 38,
+    "cityTriangles": 192468,
+    "maxSingleBuildingTriangles": 11676,
+    "maxEaveDeviationMm": 2,
+    "maxLateralExtraM": 2.052,
+    "maxFrontExtraM": 10.654,
+    "greyboxBuildings": 67
+  }
+}

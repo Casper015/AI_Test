@@ -1,0 +1,16 @@
+{
+  "name": "imperial-palace-opencode-424k",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "紫禁天朝 · 完整皇宫 3D 交互项目（Three.js，程序化建筑构件库）",
+  "scripts": {
+    "dev": "node scripts/serve.mjs 5173",
+    "serve": "node scripts/serve.mjs 5173",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/serve.mjs 5174",
+    "test": "node tests/layout.test.mjs"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT"
+}
