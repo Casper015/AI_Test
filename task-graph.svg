@@ -1,0 +1,536 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1670" height="1436" viewBox="0 0 1670 1436" font-family="Helvetica,Arial,sans-serif">
+<rect width="1670" height="1436" fill="#fbfbf7"/>
+<path d="M226 39.0 C230.5 39.0 230.5 39.0 235 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 39.0 C230.5 39.0 230.5 73.0 235 73.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 39.0 C435.5 39.0 435.5 39.0 440 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 73.0 C435.5 73.0 435.5 39.0 440 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 73.0 C333.0 73.0 333.0 39.0 440 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 39.0 C333.0 39.0 333.0 73.0 440 73.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 39.0 C435.5 39.0 435.5 73.0 440 73.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 73.0 C435.5 73.0 435.5 73.0 440 73.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 39.0 C333.0 39.0 333.0 107.0 440 107.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 39.0 C435.5 39.0 435.5 107.0 440 107.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 73.0 C435.5 73.0 435.5 107.0 440 107.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 39.0 C333.0 39.0 333.0 141.0 440 141.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 39.0 C435.5 39.0 435.5 141.0 440 141.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 73.0 C435.5 73.0 435.5 141.0 440 141.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 39.0 C435.5 39.0 435.5 39.0 645 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 39.0 C538.0 39.0 538.0 39.0 645 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 175.0 C640.5 175.0 640.5 39.0 645 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 73.0 C640.5 73.0 640.5 73.0 645 73.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 107.0 C640.5 107.0 640.5 107.0 645 107.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 39.0 C640.5 39.0 640.5 39.0 850 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 73.0 C640.5 73.0 640.5 39.0 850 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 73.0 C743.0 73.0 743.0 39.0 850 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 107.0 C743.0 107.0 743.0 39.0 850 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 141.0 C743.0 141.0 743.0 39.0 850 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 73.0 C845.5 73.0 845.5 39.0 850 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 107.0 C845.5 107.0 845.5 39.0 850 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 39.0 C948.0 39.0 948.0 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1046 39.0 C1050.5 39.0 1050.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 73.0 C640.5 73.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 209.0 C640.5 209.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 243.0 C640.5 243.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 277.0 C640.5 277.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 311.0 C640.5 311.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 107.0 C743.0 107.0 743.0 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 345.0 C640.5 345.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 413.0 C640.5 413.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 447.0 C640.5 447.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 515.0 C640.5 515.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 549.0 C640.5 549.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 583.0 C640.5 583.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 617.0 C640.5 617.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 651.0 C640.5 651.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 141.0 C743.0 141.0 743.0 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 685.0 C640.5 685.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 175.0 C743.0 175.0 743.0 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 719.0 C640.5 719.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 753.0 C640.5 753.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 209.0 C743.0 209.0 743.0 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 821.0 C640.5 821.0 640.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 277.0 C845.5 277.0 845.5 39.0 1055 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 73.0 C1050.5 73.0 1050.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 107.0 C1050.5 107.0 1050.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 141.0 C1050.5 141.0 1050.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 39.0 C1153.0 39.0 1153.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 73.0 C1153.0 73.0 1153.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 107.0 C1153.0 107.0 1153.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1046 39.0 C1255.5 39.0 1255.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1251 39.0 C1358.0 39.0 1358.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 73.0 C845.5 73.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 209.0 C845.5 209.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 243.0 C845.5 243.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 277.0 C845.5 277.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 311.0 C845.5 311.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 107.0 C948.0 107.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 345.0 C845.5 345.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 413.0 C845.5 413.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 447.0 C845.5 447.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 515.0 C845.5 515.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 549.0 C845.5 549.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 583.0 C845.5 583.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 617.0 C845.5 617.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 651.0 C845.5 651.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 141.0 C948.0 141.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 685.0 C845.5 685.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 175.0 C948.0 175.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 719.0 C845.5 719.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 753.0 C845.5 753.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 209.0 C948.0 209.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 821.0 C845.5 821.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 277.0 C1050.5 277.0 1050.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 991.0 C845.5 991.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1025.0 C845.5 1025.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1093.0 C845.5 1093.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 243.0 C1153.0 243.0 1153.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 277.0 C1153.0 277.0 1153.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 311.0 C1153.0 311.0 1153.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1456 39.0 C1460.5 39.0 1460.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 413.0 C948.0 413.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1229.0 C845.5 1229.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 447.0 C948.0 447.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 311.0 C1050.5 311.0 1050.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1263.0 C845.5 1263.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 481.0 C948.0 481.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 515.0 C948.0 515.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 549.0 C948.0 549.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1297.0 C845.5 1297.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 583.0 C948.0 583.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 617.0 C948.0 617.0 948.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 345.0 C1050.5 345.0 1050.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1331.0 C845.5 1331.0 845.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 413.0 C1153.0 413.0 1153.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1046 73.0 C1255.5 73.0 1255.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 447.0 C1153.0 447.0 1153.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1046 107.0 C1255.5 107.0 1255.5 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1251 73.0 C1358.0 73.0 1358.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1251 107.0 C1358.0 107.0 1358.0 39.0 1465 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 39.0 C435.5 39.0 435.5 175.0 440 175.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 73.0 C435.5 73.0 435.5 209.0 440 209.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 39.0 C538.0 39.0 538.0 141.0 645 141.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 175.0 C640.5 175.0 640.5 141.0 645 141.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 175.0 C640.5 175.0 640.5 175.0 645 175.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 209.0 C230.5 209.0 230.5 107.0 235 107.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 73.0 C640.5 73.0 640.5 209.0 645 209.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 277.0 C435.5 277.0 435.5 209.0 645 209.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 651.0 C230.5 651.0 230.5 141.0 235 141.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 141.0 C435.5 141.0 435.5 243.0 440 243.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 685.0 C230.5 685.0 230.5 175.0 235 175.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 719.0 C230.5 719.0 230.5 175.0 235 175.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 787.0 C230.5 787.0 230.5 209.0 235 209.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 821.0 C230.5 821.0 230.5 243.0 235 243.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 243.0 C435.5 243.0 435.5 277.0 440 277.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 855.0 C230.5 855.0 230.5 277.0 235 277.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 855.0 C230.5 855.0 230.5 311.0 235 311.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 889.0 C230.5 889.0 230.5 345.0 235 345.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 957.0 C230.5 957.0 230.5 379.0 235 379.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1093.0 C435.5 1093.0 435.5 243.0 645 243.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 413.0 C538.0 413.0 538.0 243.0 645 243.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 311.0 C640.5 311.0 640.5 243.0 645 243.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1093.0 C435.5 1093.0 435.5 277.0 645 277.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 413.0 C538.0 413.0 538.0 277.0 645 277.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 311.0 C640.5 311.0 640.5 277.0 645 277.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1093.0 C435.5 1093.0 435.5 311.0 645 311.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 413.0 C538.0 413.0 538.0 311.0 645 311.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 311.0 C640.5 311.0 640.5 311.0 645 311.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 311.0 C640.5 311.0 640.5 345.0 645 345.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 243.0 C1050.5 243.0 1050.5 39.0 1260 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 277.0 C1050.5 277.0 1050.5 39.0 1260 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 311.0 C1050.5 311.0 1050.5 39.0 1260 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 447.0 C1050.5 447.0 1050.5 39.0 1260 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1046 107.0 C1153.0 107.0 1153.0 39.0 1260 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1251 73.0 C1255.5 73.0 1255.5 39.0 1260 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1251 107.0 C1255.5 107.0 1255.5 39.0 1260 39.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 311.0 C640.5 311.0 640.5 379.0 645 379.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1093.0 C230.5 1093.0 230.5 413.0 235 413.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1229.0 C230.5 1229.0 230.5 447.0 235 447.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1229.0 C333.0 1229.0 333.0 311.0 440 311.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 447.0 C435.5 447.0 435.5 311.0 440 311.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1263.0 C230.5 1263.0 230.5 481.0 235 481.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1297.0 C230.5 1297.0 230.5 481.0 235 481.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1263.0 C230.5 1263.0 230.5 515.0 235 515.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1297.0 C230.5 1297.0 230.5 549.0 235 549.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1025.0 C230.5 1025.0 230.5 583.0 235 583.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1297.0 C230.5 1297.0 230.5 617.0 235 617.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 549.0 C435.5 549.0 435.5 345.0 440 345.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1297.0 C333.0 1297.0 333.0 345.0 440 345.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 617.0 C435.5 617.0 435.5 345.0 440 345.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 345.0 C640.5 345.0 640.5 413.0 645 413.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M226 1331.0 C435.5 1331.0 435.5 413.0 645 413.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 413.0 C845.5 413.0 845.5 73.0 850 73.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 549.0 C538.0 549.0 538.0 447.0 645 447.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M431 583.0 C538.0 583.0 538.0 447.0 645 447.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 345.0 C640.5 345.0 640.5 447.0 645 447.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 447.0 C845.5 447.0 845.5 107.0 850 107.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 447.0 C948.0 447.0 948.0 73.0 1055 73.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1046 107.0 C1050.5 107.0 1050.5 73.0 1055 73.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M636 345.0 C845.5 345.0 845.5 107.0 1055 107.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M841 413.0 C948.0 413.0 948.0 107.0 1055 107.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<path d="M1046 73.0 C1050.5 73.0 1050.5 107.0 1055 107.0" fill="none" stroke="#9aa0a6" stroke-width="1" opacity="0.45"/>
+<rect x="30" y="25" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="25" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="38" font-size="11" font-weight="bold" fill="#202124">t1</text>
+<text x="42" y="49" font-size="10" fill="#5f6368">T1 工程骨架、共享契约与全城布</text>
+<rect x="235" y="25" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="25" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="38" font-size="11" font-weight="bold" fill="#202124">t2</text>
+<text x="247" y="49" font-size="10" fill="#5f6368">T2 核心引擎、唯一相机装置（八</text>
+<rect x="235" y="59" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="59" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="72" font-size="11" font-weight="bold" fill="#202124">t3</text>
+<text x="247" y="83" font-size="10" fill="#5f6368">T3 建筑构件库、材质体系、LO</text>
+<rect x="440" y="25" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="25" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="452" y="38" font-size="11" font-weight="bold" fill="#202124">t5</text>
+<text x="452" y="49" font-size="10" fill="#5f6368">review r1 verdic</text>
+<rect x="440" y="59" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="59" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="452" y="72" font-size="11" font-weight="bold" fill="#202124">t6</text>
+<text x="452" y="83" font-size="10" fill="#5f6368">implementation v</text>
+<rect x="440" y="93" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="93" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="452" y="106" font-size="11" font-weight="bold" fill="#202124">t7</text>
+<text x="452" y="117" font-size="10" fill="#5f6368">T5 C 区后宫：三进内廷院落、</text>
+<rect x="440" y="127" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="127" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="452" y="140" font-size="11" font-weight="bold" fill="#202124">t8</text>
+<text x="452" y="151" font-size="10" fill="#5f6368">T6 F 区御花园、宫墙角楼、外</text>
+<rect x="645" y="25" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="25" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="657" y="38" font-size="11" font-weight="bold" fill="#202124">t9</text>
+<text x="657" y="49" font-size="10" fill="#5f6368">T7 G 区交互与 UI：八视角</text>
+<rect x="645" y="59" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="59" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="657" y="72" font-size="11" font-weight="bold" fill="#202124">t10</text>
+<text x="657" y="83" font-size="10" fill="#5f6368">implementation v</text>
+<rect x="645" y="93" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="93" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="657" y="106" font-size="11" font-weight="bold" fill="#202124">t11</text>
+<text x="657" y="117" font-size="10" fill="#5f6368">T9 E 区东侧宫苑：≥4 组院</text>
+<rect x="850" y="25" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="850" y="25" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="862" y="38" font-size="11" font-weight="bold" fill="#202124">t12</text>
+<text x="862" y="49" font-size="10" fill="#5f6368">V1 G2 场景完整性与跨区连接</text>
+<rect x="1055" y="25" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="1055" y="25" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="1067" y="38" font-size="11" font-weight="bold" fill="#202124">t13</text>
+<text x="1067" y="49" font-size="10" fill="#5f6368">V2 G3/G4 八视角与第一人</text>
+<rect x="1465" y="25" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="1465" y="25" width="6" height="28" rx="3" fill="#9e9e9e"/>
+<text x="1477" y="38" font-size="11" font-weight="bold" fill="#202124">t14</text>
+<text x="1477" y="49" font-size="10" fill="#5f6368">T10 整城集成、发布包与 RE</text>
+<rect x="30" y="59" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="59" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="72" font-size="11" font-weight="bold" fill="#202124">t15</text>
+<text x="42" y="83" font-size="10" fill="#5f6368">T1.1 共享配置修订：GRAD</text>
+<rect x="30" y="93" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="93" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="106" font-size="11" font-weight="bold" fill="#202124">t16</text>
+<text x="42" y="117" font-size="10" fill="#5f6368">T1.2 README 同步 C</text>
+<rect x="440" y="161" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="161" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="452" y="174" font-size="11" font-weight="bold" fill="#202124">t17</text>
+<text x="452" y="185" font-size="10" fill="#5f6368">T2.1 CONTRACTS 文</text>
+<rect x="440" y="195" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="195" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="452" y="208" font-size="11" font-weight="bold" fill="#202124">t18</text>
+<text x="452" y="219" font-size="10" fill="#5f6368">T3.1 归档 kit 交付回执</text>
+<rect x="645" y="127" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="127" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="657" y="140" font-size="11" font-weight="bold" fill="#202124">t19</text>
+<text x="657" y="151" font-size="10" fill="#5f6368">T1.3 环境预设校准：夜景方案</text>
+<rect x="645" y="161" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="161" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="657" y="174" font-size="11" font-weight="bold" fill="#202124">t20</text>
+<text x="657" y="185" font-size="10" fill="#5f6368">T3.2 CONTRACTS 补</text>
+<rect x="30" y="127" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="127" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="42" y="140" font-size="11" font-weight="bold" fill="#202124">t21</text>
+<text x="42" y="151" font-size="10" fill="#5f6368">T2.2 修复 ?dpr NaN</text>
+<rect x="30" y="161" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="161" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="174" font-size="11" font-weight="bold" fill="#202124">t22</text>
+<text x="42" y="185" font-size="10" fill="#5f6368">T3.3 复现并修复 hall/</text>
+<rect x="30" y="195" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="195" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="208" font-size="11" font-weight="bold" fill="#202124">t23</text>
+<text x="42" y="219" font-size="10" fill="#5f6368">T2.3 修复 courtyar</text>
+<rect x="30" y="229" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="229" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="242" font-size="11" font-weight="bold" fill="#202124">t24</text>
+<text x="42" y="253" font-size="10" fill="#5f6368">T5.1 C 区寝殿恢复重檐庑殿</text>
+<rect x="30" y="263" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="263" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="276" font-size="11" font-weight="bold" fill="#202124">t25</text>
+<text x="42" y="287" font-size="10" fill="#5f6368">T3.4 修复 mergeZon</text>
+<rect x="30" y="297" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="297" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="310" font-size="11" font-weight="bold" fill="#202124">t26</text>
+<text x="42" y="321" font-size="10" fill="#5f6368">T1.4 夜色判据收口：内容掩码</text>
+<rect x="235" y="93" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="93" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="106" font-size="11" font-weight="bold" fill="#202124">t27</text>
+<text x="247" y="117" font-size="10" fill="#5f6368">T2.4 碰撞语义修正：水体不可</text>
+<rect x="30" y="331" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="331" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="344" font-size="11" font-weight="bold" fill="#202124">t28</text>
+<text x="42" y="355" font-size="10" fill="#5f6368">T2.5 修复审计口径：按激活 </text>
+<rect x="645" y="195" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="195" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="657" y="208" font-size="11" font-weight="bold" fill="#202124">t29</text>
+<text x="657" y="219" font-size="10" fill="#5f6368">repair verdict p</text>
+<rect x="30" y="365" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="365" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="378" font-size="11" font-weight="bold" fill="#202124">t30</text>
+<text x="42" y="389" font-size="10" fill="#5f6368">T3.5 KIT_VERSION</text>
+<rect x="30" y="399" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="399" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="412" font-size="11" font-weight="bold" fill="#202124">t31</text>
+<text x="42" y="423" font-size="10" fill="#5f6368">T2.6 core 语义修正：相</text>
+<rect x="30" y="433" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="433" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="446" font-size="11" font-weight="bold" fill="#202124">t32</text>
+<text x="42" y="457" font-size="10" fill="#5f6368">T7.1 同步 G 侧过期断言 </text>
+<rect x="30" y="467" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="467" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="42" y="480" font-size="11" font-weight="bold" fill="#202124">t33</text>
+<text x="42" y="491" font-size="10" fill="#5f6368">T3.6 内景白天/夕照可读性：</text>
+<rect x="30" y="501" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="501" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="514" font-size="11" font-weight="bold" fill="#202124">t34</text>
+<text x="42" y="525" font-size="10" fill="#5f6368">T1.5 判据收口：axis 归</text>
+<rect x="30" y="535" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="535" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="548" font-size="11" font-weight="bold" fill="#202124">t35</text>
+<text x="42" y="559" font-size="10" fill="#5f6368">T2.7 夜景/夕照证据矩阵的显</text>
+<rect x="30" y="569" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="569" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="582" font-size="11" font-weight="bold" fill="#202124">t36</text>
+<text x="42" y="593" font-size="10" fill="#5f6368">T2.8 修复 registry</text>
+<rect x="30" y="603" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="603" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="616" font-size="11" font-weight="bold" fill="#202124">t37</text>
+<text x="42" y="627" font-size="10" fill="#5f6368">T3.7 修正 CONTRACT</text>
+<rect x="30" y="637" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="637" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="650" font-size="11" font-weight="bold" fill="#202124">t38</text>
+<text x="42" y="661" font-size="10" fill="#5f6368">T2.9 内景可读性（环境侧）：</text>
+<rect x="235" y="127" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="127" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="140" font-size="11" font-weight="bold" fill="#202124">t39</text>
+<text x="247" y="151" font-size="10" fill="#5f6368">T1.6 夕照阴影侧可读性：du</text>
+<rect x="440" y="229" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="229" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="452" y="242" font-size="11" font-weight="bold" fill="#202124">t40</text>
+<text x="452" y="253" font-size="10" fill="#5f6368">T1.7 金砖反照率物理修正（C</text>
+<rect x="30" y="671" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="671" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="684" font-size="11" font-weight="bold" fill="#202124">t41</text>
+<text x="42" y="695" font-size="10" fill="#5f6368">T1.8 修复 shot.mjs</text>
+<rect x="235" y="161" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="161" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="174" font-size="11" font-weight="bold" fill="#202124">t42</text>
+<text x="247" y="185" font-size="10" fill="#5f6368">T1.9 修正口径重测全矩阵 +</text>
+<rect x="30" y="705" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="705" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="718" font-size="11" font-weight="bold" fill="#202124">t43</text>
+<text x="42" y="729" font-size="10" fill="#5f6368">T2.10 core 内景补光系</text>
+<rect x="30" y="739" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="739" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="752" font-size="11" font-weight="bold" fill="#202124">t44</text>
+<text x="42" y="763" font-size="10" fill="#5f6368">T1.11 统一背景识别规则（雾</text>
+<rect x="30" y="773" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="773" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="786" font-size="11" font-weight="bold" fill="#202124">t45</text>
+<text x="42" y="797" font-size="10" fill="#5f6368">T2.11 在 ?stats=1</text>
+<rect x="235" y="195" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="195" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="208" font-size="11" font-weight="bold" fill="#202124">t46</text>
+<text x="247" y="219" font-size="10" fill="#5f6368">T1.12 接入权威背景色：复算</text>
+<rect x="30" y="807" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="807" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="820" font-size="11" font-weight="bold" fill="#202124">t47</text>
+<text x="42" y="831" font-size="10" fill="#5f6368">T2.12 权威背景字段接入 c</text>
+<rect x="235" y="229" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="229" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="242" font-size="11" font-weight="bold" fill="#202124">t48</text>
+<text x="247" y="253" font-size="10" fill="#5f6368">T2.13 上报&quot;实际落屏背景像</text>
+<rect x="440" y="263" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="263" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="452" y="276" font-size="11" font-weight="bold" fill="#202124">t49</text>
+<text x="452" y="287" font-size="10" fill="#5f6368">T1.13 背景引用改用&quot;实际落</text>
+<rect x="30" y="841" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="841" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="854" font-size="11" font-weight="bold" fill="#202124">t50</text>
+<text x="42" y="865" font-size="10" fill="#5f6368">T2.14 提供&quot;真天空掩码&quot;诊</text>
+<rect x="235" y="263" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="263" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="247" y="276" font-size="11" font-weight="bold" fill="#202124">t51</text>
+<text x="247" y="287" font-size="10" fill="#5f6368">T1.14 掩码改用真天空掩码：</text>
+<rect x="235" y="297" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="297" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="247" y="310" font-size="11" font-weight="bold" fill="#202124">t52</text>
+<text x="247" y="321" font-size="10" fill="#5f6368">T1.15 掩码口径落地：掩码专</text>
+<rect x="30" y="875" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="875" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="888" font-size="11" font-weight="bold" fill="#202124">t53</text>
+<text x="42" y="899" font-size="10" fill="#5f6368">T2.15 定性并修正掩码图极性</text>
+<rect x="235" y="331" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="331" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="247" y="344" font-size="11" font-weight="bold" fill="#202124">t54</text>
+<text x="247" y="355" font-size="10" fill="#5f6368">T1.16 掩码口径接入：复制式</text>
+<rect x="30" y="909" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="909" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="42" y="922" font-size="11" font-weight="bold" fill="#202124">t55</text>
+<text x="42" y="933" font-size="10" fill="#5f6368">T1.17 掩码接线最小切片：打</text>
+<rect x="30" y="943" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="943" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="956" font-size="11" font-weight="bold" fill="#202124">t56</text>
+<text x="42" y="967" font-size="10" fill="#5f6368">T2.16 在 ?stats=1</text>
+<rect x="235" y="365" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="365" width="6" height="28" rx="3" fill="#616161"/>
+<text x="247" y="378" font-size="11" font-weight="bold" fill="#202124">t57</text>
+<text x="247" y="389" font-size="10" fill="#5f6368">T1.18 掩码口径落地：同加载</text>
+<rect x="30" y="977" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="977" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="990" font-size="11" font-weight="bold" fill="#202124">t58</text>
+<text x="42" y="1001" font-size="10" fill="#5f6368">T7.2 接入 mountInt</text>
+<rect x="30" y="1011" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1011" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="1024" font-size="11" font-weight="bold" fill="#202124">t59</text>
+<text x="42" y="1035" font-size="10" fill="#5f6368">T7.3 面板迁左上角 + 点击</text>
+<rect x="30" y="1045" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1045" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="42" y="1058" font-size="11" font-weight="bold" fill="#202124">t60</text>
+<text x="42" y="1069" font-size="10" fill="#5f6368">T1.19 布局扩展：47 栋封</text>
+<rect x="30" y="1079" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1079" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="1092" font-size="11" font-weight="bold" fill="#202124">t61</text>
+<text x="42" y="1103" font-size="10" fill="#5f6368">T3.8 室内陈设套件 kit.</text>
+<rect x="645" y="229" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="229" width="6" height="28" rx="3" fill="#1565c0"/>
+<text x="657" y="242" font-size="11" font-weight="bold" fill="#202124">t62</text>
+<text x="657" y="253" font-size="10" fill="#5f6368">T8.1 B/D 区 18 栋内</text>
+<rect x="645" y="263" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="263" width="6" height="28" rx="3" fill="#1565c0"/>
+<text x="657" y="276" font-size="11" font-weight="bold" fill="#202124">t63</text>
+<text x="657" y="287" font-size="10" fill="#5f6368">T9.1 C/E 区 18 栋内</text>
+<rect x="645" y="297" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="297" width="6" height="28" rx="3" fill="#1565c0"/>
+<text x="657" y="310" font-size="11" font-weight="bold" fill="#202124">t64</text>
+<text x="657" y="321" font-size="10" fill="#5f6368">T6.1 F 区 11 栋内景布</text>
+<rect x="645" y="331" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="331" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="657" y="344" font-size="11" font-weight="bold" fill="#202124">t65</text>
+<text x="657" y="355" font-size="10" fill="#5f6368">T2.17 内核多内景支持：in</text>
+<rect x="1260" y="25" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="1260" y="25" width="6" height="28" rx="3" fill="#9e9e9e"/>
+<text x="1272" y="38" font-size="11" font-weight="bold" fill="#202124">t66</text>
+<text x="1272" y="49" font-size="10" fill="#5f6368">work attempt 0 V</text>
+<rect x="30" y="1113" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1113" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="42" y="1126" font-size="11" font-weight="bold" fill="#202124">t67</text>
+<text x="42" y="1137" font-size="10" fill="#5f6368">T1.20 布局内景注册（切片 </text>
+<rect x="645" y="365" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="365" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="657" y="378" font-size="11" font-weight="bold" fill="#202124">t68</text>
+<text x="657" y="389" font-size="10" fill="#5f6368">T1.21 布局内景注册（切片 </text>
+<rect x="235" y="399" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="399" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="412" font-size="11" font-weight="bold" fill="#202124">t69</text>
+<text x="247" y="423" font-size="10" fill="#5f6368">T3.9 kit 正面门洞几何能</text>
+<rect x="30" y="1147" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1147" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="42" y="1160" font-size="11" font-weight="bold" fill="#202124">t70</text>
+<text x="42" y="1171" font-size="10" fill="#5f6368">T1.22 布局内景注册（切片 </text>
+<rect x="30" y="1181" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1181" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="42" y="1194" font-size="11" font-weight="bold" fill="#202124">t71</text>
+<text x="42" y="1205" font-size="10" fill="#5f6368">T1.23 布局内景注册（切片 </text>
+<rect x="30" y="1215" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1215" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="1228" font-size="11" font-weight="bold" fill="#202124">t72</text>
+<text x="42" y="1239" font-size="10" fill="#5f6368">T1.24 4 座城门通道级内景</text>
+<rect x="235" y="433" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="433" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="446" font-size="11" font-weight="bold" fill="#202124">t73</text>
+<text x="247" y="457" font-size="10" fill="#5f6368">T1.25 布局内景注册（切片 </text>
+<rect x="440" y="297" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="297" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="452" y="310" font-size="11" font-weight="bold" fill="#202124">t74</text>
+<text x="452" y="321" font-size="10" fill="#5f6368">T1.26 布局内景注册（切片 </text>
+<rect x="30" y="1249" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1249" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="1262" font-size="11" font-weight="bold" fill="#202124">t75</text>
+<text x="42" y="1273" font-size="10" fill="#5f6368">T1.27 门洞通道可行走面：使</text>
+<rect x="235" y="467" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="467" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="480" font-size="11" font-weight="bold" fill="#202124">t76</text>
+<text x="247" y="491" font-size="10" fill="#5f6368">T2.18 core 侧测试期望</text>
+<rect x="235" y="501" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="501" width="6" height="28" rx="3" fill="#c62828"/>
+<text x="247" y="514" font-size="11" font-weight="bold" fill="#202124">t77</text>
+<text x="247" y="525" font-size="10" fill="#5f6368">V1.1 验收套件期望同步 + </text>
+<rect x="235" y="535" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="535" width="6" height="28" rx="3" fill="#1565c0"/>
+<text x="247" y="548" font-size="11" font-weight="bold" fill="#202124">t78</text>
+<text x="247" y="559" font-size="10" fill="#5f6368">T2.19 修复 focus 取</text>
+<rect x="30" y="1283" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1283" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="1296" font-size="11" font-weight="bold" fill="#202124">t79</text>
+<text x="42" y="1307" font-size="10" fill="#5f6368">T2.20 修复 WALKABL</text>
+<rect x="235" y="569" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="569" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="582" font-size="11" font-weight="bold" fill="#202124">t80</text>
+<text x="247" y="593" font-size="10" fill="#5f6368">T7.4 修复 F7：信息面板不</text>
+<rect x="235" y="603" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="235" y="603" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="247" y="616" font-size="11" font-weight="bold" fill="#202124">t81</text>
+<text x="247" y="627" font-size="10" fill="#5f6368">T1.28 契约递增：内景机位口</text>
+<rect x="440" y="331" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="440" y="331" width="6" height="28" rx="3" fill="#9e9e9e"/>
+<text x="452" y="344" font-size="11" font-weight="bold" fill="#202124">t82</text>
+<text x="452" y="355" font-size="10" fill="#5f6368">T2.21 定论两处口径：OBS</text>
+<rect x="30" y="1317" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="30" y="1317" width="6" height="28" rx="3" fill="#2e7d32"/>
+<text x="42" y="1330" font-size="11" font-weight="bold" fill="#202124">t83</text>
+<text x="42" y="1341" font-size="10" fill="#5f6368">T1.29 修正 C/D/E 派</text>
+<rect x="645" y="399" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="399" width="6" height="28" rx="3" fill="#9e9e9e"/>
+<text x="657" y="412" font-size="11" font-weight="bold" fill="#202124">t84</text>
+<text x="657" y="423" font-size="10" fill="#5f6368">T1.30 按 §8.2 重分配</text>
+<rect x="850" y="59" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="850" y="59" width="6" height="28" rx="3" fill="#9e9e9e"/>
+<text x="862" y="72" font-size="11" font-weight="bold" fill="#202124">t85</text>
+<text x="862" y="83" font-size="10" fill="#5f6368">T1.31 连通性模型定位（su</text>
+<rect x="645" y="433" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="645" y="433" width="6" height="28" rx="3" fill="#9e9e9e"/>
+<text x="657" y="446" font-size="11" font-weight="bold" fill="#202124">t86</text>
+<text x="657" y="457" font-size="10" fill="#5f6368">T2.22 修复 DEFECT-</text>
+<rect x="850" y="93" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="850" y="93" width="6" height="28" rx="3" fill="#9e9e9e"/>
+<text x="862" y="106" font-size="11" font-weight="bold" fill="#202124">t87</text>
+<text x="862" y="117" font-size="10" fill="#5f6368">T7.5 消除空气墙与卡死：四类</text>
+<rect x="1055" y="59" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="1055" y="59" width="6" height="28" rx="3" fill="#9e9e9e"/>
+<text x="1067" y="72" font-size="11" font-weight="bold" fill="#202124">t88</text>
+<text x="1067" y="83" font-size="10" fill="#5f6368">T7.6 F8-②：走查层消费 </text>
+<rect x="1055" y="93" width="196" height="28" rx="5" fill="#ffffff" stroke="#d0d0d0"/>
+<rect x="1055" y="93" width="6" height="28" rx="3" fill="#9e9e9e"/>
+<text x="1067" y="106" font-size="11" font-weight="bold" fill="#202124">t89</text>
+<text x="1067" y="117" font-size="10" fill="#5f6368">T1.32 F8-①+F10：1</text>
+<text x="30" y="1374" font-size="12" font-weight="bold" fill="#202124">共 88 张卡 · 8 层 · 边 168</text>
+<rect x="250" y="1364" width="10" height="10" fill="#2e7d32"/>
+<text x="265" y="1374" font-size="11" fill="#5f6368">completed 59</text>
+<rect x="390" y="1364" width="10" height="10" fill="#c62828"/>
+<text x="405" y="1374" font-size="11" fill="#5f6368">failed 15</text>
+<rect x="530" y="1364" width="10" height="10" fill="#1565c0"/>
+<text x="545" y="1374" font-size="11" fill="#5f6368">claimed 3</text>
+<rect x="670" y="1364" width="10" height="10" fill="#1565c0"/>
+<text x="685" y="1374" font-size="11" fill="#5f6368">in_progress 1</text>
+<rect x="810" y="1364" width="10" height="10" fill="#9e9e9e"/>
+<text x="825" y="1374" font-size="11" fill="#5f6368">pending 9</text>
+<rect x="950" y="1364" width="10" height="10" fill="#616161"/>
+<text x="965" y="1374" font-size="11" fill="#5f6368">cancelled 1</text>
+</svg>

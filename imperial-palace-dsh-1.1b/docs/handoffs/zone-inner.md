@@ -514,3 +514,171 @@ exit=0
 C 区 **49/50**、整城 **293/350**、可见三角面 **288,609/150 万**、单栋最大 `C-hall-bed-main` 8,044（上限 24,000），**未删任何院落/建筑/装饰**。
 
 未验证项同 §A.5（浏览器内实际画面与帧率、固定验收视角截图、真人第一人称连续走查、kit 台阶朝向语义变更后的丹陛复核、`layout.totalHeight` 估值与 kit 实测差异）。
+
+---
+
+# 附：t63 · C/E 区 18 栋内景布陈设（复用 kit.interiorSet）—— 交付回执
+
+> 归属任务：`t63 zone-inner`（用户在计划外新增需求：47 栋封闭建筑"进得去、看得见室内"；本卡负责 **C 9 + E 9 = 18 栋**）。
+> 依赖：t60（layout 注册 47 栋内景）、t61（`kit.interiorSet`）、t70/t72/t73/t74（派生 WK/VP/FP 与通行语义）。
+> **本节为追加**，上文 §1–§3（t7）与 §A（t24）原样保留。
+
+## B.0 版本与口径
+
+| 项目 | 值 |
+| --- | --- |
+| ROOT | `imperial-palace-dsh-1.1b` |
+| 布局 | `LAYOUT_VERSION 1.1.x`（`INTERIOR_BY_SLOT` 43 栋 = 2 殿 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿） |
+| 构件库 | `kit.interiorSet`（t61，四档分层 hall/sideHall/gateHall/cornerTower；零新增令牌） |
+| 内景判据 | `CONTRACTS §12`：低空/近景类（focus/fp/interior/axis）**内容暗区 ≤30%**、**内容高光截断 ≤5%**、内容均值 ≥0.04（`--interior-min-luma`） |
+| 预算口径 | `scripts/audit.mjs`：质量档 `medium`（Dpr 1 / 阴影 1536px / Bloom on）；**LOD 激活档口径**（统计前对每个 LOD 调 `update(camera)`）；合批后；阴影批次单列；Bloom 后处理**不计入** |
+| 测量工具 | 出图：`Page.captureScreenshot`（1440×900、DPR 1）驱动真应用；像素判据：`node scripts/shot.mjs --stats-only=<png...>`（同一份 luma/暗区/截断定义） |
+
+## B.1 交付内容（18 栋，逐栋）
+
+改动仅 5 个 inScope 文件：`src/zones/inner-palace.js`、`src/zones/east-courts.js`、`tests/zone-inner.test.mjs`、`tests/zone-east.test.mjs`、本回执。
+两区各自新增一段"内景布景"逻辑，**尺寸/地坪只取自 layout 注册的 `WK-<slotId>-interior`（含 `WK-C-bed-interior` 别名，经 `ctx.layout.interiorFor()` 解析）**，不自行推断：
+
+| 区 | 建筑 | kind | grade | 室内地面 y | 天花 y | kit 返回构件数 |
+| --- | --- | --- | --- | --- | --- | --- |
+| C | C-gate-inner（内廷门） | gateHall | 2 | 0.9 | 4.9 | 7 |
+| C | C-hall-bed-main（寝殿正殿，既有别名 WK-C-bed-interior） | hall | 3 | 2.4 | 8.01 | 13 |
+| C | C-hall-bed-rear（后寝殿） | hall | 2 | 1.2 | 5.89 | 11 |
+| C | C-side-west-main / C-side-east-main | sideHall | 2 | 0.8 | 4.49 | 7 / 7 |
+| C | C-side-west-rear / C-side-east-rear | sideHall | 1 | 0.6 | 3.69 | 7 / 7 |
+| C | C-annex-west / C-annex-east | sideHall | 1 | 0.5 | 3.59 | 7 / 7 |
+| E | E-court1/2/3/4-hall（文华殿/陈设正堂/生活主屋/东后殿） | hall | 2 | 1.4/1.4/1.3/1.3 | 6.09/6.09/5.99/5.99 | 11 ×4 |
+| E | E-court1/2/3/4-house + E-court3-annex | sideHall | 1 | 0.9/0.9/0.9/0.9/0.9 | 4.09/4.09/4.09/4.09/4.09 | 7 ×5 |
+| **排除** | C-pavilion-rear（亭）、C-gate-west/east（院门）、E-court3/4-pavilion（水榭/亭）、E-court1..4-gate（院门） | — | — | — | — | 0（layout 未注册内景） |
+
+每栋同时：① 补一层**天花**（`kit.paving` + `pavingLight` 令牌，顶到墙、压住 kit 藻井）——kit 屋面为单面朝外，室内抬头会看见天空，必须补；
+② 登记 **2 条室内灯位**（`LA-<ZONE>-<slotId>-01/02`，`role='interiorLantern'`）+ 2 座灯体（`kit.lantern`，`detail:'far'`）——供环境系统按距离激活，夜景/夕照内景照度所需；
+③ 收紧内景 LOD 档距（`INTERIOR_LOD_DISTANCE_SCALE = 0.4` ⇒ 约 `[0, 36, 120]m`）：数十米外切到 kit 刻意留空的**空远景档** ⇒ 远景/全城视角 0 新增调用，而 `VP-<slotId>-interior` 机位（≤20m）仍取 near 全细节档。
+（上述三项都用**已存在的**材质/部位桶：`pavingLight|paving`、`lanternBase/Post/Body`、`floor/ceiling/furniture/...`，不新增材质令牌。）
+
+## B.2 碰撞与可达性（真实碰撞数据，逐栋结论）
+
+区域返回的 `colliders` 来自 layout（可行走面 69 → C/E 的室内面 + t75 门洞通道面）+ 建筑障碍 `blocks:'exceptDoor'`。逐栋机器断言（`tests/zone-*.test.mjs` 的"碰撞可达性"用例，**不使用相机近平面**）：
+
+| 判据 | 结论 |
+| --- | --- |
+| 室内可站立 | 9+9 栋：室内中心点（地面高度）不被任何障碍阻挡 ⇒ **全部可站立** ✓ |
+| 可从入口门洞走入 | 9+9 栋：layout 的 `WP-fp-<slotId>`（门洞内侧 1.5m）所在可行走面存在且该点不被阻挡 ⇒ **全部可走入** ✓ |
+| 不可从外部穿墙进入 | 9+9 栋：门洞旁外墙中线取点必须被阻挡（建筑障碍 `blocks='exceptDoor'` 且门洞净宽 = `layout.door.width`）⇒ **全部不可穿墙** ✓ |
+| 不掉出 | 9+9 栋：室内可行走面 `kind='interior'`、`enterable=true`、`y` = layout 注册地面 ⇒ **不会掉出** ✓ |
+
+## B.3 预算（47 内景全布后，含口径与配额申请）
+
+`node scripts/audit.mjs`（LOD 激活档口径，质量档 medium）：
+
+| 区域 | 绘制调用 | 分区初始配额 | 判定 | 三角面 | 阴影批次 |
+| --- | --- | --- | --- | --- | --- |
+| B | 61 | 70 | ✓ | 80,716 | 60 |
+| **C（本卡）** | **55** | **50** | ✗ 超 5 | 57,656 | 54 |
+| D（他卡同期） | 48 | 40 | ✗ 超 8 | 46,340 | 46 |
+| **E（本卡）** | **49** | **40** | ✗ 超 9 | 47,008 | 47 |
+| F | 72 | 80 | ✓ | 65,224 | 70 |
+| **主场景合计** | **331** | **350** | **✓** | **305,753 / 1,500,000** ✓ | 313（1 盏主方向光投影） |
+
+- **口径**：`audit.mjs` 输出的"批次(激活档)"= 合批后、按相机距离激活单一 LOD 档的可见网格数；阴影批次单列；Bloom 后处理不计入；可见三角面为视锥剔除后的视角口径（最高 `oblique` 324 批次）。
+- **超配额原因（如实记录，未删任何内容）**：本卡带来的是**用户在计划外新增的需求**——47 栋封闭建筑要从"能进"变成"看得见室内"，`kit.interiorSet` 的内景部位词表（floor/runner/dais/daisCap/throne/furniture/screenPanel/trim/ceiling/lanternGlow）在区域里是**新增的材质×部位组合**，C 区净增 ~11 桶、E 区净增 ~9 桶（D 区同期同因 +8）。分区初始配额（C50/E40/D40）是在"只做外观"的假设下定的。
+- **已做的优化（不牺牲内容）**：① 一次 `kit.mergeZone` 整区合批；② 内景 LOD 档距收紧 + kit 空远景档 ⇒ 远景/全城 0 新增调用；③ 天花/灯体复用既有桶（0 新增）；④ 树上实例化（E 区既有）。
+- **配额申请（按 §8.2 提议，请主理人裁定）**：C 50 → **60**、E 40 → **50**、D 40 → **50**（各留 ~5 桶余量）；或改判"分区配额为诊断指标、以整城 ≤350 为硬门槛"（当前 331/350 ✓，若 B/D/F 后续再增内景，整城将接近上限，需统一复核）。**本卡未删除任何建筑/院落/装饰腾预算。**
+
+## B.4 §12 三时辰可读性实测（逐栋逐时辰，原始判定行）
+
+### B.4.1 方法（含工具缺口）
+
+应用**没有"按机位/建筑出内景图"的查询参数**（`?view=interior` 只能按 `?zone=` 回退到该区 legacy/首个内景机位；`?focus=` 只影响 focus 模式）。因此本卡用一次性 CDP 驱动（`Page.navigate` → `window.__PALACE__.store.patch({view:{interiorViewpointId,area}})` + `rig.applyMode('interior',{instant:true})` + `settle()` → `Page.captureScreenshot`，1440×900 DPR1、质量档 medium），像素判据仍走**项目自己的** `node scripts/shot.mjs --stats-only=<png…>`（同一份 luma/暗区/截断定义，`viewFromFilename` 识别为 interior ⇒ 低空/近景类：内容暗区 ≤30%、内容截断 ≤5%、内容均值 ≥0.04）。
+
+### B.4.2 goldenHour：18/18 逐栋实测（原始数字，PASS/FAIL 按 §12 阈值机械判定）
+
+| 建筑 | 时辰 | 内容均值(≥0.04) | 内容暗区(≤30%) | 内容截断(≤5%) | 内容像素 | 判定 |
+| --- | --- | --- | --- | --- | --- | --- |
+| C-annex-east | golden | 0.4476→0.4476 | 0.02% | **0.31%** | 100.0% | PASS |
+| C-annex-west | golden | 0.4476→0.4463 | 0.05% | **0.31%** | 100.0% | PASS |
+| C-gate-inner | golden | 0.4476→0.2465 | 0.98% | **0.08%** | 76.9% | PASS |
+| C-hall-bed-main | golden | 0.4476→0.2859 | 0.90% | **0.06%** | 100.0% | PASS |
+| C-hall-bed-rear | golden | 0.4476→0.4459 | 0.33% | **0.07%** | 86.3% | PASS |
+| C-side-east-main | golden | 0.4476→0.4950 | 0.00% | **6.36%** | 82.9% | **FAIL** |
+| C-side-east-rear | golden | 0.4476→0.4375 | 0.05% | **0.32%** | 78.0% | PASS |
+| C-side-west-main | golden | 0.4476→0.4927 | 0.00% | **5.41%** | 82.9% | **FAIL** |
+| C-side-west-rear | golden | 0.4476→0.4357 | 0.09% | **0.32%** | 78.0% | PASS |
+| E-court1-hall | golden | 0.4476→0.4397 | 0.34% | **0.19%** | 83.7% | PASS |
+| E-court1-house | golden | 0.4476→0.4510 | 0.04% | **0.31%** | 100.0% | PASS |
+| E-court2-hall | golden | 0.4476→0.4365 | 0.03% | **0.20%** | 84.7% | PASS |
+| E-court2-house | golden | 0.4476→0.4063 | 0.37% | **0.08%** | 76.9% | PASS |
+| E-court3-annex | golden | 0.4476→0.4115 | 0.00% | **0.49%** | 78.1% | PASS |
+| E-court3-hall | golden | 0.4476→0.4272 | 0.03% | **0.23%** | 87.5% | PASS |
+| E-court3-house | golden | 0.4476→0.4038 | 0.36% | **0.08%** | 77.5% | PASS |
+| E-court4-hall | golden | 0.4476→0.4316 | 0.03% | **0.19%** | 88.5% | PASS |
+| E-court4-house | golden | 0.4476→0.4060 | 0.37% | **0.08%** | 76.9% | PASS |
+
+（原始行可在 `/tmp/t63-shots/t63-interior-<slotId>-golden.png` + `--stats-only` 复现；图片不在 inScope 内故未入库。）
+
+**结论（goldenHour）**：**18/18 内容暗区达标**（最大 0.98%）、**18/18 内容均值达标**（最小 0.2465）、**16/18 高光截断达标**；**2 栋不达标**：
+- `C-side-west-main` 截断 **5.41% > 5%**；`C-side-east-main` 截断 **6.36% > 5%**（其余 E 区最大 0.49%）。
+
+**最小修法（本次已实施其一，未复测）**：逐像素定位（自写 PNG 解码 + 亮度>230/255 的 12×8 网格分布）显示亮斑集中在**画面中下部**（行 y3–y7、列 1–4/8–9 一带；y0–y2 上部干净）⇒ **不是天花**，而是**室内自发光灯具 `lampGlow` + 受光石活/地面**：
+1. ✅ 已实施：删除本卡为每栋额外增加的 2 座 `kit.lantern` 灯体（其 `lampGlow` 自发光体是室内画面里最亮的小面积高光源）——**灯位 `LA-…` 照旧登记**（环境系统按距离点亮），`kit.interiorSet` 自带灯具保留；两区测试仍全绿（C 35/35、E 31/31）。
+2. ⏳ 待复测/待裁定：若仍超 5%，下一步最小修法是 **t61 给 `interiorSet` 的自发光体加亮度上限（或按 `grade` 降 `lampGlow` 强度）**，或对 grade 1/2 配殿把地面令牌从 `pavingStone` 换为更暗的 `pavingDark`——两者都**不动 §12 判据**。
+3. ⏳ **dusk / night 两批逐栋实测未完成**（未验证）：本机 headless（SwiftShader）连续多页加载后渲染器会停滞/白屏——首批 18 golden + 12 dusk 成功，其后批次返回 5.7KB 纯白图（`--stats-only` 显示内容截断 100%）；项目自带 `scripts/shot.mjs --view=interior --zone=C/E --preset=all` 可稳定出图但**只能取到每区一个内景机位**（工具缺口见 B.5#2）。⇒ **C/E 18 栋 × dusk/night 的可读性判定为未验证**，不得当作通过。
+
+
+
+## B.5 未验证项与发现
+
+1. **未验证**：真人第一人称走查手感（进入 18 栋内景的移动/贴墙感）；三个时辰下 18 栋内景的**目视风格**（本卡只做 §12 像素判据与几何断言）；`?mask=sky` 真天空掩码口径下的内景（§12 对 interior 已豁免该防护）。
+2. **工具缺口（建议另开卡）**：应用**没有"按机位 id / 建筑 id 出内景图"的查询参数**（`?view=interior` 只能按 `?zone=` 回退到该区 legacy/首个内景机位）。本卡为拿到 18×3 的真实像素判据，用 CDP（`Page.navigate` + `window.__PALACE__.store.patch/rig.applyMode/settle` + `Page.captureScreenshot`）自建一次性驱动（**临时脚本，未落库**）；建议在 `main.js`/`camera.js` 增加 `?interior=<slotId|vpId>` 或给 `scripts/shot.mjs` 加 `--interior=<slotId>`，否则 B/D/F 三卡都要重复这套一次性驱动。
+3. **期间观察到的外部红灯**：`garden-boundary.js` 曾在运行中途抛 `ReferenceError: ZONE is not defined`（t65 在写盘的瞬时状态；现已被其修复，audit 可跑通）；`tests/zone-forecourt/zone-garden/zone-west/verify-*` 在当前 HEAD 下红（**非本卡文件**，属各区域/验收卡在飞过程中的自身用例），本卡未触碰。
+4. **口径变更提醒**：本分支 `audit.mjs` 已改为 **LOD 激活档口径**，同一份内容在"全档口径"下会虚高 ~+12 桶/区；跨报告比较必须写明口径（本节已写明）。
+
+## B.6 verify 四条（真实输出）
+
+```text
+$ node tests/zone-inner.test.mjs
+  ✓ 内景登记与 layout 一致：C 区 9 栋（殿 2 + 门殿 1 + 配殿/配房 6），亭/院门排除
+  ✓ 9 栋内景机位逐一落在各自室内包围盒内（视线高 = 面高 + 1.65、不出顶、目标在室内）
+  ✓ 9 栋内景均调用 kit.interiorSet：几何事实（边界/落地/不穿顶/LOD 空远景档）
+  ✓ 内景进入最终绘制批次（合批后含 kit 内景部位词表）且室内灯位在内景内
+  ✓ 碰撞可达性（真实碰撞数据）：9 栋每栋可从门洞走入、可在室内站立、不可穿墙进入
+  · 内景构件：C-gate-inner:gateHall:7件 | C-hall-bed-main:hall:13件 | C-hall-bed-rear:hall:11件 | C-side-*:sideHall:7件 ×6
+ 通过 35 / 35     exit=0
+
+$ node tests/zone-east.test.mjs
+  ✓ 内景登记与 layout 一致：E 区 9 栋（殿 4 + 配房 5），亭/水榭/院门排除
+  ✓ 9 栋内景机位逐一落在各自室内包围盒内（视线高 = 面高 + 1.65、不出顶、目标在室内）
+  ✓ 9 栋内景均调用 kit.interiorSet：几何事实（边界/落地/不穿顶/LOD 三档）
+  ✓ 内景进入最终绘制批次 + 每栋 2 条室内灯位（均在室内包围盒内）
+  ✓ 碰撞可达性（真实碰撞数据）：9 栋每栋室内可站立、门洞可走入、外墙不可穿
+ 通过 31 / 31     exit=0
+
+$ node tests/run.mjs
+ PASS  tests/core*.test.mjs（8 个）+ kit + layout + shot-mask + zones
+ PASS  tests/zone-east.test.mjs  1155ms
+ PASS  tests/zone-forecourt.test.mjs  2449ms
+ PASS  tests/zone-garden.test.mjs  1741ms
+ PASS  tests/zone-inner.test.mjs  706ms
+ PASS  tests/zone-west.test.mjs  2996ms
+ FAIL  tests/verify-completeness.test.mjs  52296ms
+ FAIL  tests/verify-experience.test.mjs  15803ms
+ 通过 18 / 20，失败 2，EXIT=1
+
+  ↓ 两项红均为**验收卡（V 系列）**的用例，逐条归因（含本卡相关的部分）：
+  · B1/B10/5.3 连通性：43 内景机位中 24 栋的"门内走查点/内景机位"**不在主连通分量**——
+    失败清单里属本区的有：VP-C-side-west-rear-interior、VP-C-hall-bed-rear-interior、
+    VP-E-court1-hall-interior、VP-E-court2-hall-interior、后寝殿门内、文华殿门内、陈设正堂门内 等；
+    验收卡同时给出根因数据「5.4/5.4b：**通道面 y ≠ 内景地面 24 栋**（C-annex-east 0.5 vs 1.4、C-hall-bed-rear 1.2 vs 2.1、
+    C-side-*-main 0.8 vs 1.7、E-court*-hall 0.9~1.0 vs 1.3~1.4 …）」⇒ **t75 的门洞通道面（layout 数据）y 与内景地面不一致，
+    导致真实可行走图上"室内 ↔ 室外"断开**。属 `src/shared/**`（本卡 out of scope，不得改）。
+  · C1 逐区绘制调用：`超预算：C 58/50, D 52/40, E 52/40` —— 与本卡 B.3 的结论一致（新增内景需求的内景词表，
+    D 区同期同因）；本卡已按要求"如实报数 + 优化 + 申请配额"。
+  · F1 24 张判据：`fp/golden 暗区 0.01%>30%(掩码防护)`、`orbit/dusk|night 0%>15%` —— 属截图/掩码卡（t2/t13）口径问题，与本卡无关。
+
+$ node scripts/audit.mjs
+ 主场景绘制调用   : 333 / 上限 350  ✓
+ 分区 B 61/70 ✓   C 55/50 ✗   D 48/40 ✗   E 49/40 ✗   F 72/80 ✓
+ 可见三角面       : 305,753 / 1,500,000  ✓
+ 阴影 pass        : 313 个投影对象；实时投影光源 1 盏（宫灯不投影）
+ 结论：3 项未通过（均为**分区诊断配额**：C/D/E）；整城门槛全绿     exit=0
+```

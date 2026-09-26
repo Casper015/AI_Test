@@ -325,6 +325,23 @@ export function createUI({
   infoPanel.hidden = true;
 
   /* ------------------------------------------------------------------ 提示条 */
+  /**
+   * t87：防卡死兜底条 —— 连续受阻 ≥ `stuckSeconds` 时出现，提供**一键**回到最近安全可行走点。
+   * 只在真正的"走不动"时显示（由 interaction.traversalState() 驱动），`?ui=0&shot=1` 下整个 root 隐藏故自动消失。
+   */
+  const stuckText = h('span', { class: 'palace-stuck__text', text: '' });
+  const stuckButton = button('回到最近安全点（G）', {
+    variant: 'primary',
+    attrs: { 'data-ui-part': 'escape', title: '确定性回到最近的已登记出生点（不会穿墙）' },
+    on: { click: () => interaction.escapeToSafePoint('panel:escape') },
+  });
+  const stuckPanel = h('div', { class: 'palace-panel palace-stuck', attrs: { 'data-ui-panel': 'stuck' } }, [
+    h('div', { class: 'palace-stuck__head', text: '好像卡住了' }),
+    stuckText,
+    stuckButton,
+  ]);
+  stuckPanel.hidden = true;
+
   const toast = h('div', { class: 'palace-toast', attrs: { 'data-ui-panel': 'toast', role: 'status' } }, [
     h('div', { class: 'palace-toast__title', text: '' }),
     h('div', { class: 'palace-toast__detail', text: '' }),
@@ -337,7 +354,7 @@ export function createUI({
   append(colTL, [brand, hud, infoPanel]);
   append(colTR, [viewPanel, zonePanel, envPanel, loadingPanel, helpPanel]);
   // t59：中轴导览移到下方中央列（原本与左下小地图同列，加上详情面板后 1440×900 会与左列相撞）
-  append(colBC, [tourPanel, toast]);
+  append(colBC, [tourPanel, stuckPanel, toast]);
 
   /* ------------------------------------------------------------------ 交互辅助 */
   function tourTakeover(reason) {
@@ -546,6 +563,18 @@ export function createUI({
     syncLabels(store.state);
   }
 
+  /** t87：卡死条同步（读 interaction 的通行性状态，不自己算"卡住"）。 */
+  function syncStuckPanel() {
+    if (typeof interaction?.traversalState !== 'function') return;
+    const state = interaction.traversalState();
+    const show = state?.stuck === true;
+    stuckPanel.hidden = !show;
+    refs.stuck = show;
+    if (show) {
+      stuckText.textContent = `连续 ${state.stuckSeconds.toFixed(1)}s 走不动（阈值 ${state.stuckThreshold}s）：按 G 或点右侧按钮脱离`;
+    }
+  }
+
   /* ------------------------------------------------------------------ 状态同步 */
   function applySnapshot(snapshot) {
     refs.lastSnapshot = snapshot;
@@ -694,6 +723,7 @@ export function createUI({
         refs.minimapAccum = 0;
         syncVolatile();
       }
+      syncStuckPanel();
       return true;
     },
     setVisible,
@@ -716,6 +746,7 @@ export function createUI({
         updates: refs.updates ?? 0,
         labelPool: refs.labels.size,
         minimapDrawn: !!refs.minimapDrawn,
+        stuck: refs.stuck === true,
         panels: [...(root.querySelectorAll?.('[data-ui-panel]') ?? [])].map((el) => el.dataset?.uiPanel ?? el.getAttribute?.('data-ui-panel')),
         spacingProblems,
       };
@@ -769,7 +800,13 @@ export function mountInterface(palaceApi = null, options = {}) {
       return ui.setVisible(value);
     },
     stats() {
-      return { ui: ui.stats(), interaction: interaction.stats(), query: { ui: query?.ui, shot: query?.shot, view: query?.view ?? null } };
+      // t104：把通行性/卡死链路状态一并暴露（浏览器 `__PALACE_UI__.stats().traversal` 可核对）
+      const traversal = typeof interaction.traversalState === 'function' ? interaction.traversalState() : null;
+      return {
+        ui: ui.stats(),
+        interaction: interaction.stats(),
+        stuck: traversal?.stuck === true,
+        traversal, query: { ui: query?.ui, shot: query?.shot, view: query?.view ?? null } };
     },
     dispose() {
       ui.dispose();

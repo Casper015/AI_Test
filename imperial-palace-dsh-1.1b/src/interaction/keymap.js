@@ -158,6 +158,11 @@ export function resolveKey(code, ctx = {}) {
     return { code, kind: 'minimap', label: '小地图', owned: true, request: null, local: 'toggleMinimap' };
   }
 
+  // t87：防卡死脱困（用户需求"不会卡在什么奇奇怪怪的地方"）——确定性回到最近的安全可行走点。
+  if (code === 'KeyG') {
+    return { code, kind: 'escape', label: '脱离卡死（回到最近安全点）', owned: true, request: null, local: 'escapeStuck' };
+  }
+
   return null;
 }
 
@@ -175,6 +180,7 @@ export function helpKeyList() {
   rows.push({ code: '点击建筑', label: '左上角显示该建筑详情（空白处或「关闭」取消选中）' });
   rows.push({ code: 'Esc', label: '释放指针锁（留在第一人称）/ 暂停导览' });
   rows.push({ code: 'W A S D', label: '第一人称移动（↑↓←→ 同义）' });
+  rows.push({ code: 'G', label: '卡住了？回到最近的安全可行走点（连续受阻自动提示）' });
   rows.push({ code: 'Shift', label: '第一人称加速' });
   rows.push({ code: '拖动 / 滚轮', label: '转视角 / 推拉镜头' });
   rows.push({ code: 'T / Y', label: '切换时辰 / 质量档' });

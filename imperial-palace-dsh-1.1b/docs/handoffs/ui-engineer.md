@@ -530,3 +530,166 @@ $ … && node scripts/audit.mjs
 - t59 的交付（面板位置/点击/F 语义）未受影响：F18/F19/A8/C4–C6 全部保持通过；面板尺寸行新增 `（平面）` 后缀，F18 断言用子串匹配故不破坏。
 - core（t79）已确认 `OB-B-hall-mid y0 = 2` 是 canonical（可进入建筑按门槛高程、不可进入建筑才下钳到足迹地坪），并逐字确认我的 E10 行为契约（`y0` 有限、不得高于记录基座）已覆盖，**本卡无需改动**。
 - 未验证：`pick.js` 那条 `eaveHeight` 兜底路径在"实体盒无 maxY"时的行为（当前实测盒总是提供 maxY，故为死路径）；以及非 Node/非本机环境下 kit `worldBounds` 的精度差异。
+
+---
+
+## 11. t87 交付回执：消除空气墙与卡死（四类阻挡审计 + 防卡死兜底 + 成对可达性）
+
+> 任务：t87（T7.5，来源**用户新增需求**"修改一下空气墙，让我不会卡在什么奇奇怪怪的地方"） · 执行者：`ui-engineer`
+> attempt：`3632d3f9-30fc-495b-983d-0c156401a92a` · 依赖 t86（内核侧隧穿已修） · 版本 `LAYOUT 1.1.4`
+> 完整审计报告见 **`docs/report-airwall.md`**（四类逐条位置与数字、修复原则、前后对照、量化交回项）
+
+### 11.1 最高优先：闭合 t86-F1（生产 FP 路径隧穿）
+
+`src/interaction/walk-solver.js` 采用与内核 t86 **同构**的修法（未放宽任何判据）：
+
+| 项 | 改动 |
+| --- | --- |
+| 子步进防隧穿 | `distance` 拆为 `ceil(distance / min(radius, maxStepHeight))` 子步，逐子步判阻挡；被挡且无法滑动即就地停住并记录原因 |
+| 口径统一 | 删除本地 `blocks()` 的"简易判定"，**委托谓词层** `obstacleBlocksPoint`（`src/core/layout-slice.js`）；水面保留 g 侧已登记的有意口径（仅桥面可通行，E7 的水面豁免覆盖） |
+| `blocked` 去重 | 上限 8（与 core 一致） |
+| 新增诊断 | `setTraversalGuard/hasTraversalGuard/noteStuckTick/resetStuckTimer/traversalState`（含 `lastDistance/lastMoved`，用于诊断"为何判/未判卡死"） |
+
+**实测**：`(-300,-430)` 向东 30m ⇒ 旧实现（E12 内对照复刻）**放行 30.00m / `blocked=[]`（隧穿宫墙）**；修复后**位移 0.00m + `blocked=["OB-WALL-CITY-west"]`**。跨求解器：短步进（0.25/1m）**32 点逐值一致**、长步进（6/30m）落点 ≤0.5m 且首因类别/障碍身份一致 32 点（E7 的 411 例不一致 ⇒ 0，E7 未删未弱化）。
+
+### 11.2 新增交付物
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/interaction/traversal.js`（新） | 通行性审计：正向 `flood` + 新增**逆向 `reverseFlood`** ⇒ 单向陷阱；四类阻挡枚举（陷阱/净宽/空气墙/单向高差）；`guardStep`（单向陷阱守卫，3×3 容差）；`nearestSafePoint`（确定性最近安全格）；**分帧预热** `warmupStep`（生产 6 行/帧，未就绪一律放行）；`pairedReachability`（成对可达） |
+| `src/interaction/walk-graph.js` | 只增：`reverseFlood / worldAt / toCell / forEachWalkable`（供审计复用同一套判据，不重复实现） |
+| `src/interaction/index.js` | 装配审计 + 分帧预热 → 装守卫；`tick(dt)` 卡死检测（意图 vs 实得位移，1.5s 阈值）；`escapeToSafePoint()`（只走请求事件、确定性、逐项复核落点）；`traversalState()/auditTraversal()`；暴露 `solver`（诊断） |
+| `src/interaction/keymap.js` | `KeyG` → `escapeStuck` + 操作提示新增 `G` 行 |
+| `src/interaction/catalog.js` | `blockedHint` 新增**空气墙可见提示**分支（亭/廊/院门：`${name} · 开敞构筑物` + "四面开敞但登记为不可进入，请沿外侧绕行观赏"），标签附带 `kind` |
+| `src/ui/index.js` + `styles.css` | 防卡死 HUD 条 `data-ui-panel="stuck"`（文案 + `data-ui-part="escape"` 按钮「回到最近安全点（G）」）；每帧由 `interaction.traversalState()` 同步，`?ui=0&shot=1` 下随整层隐藏 |
+| `docs/report-airwall.md`（新） | 四类审计报告（逐条位置/数字）、修复原则、前后对照、量化交回项、未验证项 |
+| `tests/interaction.test.mjs` | 新增 E12–E16、F21 六个用例（见 11.3） |
+
+### 11.3 断言与用例（只增不减；skip 0）
+
+- 用例 **56 → 62**（+6）；断言 **471 → 558**（+87）；**skip 0**（未新增任何 skip）。
+- `E12` 隧穿闭环（子步进 + 谓词层同源 + 旧实现对照 + 门洞/墙体正反控制 + 短步进逐值 & 长步进容差等价）。
+- `E13` 四类阻挡审计（分类完备性 `main+trap+sealed == walkable`；净宽判据=直径+余量；空气墙与 layout/障碍**逐栋对齐**且"有门洞的院门不算空气墙"；单向高差必须落在不对称窗口内）。
+- `E14` 单向陷阱守卫（**合成世界构造**：审计检出 1 块死口袋；守卫拒绝深入；无守卫进得去出不来）+ 容差语义（相邻格放行、深入 ≥1 格拒绝）。
+- `E15` 防卡死兜底（检测累加/未达阈值不误判/记录意图与实得位移 → 跨阈值出提示 + HUD 条；按钮与 `G` 与 API **三次落点一致**；落点可站立/包络内/眼高正确/`lastEscape.safe`；守卫预热完成后自动装上）。
+- `E16` 成对可达性（98 样本：43 内景 + 5 出生点 + 50 路点；断言"进得去必出得来"、出生点 5/5 进出皆可、分类自洽，并报告封团/只出不进清单）。
+- `F21` UI 与按键（`G` 映射与提示文案；亭的撞墙提示为「开敞构筑物」且解释"为什么 + 怎么办"；卡死条默认隐藏、`setVisible(false)` 下仍隐藏）。
+
+### 11.4 实测（三条 verify 全绿）
+
+```text
+$ node tests/interaction.test.mjs
+  ✓ E12 … ✓ E13 … ✓ E14 … ✓ E15 … ✓ E16 … ✓ F21
+  · 隧穿闭环：30m 一跳位移 0.00m、原因 ["OB-WALL-CITY-west"]；旧实现对照位移 30m（放行）；短步进逐值一致 32 点、长步进 ≤0.5m 且原因一致 32 点
+  · 审计（cell=3m）：可走 81768 格 = 主分量 80832 + 单向陷阱 0 + 封团 936
+  · ① 0 块 / ② 0（样本 100，最小 6.60m ≥ 判据 1m） / ③ 10 座亭 / ④ 42 边
+  · 合成死口袋：1 块 / 800 格；守卫停在 x=0.49（oneWayTrap），无守卫走到 x=10.00 且回不来
+  · 防卡死：2.5s → HUD 条；脱困位移 236.5m、落点可站立/包络内/眼高 ✓、按钮·G·API 三次一致
+  · 成对可达性：98 = 进出皆可 72（内景 30/43）+ 封团 26（只出不进 4）
+ 通过 62 / 62（exit=0；断言 558、skip 0）
+
+$ node tests/core-collision.test.mjs
+ 通过 24 / 24（exit=0）
+
+$ node scripts/audit.mjs
+ 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）（exit=0）
+```
+
+### 11.5 交回主理人的量化项（不越界改；详见 report §6）
+
+1. **10 座亭的空气墙**（id/坐标/足迹见 report §2 表）：数据侧语义为 `blocks:'all'` 无门洞，本卡按允许的第二条路径给**可见提示**（「开敞构筑物」+ 解释 + 绕行建议）。若产品要"能进/能穿行"，需数据侧改为 `visitable`+通道面，或 `exceptDoor`+门规格。
+2. **13 台内景进不去**（门已通、缺入口台阶/坡道，高差 0.6–2.0m；与 t59 登记同源）——它是"想进亭/殿却进不去"的另一半成因，属 layout 内景切片 + 区域几何。
+3. **42 条单向高差边**（阈值窗口 `(0.5, 0.6]m`，样例坐标见 report §2 ④）：当前不构成陷阱（0 孤立格），如需"平地化"需数据侧补台阶/坡道；本卡**不动阈值**。
+4. **栅格残余**：守卫容差基于 cell=3m，理论上存在"深入陷阱 ≤1 格（≈3m）才被拒"的窗口；由"每步都过守卫 + 1.5s 确定性脱困"双覆盖，当前数据 0 触发。
+
+### 11.6 未验证（如实）
+
+- 本轮**未产出浏览器截图**（`docs/shots-airwall/` 为空）：可见提示/HUD 条在 Node（DOM 替身）下逐元素断言（F21/E15），但未跑 headless 端到端截图。复现：`bash scripts/serve.sh 8124` → `?preset=goldenHour` → 走向任一亭（如 `(-58,-386)`）见提示；顶住墙体 ≥1.5s 见卡死条与 `G` 脱困。
+- `nearestSafePoint` 的"距离保证"未验证（脱困实际落点用 core 的最近已登记出生点，确定且经契约校验）。
+- 触屏/真实设备上的卡死与提示体验未验证。
+
+---
+
+## 12. t88 交付回执：F8-② 走查层消费 layout.CONNECTORS（坡道/台阶语义）
+
+> 任务：t88（T7.6） · 执行者：`ui-engineer` · attempt `5197411b-436d-40bd-9fb4-2a7fd6ee7b07`
+> 依赖：t86（同文件隧穿已修）、t87（同目录/同测试文件）——两者均已终态 · 版本 `LAYOUT 1.1.4`
+> inScope：`src/interaction/walk-solver.js`、`src/interaction/walk-graph.js`、`tests/interaction.test.mjs`、本回执
+
+### 12.1 根因与修法（引用数 0 → 真正消费）
+
+t77 的决定性证据（本卡开工时复现）：`grep -c CONNECTORS src/interaction/walk-solver.js src/interaction/walk-graph.js` = **0 / 0**。
+修法（`walk-solver.js`）：新增 **connector 坡道带**（`buildConnectorRamps` 语义内联，见 `findRampFor/connectorRampAt/groundAt`）：
+
+| 环节 | 规则 |
+| --- | --- |
+| 清单来源 | `layout.CONNECTORS` ∪ `registry.allConnectors()`（同 id 去重、layout 优先；形状守卫：必须有 `id/position/elevation`）→ **联合口径**，layout 侧登记与本层消费解耦 |
+| 触发条件 | 沿 4 个候选轴从 connector 中心向外逐 0.25m 扫描，只有发现 `abs(Δy) > maxStepHeight` 的**实测突变**（台阶边缘，取两侧采样中点）才生成坡道带；高端需 ≈ 自报 `elevation`（±0.5m）。**找不到突变 ⇒ 不生成（零足迹）** |
+| 依据 | 只取**实测两侧地面**作为 `elevationLow/elevation`（不发明标高）；`run = clamp((Δy)/0.75, 1.5, 8)`（0.75 = 1:1.33 的最陡过渡面，用于保证每子步 ≤ 全局阈值） |
+| 边界 | 横向 `abs(lateral) ≤ width/2`（**仅该 connector 覆盖的横断面**）∩ 沿轴位于 `[edge − run, edge]` |
+| 带内地面 | `低端 + (高端−低端) × t`（沿轴线性），并与既有地面**取较高者**（绝不把玩家沉进地形）；带端与带外地面在边缘处连续 |
+| 带外/阈值 | **全局 `maxStepHeight 0.5` / `snapDownDistance 0.6` 一字未改**（E17 断言逐值锁定）；带外完全走原判据 |
+
+`walk-graph.js`：`stats()` 新增 `connectors`（来自 `solver.connectorStats()`）与 `connectorDeclared`；图的可走性全部经 `solver.probe → groundAt`，因此**继承**坡道过渡面（图不再对 connector 零引用）。
+
+### 12.2 前后对照与突变证明
+
+**真实数据（32 条 connector）——本卡的关键实测结论**
+
+- connector 声明 **32** 条（bridge 4 / gate 8 / passage 11 / stairs 9）；
+- 横断面内存在 `>0.5m` 突变的 connector：**0 条**；两端不连通者：**0 条**；
+- ⇒ 真实数据下 **cliff 0 ⇒ 坡道带 0 条、零行为改变**（既有 `ROADS`/`WALKABLE`/台面已经把丹陛与各台阶铺成连续面：例如主殿丹陛沿轴实测 1.5→2.7 无突变、主殿西侧台阶 0.25→1.25 无突变）。
+
+**并列实测（t77 前提的部分更正，如实登记）**：43 台内景当前 **25 可达 / 18 封团**，而封团者的**内景地面与门外接近面同高**（如 `B-side-west-south` 内 0.9 = 外 0.9）⇒ 它们的封团是**口袋/通道连通性**问题，**不是** connector 高差问题；"33/43→10 栋不可达归因于 connector 未消费"这一推断在本树数据上**不成立**（connector 消费前后这些点的可达性不变）。本卡的机制仍必须落地（否则任何**只在 connector 里登记**的落差都会重演），但"修好那 10 栋"应由 layout 侧登记过渡（F8-①）与口袋连通性负责。
+
+**合成世界（真正的步骤落差，用于机制证明）**：`x ≥ 0` 为 2.2m 平台、`x < 0` 为 0.2m 场地（2.0m 陡坎），connector 自报 `stairs(0.2→2.2)`、横断面宽 6m：
+
+| 场景 | 逐帧行走（每帧 0.25m × 40 帧）结果 |
+| --- | --- |
+| **停用** connector 语义（`connectorRamps: false`） | 停在 `x = −0.03`、`blocked=["stepTooHigh"]`（上不去） |
+| **启用**（生产默认） | **登顶 `x = 6.00`**（平台面），眼高 = 2.2 + 1.65 逐值一致 |
+| 带内单步抬升（逐 0.25m 采样） | 最大 **0.187m ≤ 0.5m**（是坡度过渡，不是瞬移） |
+| **横断面外**（`|lateral| > 3m`）同一落差 | 停在 `x = −0.03`、仍 `stepTooHigh`（**范围外仍按 0.5m 拒绝**）；`connectorAt()` 返回 null |
+| 反向（从平台走下来） | 走到 `x < 0`（双向可走） |
+| 坡道世界单向陷阱（t87 审计） | **0** |
+
+**突变证明（两条，均实跑）**
+1. 测试内对照：同一断言在"停用"实例上必然失败（`stepTooHigh` + 上不去）——即 E17 就是"停用即失败"的可执行形式；
+2. **生产路径突变**：把 `createWalkSolver` 的默认 `connectorRamps` 临时改成 `false` → **E17 红（62/63）**（因为 E17 额外断言"走生产默认（不传选项）也必须为 cliff 生成坡道带"）；还原后 **63/63**。
+
+### 12.3 与 layout 侧（F8-①）的联合口径
+
+- 分工：**layout 侧登记**（可行走面/connector 的 `elevation/elevationLow`）↔ **本层消费**（识别实测突变 → 生成有界过渡面）；
+- 加法关系：本层用 `layout.CONNECTORS ∪ registry.allConnectors()`，任一侧新增"有落差的通道"只要形状合法就会被纳入评估；不变量 = **"有实测突变 ⇒ 必有坡道带"**（E17 逐条断言，当前 0/0 成立）；
+- 两者都**不**放宽通用阻挡：本层只提供"带内过渡面"（并把带内地面与既有地面取较高者），带外一切照旧；
+- **不产生新的单向陷阱**：坡道带双向可走 + 坡道世界 t87 审计陷阱 0（E17 断言）；真实数据 32 条两端全连通（E17 断言断言 0 条不连通）。
+
+### 12.4 实测（两条 verify 全绿）
+
+```text
+$ node tests/interaction.test.mjs
+  ✓ E17 走查层消费 CONNECTORS：台阶落差可走、横断面外仍 0.5m 拒绝、停用即失败（突变证明）
+  · CONNECTORS：声明 32 条｜真实数据 cliff 0 ⇒ 坡道带 0 条（零行为改变）；合成 cliff 2.0m：停用 ⇒ stepTooHigh 上不去（x=-0.03），
+    启用 ⇒ 登顶 x=6.00、单步最大抬升 0.187m ≤ 0.5m；横断面外（|lat|>3m）仍被拒（x=-0.03）；坡道世界单向陷阱 0；真实数据两端不连通 0
+ 通过 63 / 63（exit=0；用例 62→63、断言 558→586、skip 0）
+
+$ node tests/core-collision.test.mjs
+ 通过 24 / 24（exit=0）
+```
+
+### 12.5 未验证 / 边界
+
+- **真实数据零触发**：本层机制在 1.1.4 数据上不改变任何点的可达性（cliff 0）；"经 connector 的高差可走"目前由既有 ROADS 保证，本层是**机制兜底 + 语义归属**。若 F8-① 把过渡改由 connector 独占登记（撤掉 ROADS 的同段铺面），本层会立即接管（cliff ⇒ ramp），但该场景**未验证**。
+- 过渡面是**可行走近似**（单段线性坡，不代表真实踏步数）：带内视觉上会略低于台沿饰面；浏览器端未做逐帧走查录像。
+- 横断面宽度取 `width/2`（含玩家半径内缩由既有判定负责）；`run` 上限 8m 为经验值（依据：最陡 0.75 时每子步 0.26m ≤ 0.5m），未与 kit 的真实踏步几何逐级对齐。
+- 未触碰 `src/shared/**`、`src/core/**`、`src/zones/**`、`src/ui/**`（提示属 t87），无根因需交回 core 的量化项。
+
+### 12.6 t101/t103 跨卡接口（本卡按平台验收项 #2 补齐，inScope 内）
+
+| 要求 | 落法 | 证据 |
+| --- | --- | --- |
+| ① 空气墙断言"清零"化（原 `tests/interaction.test.mjs:2192` 的 `assert(airWalls.length > 0, …)`） | 替换为三条：ⓐ `airWalls.length === blockedOpen.length`（数据推导）ⓑ `blockedOpen === 0 ⇒ airWalls === 0`（t103 落地后自动生效）ⓒ **合成清零场景**：把 10 座亭障碍在内存里改 `exceptDoor`（带门规格）⇒ `auditAirWalls()` 必须 **0** | 三条断言均在 E13 内，不删不弱化、不恒真 |
+| ② 提示联动收窄 | 已可通行的亭不得再弹「开敞构筑物」：`blockedHint({blocks:'exceptDoor', kind:'pavilion'})` 必须走"仅门洞可通行"分支；保留"整足迹阻挡者逐座必须有可见提示"的反向断言 | `catalog.blockedHint` 本就先判 `exceptDoor` ⇒ t103 一落地提示自动收窄（**无需改 catalog**） |
+| ③ 依赖未落地如实登记 | 当前 **`airWalls = 10`**（t103 未落地）⇒ ⓑ 不触发、ⓒ 用合成世界证明目标状态可达；E13 报告行打印「t103 依赖：10 座亭改 exceptDoor 后应自动清零」 | 未放宽任何判据、未排除任何槽位 |
+
+本卡这三条只改测试与报告（`tests/interaction.test.mjs`、`docs/report-airwall.md`），未触碰 `src/ui/**`；若主理人希望**在 UI 文案层**也加"亭已可通行"的联动（例如提示里出现"亭内可通行"），需另派含 `src/ui/**` 的小卡。

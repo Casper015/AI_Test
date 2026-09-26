@@ -68,8 +68,8 @@ const {
 
 check('config.version 为字符串', typeof CONFIG_VERSION === 'string' && CONFIG_VERSION.length > 0);
 // 版本对应关系（有意 pin：任何版本递增都必须同步改这两条断言，避免"悄悄改冻结值"）
-eq('CONFIG 版本 = 1.0.6（+ 夜景户外补光/夕照 orbit 补光）', CONFIG_VERSION, '1.0.6');
-eq('LAYOUT 版本 = 1.1.5（+ t83：内景 y 基准 = 区域地坪 + baseY）', L.LAYOUT_VERSION, '1.1.5');
+eq('CONFIG 版本 = 1.0.7（t84：§8.2 分区配额重分配）（+ 夜景户外补光/夕照 orbit 补光）', CONFIG_VERSION, '1.0.7');
+eq('LAYOUT 版本 = 1.1.8（t97：S() 内补区域地坪，sillY/passage y 与内景地面同源）', L.LAYOUT_VERSION, '1.1.8');
 check('config.styleBaseline 为字符串', typeof STYLE_BASELINE === 'string' && /^v\d+\.\d+\.\d+$/.test(STYLE_BASELINE), STYLE_BASELINE);
 check('config.sceneSeed 为整数', Number.isInteger(SCENE_SEED));
 check('config.deriveSeed 确定性', deriveSeed('B') === deriveSeed('B') && deriveSeed('B') !== deriveSeed('C'));
@@ -198,8 +198,8 @@ eq('§8.2 参考视口 1440×900', [BUDGET.viewport.width, BUDGET.viewport.heigh
 eq('§8.2 DPR = 1', BUDGET.viewport.dpr, 1);
 eq('§8.2 目标 60 FPS / 低档 30 FPS', [BUDGET.fps.target, BUDGET.fps.lowTierTarget], [60, 30]);
 eq('§8.2 主场景绘制调用 ≤ 350', BUDGET.drawCalls.mainSceneMax, 350);
-eq('§8.2 分区绘制调用 B70/C50/D40/E40/F80', BUDGET.drawCalls.perZone, { B: 70, C: 50, D: 40, E: 40, F: 80 });
-eq('§8.2 保留 70', BUDGET.drawCalls.reserve, 70);
+eq('§8.2 分区绘制调用 B70/C60/D56/E56/F80（t84 §8.2 重分配，理由见 CONTRACTS §8.2.1）', BUDGET.drawCalls.perZone, { B: 70, C: 60, D: 56, E: 56, F: 80 });
+eq('§8.2 保留 28（Σ perZone 322 + 28 = 350）', BUDGET.drawCalls.reserve, 28);
 eq(
   '§8.2 分区分配合计 + 保留 = 350',
   Object.values(BUDGET.drawCalls.perZone).reduce((a, b) => a + b, 0) + BUDGET.drawCalls.reserve,
@@ -548,7 +548,13 @@ check('legacy 走查口径不受影响：WP-fp-02 处 floorYAt = 0.4', Math.abs(
    起点 = 室外地面 WK-F-bridge-south（既有走查路线起点所在面）。 */
 {
   const W = L.WALKABLE;
-  const EPS = 1e-6; const DY = 1.0; // t83：区域地坪修正后，跨区台阶高差上限按 1.0m 计
+  const EPS = 1e-6;
+  /* **surfaces-only 诊断模型**（t85 定位声明）：只按“可行走面矩形重叠/相接 + 单步高差 ≤ DY”判邻接，**不含 connector 丹陛/台阶**
+     ⇒ 本模型数字**只是诊断、不构成可达性结论**；可达性约束口径是**生产口径（含 connector）**，由 t77 复验负责。
+     实测直方图（194 对相邻面）：0~0.05m 48 · 0.05~0.5m 81 · 0.5~0.8m 11 · **0.8~1.0m 27 · 1.0~2.0m 22 · ≥2.0m 5**；
+     真实走查求解器台阶阈值仅 **0.5m**（t13 实测），0.8m 以上高差靠丹陛/台阶 connector（本模型按设计不含）
+     ⇒ **不得**把 DY 调到 1.0 以减少红项（t85 裁定）：DY = 0.8m 保留。 */
+  const DY = 0.8;
   const touch = (a, b2, withY = true) => a.bounds.maxX > b2.bounds.minX - EPS && a.bounds.minX < b2.bounds.maxX + EPS
     && a.bounds.maxZ > b2.bounds.minZ - EPS && a.bounds.minZ < b2.bounds.maxZ + EPS && (!withY || Math.abs(a.y - b2.y) <= DY);
   const reachable = (skipKind) => {
@@ -577,15 +583,15 @@ check('legacy 走查口径不受影响：WP-fp-02 处 floorYAt = 0.4', Math.abs(
   };
   const seenA = reachA(null, false);
   const badA = interiors.filter((w) => !seenA.has(W.indexOf(w)));
-  check('A) 卡片口径（矩形重叠/相接）：43 处内景全部与室外地面同属一个连通分量', badA.length === 0, `不连通 ${badA.length}：${badA.slice(0, 5).map((w) => w.id).join(',')}`);
+  check('A) surfaces-only 启发式（矩形重叠/相接，不含 connector）：43 处内景全部与室外地面同属一个连通分量', badA.length === 0, `不连通 ${badA.length}：${badA.slice(0, 5).map((w) => w.id).join(',')}`);
   // B) 通道面必要性（局部突变证明）：去掉通道面后，哪些内景在**同层**（|Δy| ≤ 0.8m）再无室外邻居？
   const sameLevelOutside = (w, opts = {}) => W.filter((x) => x !== w
     && (opts.withPassage ? true : x.kind !== 'passage')
     && x.kind !== 'interior' && touch(w, x, true)).length;
   const withP = interiors.filter((w) => sameLevelOutside(w, { withPassage: true }) > 0);
   const needPassage = interiors.filter((w) => sameLevelOutside(w, { withPassage: false }) === 0);
-  check('B) 每条内景都经其门洞通道获得同层可达邻居（43/43）', withP.length === 43, `${withP.length}/43`);
-  check('B) 突变证明：去掉通道面后有 3 处内景在同层再无室外邻居（改动前实测基线）', needPassage.length === 3, `needPassage=${needPassage.length}：${needPassage.slice(0, 4).map((w) => w.id).join(',')}`);
+  check('B) 每条内景都经其门洞通道获得同层可达邻居（t97 修复后 surfaces-only 诊断 = 43/43）', withP.length === 43, `${withP.length}/43`);
+  check('B) 突变证明（surfaces-only，Δy≤0.8m）：去掉通道面后有 15 处内景在同层再无室外邻居（改动前实测基线）', needPassage.length === 15, `needPassage=${needPassage.length}：${needPassage.slice(0, 4).map((w) => w.id).join(',')}`);
   console.log(` - t75 突变证明：加通道面后 43/43 内景同层可达；去掉通道面后 ${needPassage.length} 处内景同层不可达（=${needPassage.slice(0, 3).map((w) => w.id).join(',')}…）`);
   const passages = W.filter((w) => w.kind === 'passage');
   check('通道面 43 条且每条同时接室内面与室外地面', passages.length === 43 && passages.every((p) => {
@@ -622,6 +628,27 @@ check('legacy 走查口径不受影响：WP-fp-02 处 floorYAt = 0.4', Math.abs(
   check('内景机位 y = 面高 + 1.65m（t83 修正后逐栋成立）', vpBad.length === 0, vpBad.map((r) => `${r.sid}:${r.vpY}!=${r.wkY}+1.65`).join(','));
   const cz = rows.filter((r) => ['C', 'D', 'E'].includes(r.zone) && !r.exc);
   check(`C/D/E 受影响的 ${cz.length} 栋全部抬到区域地坪（C+0.9 / D+0.4 / E+0.4）`, cz.every((r) => Math.abs(r.wkY - r.exp) <= 0.01), '');
+}
+
+console.log(` - t85 连通性定位：**surfaces-only 启发式（不含 connector 台阶）**，上面 A/B 数字**只是诊断、不构成可达性结论**；可达性以**生产口径（含 connector）**为准，由 t77 复验`);
+
+/* ===== t89（部分）：内景元数据口径 43/43 + F10 door.sillY 语义与例外表 ===== */
+{
+  const rows = Object.entries(L.INTERIOR_BY_SLOT).map(([sid, rec]) => {
+    const wk = L.WALKABLE.find((w) => w.id === rec.walkableId);
+    const slot = L.SLOT_BY_ID[sid];
+    const passage = L.WALKABLE.find((w) => w.id === `WK-${sid}-door-passage`);
+    return { sid, recY: rec.groundY, wkY: wk?.y, sillY: slot?.door?.sillY, passageY: passage?.y, exc: L.DOOR_SILL_EXCEPTIONS.includes(sid) };
+  });
+  const badMeta = rows.filter((r) => r.wkY == null || Math.abs(r.recY - r.wkY) > 1e-9);
+  check('INTERIOR_BY_SLOT[].groundY === WK-*-interior.y（43/43；唯一权威来源 = WK 地面）', badMeta.length === 0, badMeta.map((r) => `${r.sid}:${r.recY}!=${r.wkY}`).join(','));
+  const passBad = rows.filter((r) => r.passageY == null || Math.abs(r.passageY - r.wkY) > 1e-9);
+  check('t97 修复后：WK-*-door-passage.y 未补区域地坪的栋数 = 0（pin 已由 24 翻绿）', passBad.length === 0, `${passBad.length}：${passBad.slice(0,3).map((r) => r.sid).join(',')}`);
+  const sillBad = rows.filter((r) => !r.exc && Math.abs(r.sillY - r.wkY) > 1e-9);
+  check('t97 修复后：door.sillY 未补区域地坪的栋数 = 0（非例外栋全部 = 区域地坪 + 本地台基；pin 已由 24 翻绿）', sillBad.length === 0, `${sillBad.length}：${sillBad.slice(0,3).map((r) => `${r.sid}:${r.sillY} vs ${r.wkY}`).join(',')}`);
+  const excSet = rows.filter((r) => r.sillY != null && Math.abs(r.sillY - r.wkY) > 1e-9).map((r) => r.sid).sort();
+  check('sillY 偏离集合 = 5（F 四城门双标高 + C-gate-inner 绝对标高；C-hall-bed-main 已随 S() 修复归位）且 ⊆ DOOR_SILL_EXCEPTIONS', excSet.length === 5 && excSet.every((id) => L.DOOR_SILL_EXCEPTIONS.includes(id)), `${excSet.length}：${excSet.join(',')}`);
+  console.log(` - t97 口径（F10 修点已落地）：groundY===WK.y 不一致 ${badMeta.length}/43；passage.y 不一致 ${passBad.length}/43；sillY 不一致（非例外）${sillBad.length}/43；例外 ${excSet.length} 条（恰等于 DOOR_SILL_EXCEPTIONS）`);
 }
 
 console.log(` - 连接 ${L.CONNECTORS.length}，道路 ${L.ROADS.length} 段，墙 ${L.WALLS.length} 段，可行走面 ${L.WALKABLE.length}，障碍 ${L.OBSTACLES.length}`);

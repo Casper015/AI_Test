@@ -341,7 +341,15 @@ export function createEnvironment({
   const lampAnchorGeometry = new THREE.BoxGeometry(0.5, 0.7, 0.5);
   let lampInstances = null; // InstancedMesh（发光材质代替大量实时点光）
   const realtimeLights = [];
-  const lampState = { anchors: [], lastReselect: -Infinity, active: 0, emissiveOnly: 0, flickerPhase: 0 };
+  const lampState = {
+    anchors: [],
+    lastReselect: -Infinity,
+    active: 0,
+    emissiveOnly: 0,
+    flickerPhase: 0,
+    /** t95：最近一次入选池（top-`realtimeLights.length`）——直接读数，供 describe()/验收消费 */
+    pool: [],
+  };
 
   function buildLampInstances(anchors) {
     if (lampInstances) {
@@ -691,21 +699,75 @@ export function createEnvironment({
   }
 
   /* ------------------------------ 每帧更新 ------------------------------ */
+  /**
+   * t90：**距离感知**的灯位优先级（取代旧的"线性衰减 × 静态权重"）。
+   *
+   * 旧口径（t90 前）：`score = importance × (1 − min(1, d / (lamps.distance × 6)))`
+   *   ⇒ 80–110m 外的 `axisLantern`(权重 1.0) 仍能压过 11–20m 的室内 `windowGlow`(0.55)
+   *   （t64 实测：golden/sunset 下南/北城门各 1 处室内灯被挤出实时池）。
+   * 新口径：`score = importance / (1 + (d / d0)^k)`，`d0 = LIGHTING.lamps.distance`、`k = LAMP_SCORE_POWER = 2`
+   *   ⇒ 近处低权重灯与远处高权重灯**两侧都不可绝对化**（见 tests/core-environment.test.mjs 的反例断言）：
+   *     · 距离主导：windowGlow@15m = 0.518 > axisLantern@90m = 0.308 ✓
+   *     · 重要性主导：windowGlow@11m = 0.532 < axisLantern@20m = 0.900 ✓（远处重要灯仍可入池）
+   * **未改任何预算**：池容量仍 `realtimeLights.length`（= `LIGHTING.lamps.maxRealtimePointLights`）、
+   * 距离上限仍 `min(lamps.distance × 6, lamps.emissiveFallbackBeyond)`。
+   */
+  const LAMP_SCORE_POWER = 2;
+  function lampScore(role, distance, { distance: d0 = LIGHTING.lamps.distance } = {}) {
+    const importance = ROLE_IMPORTANCE[role] ?? 0.5;
+    const d = Number.isFinite(distance) ? Math.max(0, distance) : Infinity;
+    const base = Number.isFinite(d0) && d0 > 0 ? d0 : 1;
+    return importance / (1 + (d / base) ** LAMP_SCORE_POWER);
+  }
+
+  /** 灯位池排名（纯函数；`updateLampSelection` 与测试共用同一实现，避免"代理断言"）。 */
+  function rankLampPool(lamps = [], focus = null, { budget = null, scoreOf = lampScore, maxDistance = null } = {}) {
+    const center = focus ?? { x: CENTER.x, y: CENTER.y, z: CENTER.z };
+    const cap = maxDistance ?? Math.min(LIGHTING.lamps.distance * 6, LIGHTING.lamps.emissiveFallbackBeyond);
+    const size = budget ?? (realtimeLights.length || LIGHTING.lamps.maxRealtimePointLights);
+    return lamps
+      .map((anchor) => ({
+        anchor,
+        distance: Math.hypot(anchor.position.x - center.x, anchor.position.z - center.z),
+      }))
+      .filter((r) => r.distance <= cap)
+      .map((r) => ({ ...r, score: scoreOf(r.anchor.role, r.distance) }))
+      .sort((a, b) => (b.score - a.score) || (a.distance - b.distance) || String(a.anchor.id).localeCompare(String(b.anchor.id)))
+      .slice(0, size);
+  }
+
+  /** t90 前口径（仅用于对照/突变证明；**不再参与生产选择**）。 */
+  function legacyLampScore(role, distance, { distance: d0 = LIGHTING.lamps.distance } = {}) {
+    const importance = ROLE_IMPORTANCE[role] ?? 0.5;
+    const span = d0 * 6;
+    return importance * (1 - Math.min(1, (Number.isFinite(distance) ? distance : 0) / span));
+  }
+
   function updateLampSelection(elapsed, cameraPosition) {
     const lamps = lampState.anchors;
-    if (lamps.length === 0 || realtimeLights.length === 0) return;
+    if (lamps.length === 0 || realtimeLights.length === 0) {
+      // t95：没有可选灯位/没有实时名额时，池必须清空（否则 describe() 会读到上一帧的陈旧清单）
+      lampState.pool = [];
+      return;
+    }
     if (elapsed - lampState.lastReselect < 0.35) return;
     lampState.lastReselect = elapsed;
     const focus = cameraPosition ?? { x: CENTER.x, y: CENTER.y, z: CENTER.z };
-    const pool = lamps
-      .map((anchor) => ({
-        anchor,
-        distance: Math.hypot(anchor.position.x - focus.x, anchor.position.z - focus.z),
-      }))
-      .filter((r) => r.distance <= LIGHTING.lamps.distance * 6 && r.distance <= LIGHTING.lamps.emissiveFallbackBeyond)
-      .map((r) => ({ ...r, score: (ROLE_IMPORTANCE[r.anchor.role] ?? 0.5) * (1 - Math.min(1, r.distance / (LIGHTING.lamps.distance * 6))) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, realtimeLights.length);
+    // t90：统一走纯函数 rankLampPool（距离感知评分；预算与距离上限不变）
+    const pool = rankLampPool(lamps, focus, { budget: realtimeLights.length });
+    /**
+     * t95：**保留入选池并暴露为可直接读取的清单**（`describe().lamps.pool`）。
+     * 动机：t94 只能做"真实计数 + 真实输入复算"的交叉校验；下游（t66/验收）需要**直接读数**：
+     * 谁是本机位池内 #1/#2、分数与距离多少，一眼可读，不需要再复算。
+     * 只保留 top-`realtimeLights.length`（真机容量），字段 `{rank,id,role,distance,score}`。
+     */
+    lampState.pool = pool.map((r, i) => ({
+      rank: i + 1,
+      id: r.anchor.id,
+      role: r.anchor.role ?? null,
+      distance: +r.distance.toFixed(3),
+      score: r.score, // 保留全精度（消费者可直接与 lampScore() 逐值比对）
+    }));
 
     lampState.active = 0;
     realtimeLights.forEach((light, i) => {
@@ -817,6 +879,12 @@ export function createEnvironment({
         emissiveIntensity: lampMaterial.emissiveIntensity,
         maxRealtimePointLights: config.LIGHTING.lamps.maxRealtimePointLights,
         poolByQuality: Math.min(config.LIGHTING.lamps.maxRealtimePointLights, config.QUALITY.tiers[applied.quality].maxRealtimeLights),
+        /** t95：真机容量（= realtimeLights.length，随时辰的 lampIntensityScale 与质量档而定） */
+        capacity: realtimeLights.length,
+        qualityTier: applied.quality,
+        preset: currentPreset,
+        /** t95：**逐灯清单（直接读数）** top-`capacity`，每项 `{rank,id,role,distance,score}` */
+        pool: lampState.pool.map((r) => ({ ...r })),
       },
       /** 权威背景口径（t45）：供 ?stats=1 / __PALACE__.stats() / 截图工具消费 */
       background: describeSceneBackground(),
@@ -912,6 +980,11 @@ export function createEnvironment({
       applyPreset(currentPreset);
       return describe();
     },
+    /** t90：灯位优先级（距离感知）与池排名，供测试/诊断复用同一实现 */
+    lampScore,
+    legacyLampScore,
+    rankLampPool,
+    LAMP_SCORE_POWER,
     registerWater,
     adoptWaterSurfaces,
     update,

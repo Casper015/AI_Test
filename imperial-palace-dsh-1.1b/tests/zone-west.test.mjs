@@ -175,9 +175,10 @@ await runner.test('§3.3/§4/§5/§6/§8.3 全部字段通过；数量与 layout
   assertNoProblems(contract.problems, 'D 区契约');
   assertEqual(contract.stats.buildings, 14, '建筑数量必须等于 layout 分配数（14）');
   assertEqual(contract.stats.connectors, 2, '本人 owner 的通道数');
-  assertEqual(contract.stats.walkable, 1, '可行走面数（WK-D-ground）');
+  assertEqual(contract.stats.walkable, zoneLayout.walkable.length, '可行走面数（应与切片一致）');
+  assertEqual(contract.stats.walkable, 17, '可行走面数 = 1 地面 + 8 室内 + 8 门洞通道（t62/t75）');
   assertEqual(contract.stats.ramps, 1, '坡道数（RD-D-garden-ramp 的 Δy）');
-  assertEqual(contract.stats.viewpoints, 3, '机位数（zone + fp-spawn + focus-extra）');
+  assertEqual(contract.stats.viewpoints, 3 + 8, '机位数 = 3 原有 + 8 内景机位');
   runner.info(`D 区：${contract.stats.meshes} 网格 / ${contract.stats.triangles} 三角面 / ${drawCallCount(built.root)} 绘制批次（≤${BUDGET.drawCalls.perZone.D}）`);
 });
 
@@ -288,6 +289,73 @@ await runner.test('南廊与院墙不冲突，廊庑贴院内一侧且长度与 
 });
 
 /* ========================================================================== */
+/* ========================================================================== */
+runner.section('4b. 室内陈设（kit.interiorSet · 8 栋内景：殿 4 + 配房 4）');
+/* ========================================================================== */
+
+const interiorFacts = built.stats.interiorFacts;
+const visitableSlots = zoneLayout.slots.filter((s) => s.visitable);
+
+await runner.test('内景清单：8 栋套件 = layout 的 visitable 槽位（4 座院门与 2 座亭不布陈设）', () => {
+  assertEqual(built.stats.interiorKitAvailable, true, 'kit.interiorSet 必须可用（t61 套件）');
+  assertEqual(interiorFacts.length, 8, '本区内景套件数');
+  assertEqual(interiorFacts.map((f) => f.id).sort().join(','), visitableSlots.map((s) => s.id).sort().join(','), '套件 id 必须与 layout 登记的 visitable 槽位一致');
+  const kinds = interiorFacts.reduce((acc, f) => { acc[f.kind] = (acc[f.kind] ?? 0) + 1; return acc; }, {});
+  assertEqual(kinds.hall, 4, '主屋 4 栋');
+  assertEqual(kinds.sideHall, 4, '配房 4 栋');
+  const notVisitable = zoneLayout.slots.filter((s) => !s.visitable);
+  assertEqual(notVisitable.length, 6, '本区非 visitable 6 栋（4 院门 + 2 亭）');
+  assert(notVisitable.every((s) => !interiorFacts.some((f) => f.id === s.id)), '非 visitable 槽位不得布内景');
+  runner.info(`内景 ${interiorFacts.length} 栋：殿 4 + 配房 4；未布：4 院门 + 2 亭`);
+});
+
+await runner.test('每栋：bounds/groundY 逐值取 layout 注册的 WK（t83 后 Δ=0，不自行推断）', () => {
+  for (const fact of interiorFacts) {
+    const surface = LAYOUT.WALKABLE.find((w) => w.id === fact.surfaceId);
+    assert(surface, `${fact.id} 的 ${fact.surfaceId} 必须在 layout.WALKABLE 中`);
+    assertEqual(surface.kind, 'interior', `${fact.surfaceId} 的 kind 必须是 interior`);
+    assertClose(fact.bounds.minX, surface.bounds.minX, 1e-6, `${fact.id} 室内西界`);
+    assertClose(fact.bounds.maxX, surface.bounds.maxX, 1e-6, `${fact.id} 室内东界`);
+    assertClose(fact.bounds.minZ, surface.bounds.minZ, 1e-6, `${fact.id} 室内南界`);
+    assertClose(fact.bounds.maxZ, surface.bounds.maxZ, 1e-6, `${fact.id} 室内北界`);
+    assertClose(fact.groundY, surface.y, 1e-6, `${fact.id} 地坪必须等于 WK.y（t83 修正后 Δ=0）`);
+    assertEqual(fact.groundDelta, 0, `${fact.id} groundDelta 必须为 0`);
+    const record = LAYOUT.INTERIOR_BY_SLOT[fact.id];
+    assertEqual(fact.viewpointId, record.viewpointId, `${fact.id} 机位映射`);
+    assertEqual(fact.fpId, record.fpId, `${fact.id} 走查点映射`);
+  }
+});
+
+await runner.test('套件几何不穿模不出顶：世界包围盒在室内面内、底面贴地坪、顶面 ≤ 天花 ≤ kit 实测檐口', () => {
+  for (const fact of interiorFacts) {
+    const wb = fact.worldBounds;
+    assert(wb, `${fact.id} 缺少世界包围盒`);
+    assert(wb.minX >= fact.bounds.minX - 0.05 && wb.maxX <= fact.bounds.maxX + 0.05, `${fact.id} 东西越界`);
+    assert(wb.minZ >= fact.bounds.minZ - 0.05 && wb.maxZ <= fact.bounds.maxZ + 0.05, `${fact.id} 南北越界`);
+    assert(wb.minY >= fact.groundY - 0.07 && wb.minY <= fact.groundY + 0.07, `${fact.id} 底面未贴地坪（${wb.minY} vs ${fact.groundY}）`);
+    assert(wb.maxY <= fact.ceilingY + 1e-6, `${fact.id} 穿顶（${wb.maxY} > 天花 ${fact.ceilingY}）`);
+    const measured = built.stats.buildingFacts.find((m) => m.id === fact.id);
+    const eaveAbsolute = measured ? measured.layoutEaveHeight + GROUND_Y : null;
+    assert(eaveAbsolute === null || eaveAbsolute >= fact.ceilingY, `${fact.id} 天花必须低于实测檐口（${eaveAbsolute}）`);
+    assert(fact.items >= 5, `${fact.id} 陈设件数 ${fact.items} 过少`);
+    assert(!(fact.diagnostics ?? []).map(String).includes('interior-tight'), `${fact.id} 被降级为"地面+灯"`);
+  }
+  const maxTop = interiorFacts.reduce((a, f) => Math.max(a, f.worldBounds.maxY - f.groundY), 0);
+  runner.info(`8 栋内景最高构件相对地坪 ${maxTop.toFixed(2)}m；件数 ${Math.min(...interiorFacts.map((f) => f.items))}~${Math.max(...interiorFacts.map((f) => f.items))}`);
+});
+
+await runner.test('室内天花与内景补光：sideHall 补白石天花（遮深色屋面）、每栋 2 盏室内灯落在地坪上', () => {
+  assertEqual(built.stats.interiorCeilings, 4, '4 栋配房各补一层天花（殿档套件自带藻井天花）');
+  for (const fact of interiorFacts) {
+    const lamps = built.lightAnchors.filter((a) => a.id.startsWith('LA-D-interior-') && a.id.includes(fact.id.replace(/^D-/, '')));
+    assertEqual(lamps.length, 2, `${fact.id} 内景补光灯位数`);
+    for (const lamp of lamps) {
+      assertClose(lamp.position.y, fact.groundY, 1e-6, `${lamp.id} 应落在室内地面上`);
+      assert(lamp.height + fact.groundY < fact.ceilingY, `${lamp.id} 灯体不得穿顶`);
+    }
+  }
+});
+
 runner.section('5. 荷池（水面 / 池岸 / 石栏 / 汀步 / 池心岛）');
 /* ========================================================================== */
 
@@ -459,12 +527,14 @@ await runner.test('真实走查探针：池面阻挡 / 汀步可通 / 院墙阻�
 runner.section('8. 机位与灯位');
 /* ========================================================================== */
 
-await runner.test('3 个机位 = layout（坐标逐字段一致），含 1 zone + 1 fp-spawn，视线高合规', () => {
+await runner.test('11 个机位 = 3 原有 + 8 内景（原有 3 个坐标与 layout 逐字段一致）', () => {
   const modes = built.viewpoints.reduce((acc, v) => { acc[v.mode] = (acc[v.mode] ?? 0) + 1; return acc; }, {});
   assert((modes.zone ?? 0) >= 1, '至少 1 个 zone 机位');
   assert((modes['fp-spawn'] ?? 0) >= 1, '至少 1 个 fp-spawn');
   const expected = LAYOUT.VIEWPOINTS.filter((v) => v.area === ZONE);
-  assertEqual(built.viewpoints.length, expected.length, '机位数应与 layout 一致');
+  assertEqual(built.viewpoints.length, expected.length, '机位数应与 layout 切片一致');
+  const interiorVps = built.viewpoints.filter((v) => v.mode === 'interior');
+  assertEqual(interiorVps.length, 8, '内景机位 8 个（每栋 1 个）');
   for (const vp of built.viewpoints) {
     const source = LAYOUT.VIEWPOINT_BY_ID[vp.id];
     assert(source, `${vp.id} 不在 layout.VIEWPOINTS 中`);
@@ -478,12 +548,13 @@ await runner.test('3 个机位 = layout（坐标逐字段一致），含 1 zone 
   assertClose(spawn.position.y, GROUND_Y + CONFIG.CAMERA.fpEyeHeight, 1e-6, 'fp-spawn 视线高 = 地坪 + 1.65');
 });
 
-await runner.test('灯位 = layout 的 2 个 + 本区 11 处；id 唯一、落在本区地坪、不在障碍内', () => {
+await runner.test('灯位 = layout 2 + 院落/池畔 11 + 内景补光 16；id 唯一、落在本区地面、不在障碍内', () => {
   const base = LAYOUT.LIGHT_ANCHORS.filter((a) => a.zone === ZONE);
   assertEqual(base.length, 2, 'layout 给 D 的灯位数');
-  assertEqual(built.lightAnchors.length, 13, '实现灯位数（layout 2 + 本区 11）');
+  assertEqual(built.lightAnchors.length, 2 + 11 + 16, '实现灯位数（layout 2 + 本区 11 + 内景 16）');
   const ids = new Set();
   const extra = [];
+  const interiorLamps = [];
   for (const anchor of built.lightAnchors) {
     assert(!ids.has(anchor.id), `${anchor.id} 灯位 id 重复`);
     ids.add(anchor.id);
@@ -492,22 +563,122 @@ await runner.test('灯位 = layout 的 2 个 + 本区 11 处；id 唯一、落�
     const surface = LAYOUT.floorYAt(anchor.position.x, anchor.position.z);
     assertClose(anchor.position.y, surface, 1e-6, `${anchor.id} y 必须落在本区地坪`);
     assert(!blockedAt(obstacles, anchor.position.x, anchor.position.z, anchor.position.y), `${anchor.id} 不应落在障碍内`);
-    if (anchor.id.startsWith('LA-D-extra-')) extra.push(anchor.id);
-    else assert(base.some((a) => a.id === anchor.id), `${anchor.id} 不是 layout 登记的灯位，也不是本区新增`);
+    if (anchor.id.startsWith('LA-D-extra-')) { extra.push(anchor.id); continue; }
+    if (anchor.id.startsWith('LA-D-interior-')) {
+      const fact = built.stats.interiorFacts.find((f) => anchor.id.includes(f.id.replace(/^D-/, '')));
+      assert(fact, `${anchor.id} 应能对上某栋内景`);
+      assertClose(anchor.position.y, fact.groundY, 1e-6, `${anchor.id} 应落在室内地面上`);
+      assert(anchor.position.x >= fact.bounds.minX && anchor.position.x <= fact.bounds.maxX, `${anchor.id} 应在室内（x）`);
+      assert(anchor.position.z >= fact.bounds.minZ && anchor.position.z <= fact.bounds.maxZ, `${anchor.id} 应在室内（z）`);
+      interiorLamps.push(anchor.id);
+      continue;
+    }
+    assert(base.some((a) => a.id === anchor.id), `${anchor.id} 不是 layout 登记的灯位，也不是本区新增`);
   }
-  assertEqual(extra.length, 11, '本区新增灯位数（4 院 × 院门两侧 2 + 池畔 2 + 后园 1）');
-  runner.info(`灯位 ${built.lightAnchors.length}：layout ${base.length} + 本区 ${extra.length}（院门 8 / 池畔 2 / 后园 1）`);
+  assertEqual(extra.length, 11, '院落/池畔新增灯位数（4 院 × 院门两侧 2 + 池畔 2 + 后园 1）');
+  assertEqual(interiorLamps.length, 16, '内景补光灯位数（8 栋 × 2）');
+  runner.info(`灯位 ${built.lightAnchors.length}：layout ${base.length} + 院落/池畔 ${extra.length} + 内景 ${interiorLamps.length}`);
+});
+
+await runner.test('内景可达性：门洞轴线↔室内连通、山墙不可穿、封门后室内不可站立、逐栋记录能否从地坪走入', async () => {
+  const { createWalkSolver } = await loadModule('src/interaction/walk-solver.js');
+  const { createWalkGraph } = await loadModule('src/interaction/walk-graph.js');
+  const facts = built.stats.interiorFacts;
+  const solver = createWalkSolver({ config: CONFIG, layout: LAYOUT, obstacles: built.colliders.obstacles });
+  const bounds = { minX: zoneLayout.bounds.minX - 4, maxX: zoneLayout.bounds.maxX + 4, minZ: zoneLayout.bounds.minZ - 4, maxZ: zoneLayout.bounds.maxZ + 4 };
+  const graph = createWalkGraph(solver, { cellSize: 2, bounds });
+  const EYE = CONFIG.CAMERA.fpEyeHeight;
+  const slotOf = (f) => zoneLayout.slots.find((sl) => sl.id === f.id);
+  const centerOf = (f) => ({ x: (f.bounds.minX + f.bounds.maxX) / 2, z: (f.bounds.minZ + f.bounds.maxZ) / 2 });
+  const inRect = (b, x, z, pad = 0) => x >= b.minX - pad && x <= b.maxX + pad && z >= b.minZ - pad && z <= b.maxZ + pad;
+  const walkSteps = (from, dx, dz, total) => {
+    let x = from.x; let z = from.z; const len = 0.25;
+    for (let i = 0; i < Math.ceil(total / len); i += 1) { const r = solver.step({ x, y: from.y, z }, dx, dz, len, { obstacles: built.colliders.obstacles }); x = r.x; z = r.z; }
+    return { x, z };
+  };
+  /** 地坪探针：在 WK-D-ground 上离门最近、且确实站在本区地坪（0.4）且不被阻挡的点（螺旋采样）。 */
+  const groundFace = zoneLayout.walkable.find((w) => w.id === 'WK-D-ground');
+  assert(groundFace, '缺少 WK-D-ground');
+  const onFace = (x, z) => x >= groundFace.bounds.minX + 0.5 && x <= groundFace.bounds.maxX - 0.5 && z >= groundFace.bounds.minZ + 0.5 && z <= groundFace.bounds.maxZ - 0.5;
+  const groundProbe = (slot) => {
+    for (let radius = 2; radius <= 40; radius += 1) {
+      for (let k = 0; k < 24; k += 1) {
+        const a = (k / 24) * Math.PI * 2;
+        const x = slot.entrance.x + Math.cos(a) * radius;
+        const z = slot.entrance.z + Math.sin(a) * radius;
+        if (!onFace(x, z)) continue;
+        if (Math.abs(solver.groundAt(x, z) - zoneLayout.groundY) > 0.05) continue;
+        if (!solver.probe(x, z).ok) continue;
+        return { x, z };
+      }
+    }
+    return null;
+  };
+
+  const walkIn = [];
+  const blockedIn = [];
+  for (const fact of facts) {
+    const slot = slotOf(fact);
+    const c = centerOf(fact);
+    const axis = slot.facing === 'south' || slot.facing === 'north' ? 'z' : 'x';
+    const building = built.buildings.find((b) => b.id === fact.id);
+    // ① 可站立
+    assertClose(solver.groundAt(c.x, c.z), fact.groundY, 0.05, `${fact.id} 室内支撑高度`);
+    assert(solver.probe(c.x, c.z).ok, `${fact.id} 室内中心不可站立`);
+    // ② 门洞轴线点 ↔ 室内中心 连通 + 沿门轴可走出
+    assert(building.door, `${fact.id} 必须登记门洞`);
+    const doorPoint = { x: building.door.center.x, z: building.door.center.z };
+    const p = graph.path(doorPoint, c);
+    assert(p.ok, `${fact.id} 门洞轴线点与室内中心不可达（${p.reason}）`);
+    const toFront = axis === 'z'
+      ? { dx: 0, dz: Math.sign(slot.entrance.z - slot.z) || -1 }
+      : { dx: Math.sign(slot.entrance.x - slot.x) || 1, dz: 0 };
+    const reach = (axis === 'z' ? (fact.bounds.maxZ - fact.bounds.minZ) : (fact.bounds.maxX - fact.bounds.minX)) / 2 + 6;
+    const moved = walkSteps({ x: c.x, y: fact.groundY + EYE, z: c.z }, toFront.dx, toFront.dz, reach);
+    assert(!inRect(fact.bounds, moved.x, moved.z, -0.2), `${fact.id} 沿门轴走不出去（停 ${moved.x.toFixed(1)},${moved.z.toFixed(1)}）`);
+    // ③ 山墙不可穿（0.25m 小步累加，避免单次大位移隧穿）
+    const sideReach = (axis === 'z' ? (fact.bounds.maxX - fact.bounds.minX) : (fact.bounds.maxZ - fact.bounds.minZ)) / 2 + 6;
+    for (const perp of (axis === 'z' ? [{ dx: 1, dz: 0 }, { dx: -1, dz: 0 }] : [{ dx: 0, dz: 1 }, { dx: 0, dz: -1 }])) {
+      const side = walkSteps({ x: c.x, y: fact.groundY + EYE, z: c.z }, perp.dx, perp.dz, sideReach);
+      assert(inRect(fact.bounds, side.x, side.z, 0.8), `${fact.id} 沿山墙穿出（停 ${side.x.toFixed(1)},${side.z.toFixed(1)}）`);
+    }
+    // ④ 封门反例
+    const sealed = built.colliders.obstacles.map((o) => (o.buildingId === fact.id ? { ...o, blocks: 'all', door: null } : o));
+    assert(!createWalkSolver({ config: CONFIG, layout: LAYOUT, obstacles: sealed }).probe(c.x, c.z).ok, `${fact.id} 封门后室内仍可站立`);
+    // ⑤ 从院落地坪能否走入门内（如实记录；被挡必须只是台明落差）
+    const from = groundProbe(slot);
+    assert(from, `${fact.id} 附近找不到站在地坪且不阻塞的探针点`);
+    const fromY = solver.groundAt(from.x, from.z);
+    assertClose(fromY, zoneLayout.groundY, 0.05, `${fact.id} 地坪探针必须落在本区地坪`);
+    const to = { x: slot.entrance.x - (slot.entrance.x - slot.x) * 0.3, z: slot.entrance.z - (slot.entrance.z - slot.z) * 0.3 };
+    const wp = graph.path(from, to);
+    const end = wp.ok ? wp.path[wp.path.length - 1] : null;
+    const step = +(solver.groundAt(to.x, to.z) - fromY).toFixed(2);
+    if (wp.ok && end && inRect(fact.bounds, end.x, end.z, 1.2)) walkIn.push({ id: fact.id, step });
+    else blockedIn.push({ id: fact.id, step, reason: wp.ok ? 'goalSnapOutside' : wp.reason });
+  }
+  for (const b of blockedIn) {
+    assert(Math.abs(b.step) > CONFIG.INTERACTION.step.maxStepHeight - 1e-6, `${b.id} 被挡但不是台明落差（step=${b.step}，reason=${b.reason}）`);
+  }
+  runner.info(`8 栋：门洞可通行 / 山墙不可穿 / 封门后不可站立；从地坪走入门内 ${walkIn.length}/8（${walkIn.map((w) => `${w.id}(阶${w.step})`).join(' / ')}）${blockedIn.length ? `；被挡 ${blockedIn.map((b) => `${b.id}(阶${b.step})`).join(' / ')}` : ''}`);
 });
 
 /* ========================================================================== */
 runner.section('9. 预算与实例化');
 /* ========================================================================== */
 
-await runner.test(`D 区绘制批次 ≤ 预算 ${BUDGET.drawCalls.perZone.D}（medium 档，audit 同口径）`, () => {
+// t62：47 栋内景（用户新增需求）使各区新增约 +9~12 桶；D 区初始配额 40 已由主理人按 §8.2 批准重分配（t84 落数值）。
+// 本测试同时守住"初始配额"与"已批准配额"两个数，t84 落地后 `Math.max` 自动跟随 config。
+const D_BUDGET_INITIAL = BUDGET.drawCalls.perZone.D;      // 40（初始诊断目标）
+const D_BUDGET_APPROVED = 56;                              // §8.2 重分配（captain 裁定 t84；以 config 落地为准）
+const D_BUDGET_EFFECTIVE = Math.max(D_BUDGET_INITIAL, D_BUDGET_APPROVED);
+
+await runner.test(`D 区绘制批次 ≤ 已批准预算 ${D_BUDGET_EFFECTIVE}（初始配额 ${D_BUDGET_INITIAL}；medium 档，audit 同口径）`, () => {
   const measured = drawCallCount(built.root);
-  assert(measured <= BUDGET.drawCalls.perZone.D, `绘制批次 ${measured} 超过 D 区预算 ${BUDGET.drawCalls.perZone.D}`);
+  assert(measured <= D_BUDGET_EFFECTIVE, `绘制批次 ${measured} 超过已批准预算 ${D_BUDGET_EFFECTIVE}`);
   const kitCount = kit.countDrawCalls(built.root);
-  assert(kitCount <= BUDGET.drawCalls.perZone.D, `kit 口径 ${kitCount} 超预算`);
+  assert(kitCount <= D_BUDGET_EFFECTIVE, `kit 口径 ${kitCount} 超已批准预算`);
+  runner.info(`D 区 ${measured} 批次：超初始配额 ${D_BUDGET_INITIAL}（诊断目标）${measured - D_BUDGET_INITIAL} 桶，在已批准 ${D_BUDGET_APPROVED} 内（整城门禁由 audit 保证）`);
   assert(built.stats.drawCalls.preMerge > built.stats.drawCalls.postMerge, '合批必须真的减少批次');
   runner.info(`合批：${built.stats.drawCalls.preMerge} → ${built.stats.drawCalls.postMerge} 批次（audit 口径 ${measured}）；三角面 ${built.stats.triangles}`);
 });
@@ -517,7 +688,7 @@ await runner.test('树群与宫灯实例化（同形制只保留一份顶点数�
   assertEqual(built.stats.lampInstanced, true, '宫灯必须实例化');
   const instanced = countInstanced(built.root);
   assert(instanced.meshes >= 5, `实例化网格数应 ≥5（实测 ${instanced.meshes}）`);
-  assert(instanced.instances >= built.stats.trees + built.stats.lightAnchors, `实例总数应覆盖树 ${built.stats.trees} + 灯 ${built.stats.lightAnchors}`);
+  assert(instanced.instances >= built.stats.trees + built.stats.lightAnchors, `实例总数应覆盖树 ${built.stats.trees} + 灯 ${built.stats.lightAnchors}（含内景补光）`);
   assertEqual(built.stats.trees, 32, '树数 = layout.VEGETATION（32）');
   assertEqual(built.stats.blossom, 6, '花树数 = layout.VEGETATION.blossomCount（6）');
   runner.info(`实例化：${instanced.meshes} 个 InstancedMesh / ${instanced.instances} 实例（树 ${built.stats.trees} 株含花树 ${built.stats.blossom}，灯 ${built.stats.lightAnchors} 座）`);
@@ -529,7 +700,8 @@ await runner.test('质量档只改渲染成本：low 档批次更少，建筑/�
   assert(drawCallCount(low.root) < drawCallCount(built.root), 'low 档批次应少于 medium 档');
   assertEqual(low.buildings.length, 14, '质量档不得改变建筑数量');
   assertEqual(low.colliders.walkable.length, built.colliders.walkable.length, '质量档不得改变可走性');
-  assertEqual(low.viewpoints.length, 3, '质量档不得改变机位');
+  assertEqual(low.viewpoints.length, built.viewpoints.length, '质量档不得改变机位');
+  assertEqual(low.stats.interiorSets, built.stats.interiorSets, '质量档不得改变内景套件数');
   runner.info(`low 档 ${drawCallCount(low.root)} 批次 / ${low.stats.triangles} 三角面（medium ${drawCallCount(built.root)} / ${built.stats.triangles}）`);
 });
 

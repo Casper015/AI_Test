@@ -156,6 +156,67 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     return { ok: unreachable.length === 0, visited, anchors, unreachable };
   }
 
+  /**
+   * t87：**逆向 BFS**（沿反向边遍历）= "哪些格子能走回起点"。
+   * 与 `flood`（正向可达）配对即可得出单向陷阱：`正向可达 ∧ ¬能返回`。
+   * 注意 `canStep` 是**有向**的（上台阶 0.5 / 下台阶 0.6 的阈值不对称），因此必须真做逆向遍历，
+   * 不能假设图无向。
+   */
+  function reverseFlood(start) {
+    const reaches = new Uint8Array(cols * rows);
+    const startIndex = index(start.col, start.row);
+    reaches[startIndex] = 1;
+    const queue = [startIndex];
+    let head = 0;
+    while (head < queue.length) {
+      const current = queue[head];
+      head += 1;
+      const col = current % cols;
+      const row = Math.floor(current / cols);
+      const neighbours = [
+        [col + 1, row],
+        [col - 1, row],
+        [col, row + 1],
+        [col, row - 1],
+      ];
+      for (const [nc, nr] of neighbours) {
+        if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+        const ni = index(nc, nr);
+        if (reaches[ni]) continue;
+        // 反向边：邻居 → 当前
+        if (!canStep(nc, nr, col, row)) continue;
+        reaches[ni] = 1;
+        queue.push(ni);
+      }
+    }
+    return { reaches, visited: queue.length };
+  }
+
+  /** 单元格世界坐标（含面高；不可走格的面高为 NaN）。 */
+  function worldAt(col, row) {
+    if (col < 0 || row < 0 || col >= cols || row >= rows) return null;
+    const i = index(col, row);
+    return { col, row, index: i, x: worldX(col), z: worldZ(row), y: heights[i], ok: cells[i] === 1 };
+  }
+
+  /** 世界坐标 → 最近格坐标（不做吸附搜索，仅取整）。 */
+  function toCell(x, z) {
+    const col = toCol(x);
+    const row = toRow(z);
+    if (col < 0 || row < 0 || col >= cols || row >= rows) return null;
+    return { col, row, index: index(col, row) };
+  }
+
+  /** 遍历所有已采样为可走的格。 */
+  function forEachWalkable(visit) {
+    for (let i = 0; i < cells.length; i += 1) {
+      if (cells[i] !== 1) continue;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      visit({ col, row, index: i, x: worldX(col), z: worldZ(row), y: heights[i] });
+    }
+  }
+
   return {
     cols,
     rows,
@@ -165,12 +226,27 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     canStep,
     nearestCell,
     flood,
+    reverseFlood,
+    worldAt,
+    toCell,
+    forEachWalkable,
     path,
     connected,
     stats() {
       let walkable = 0;
       for (let i = 0; i < cells.length; i += 1) if (cells[i] === 1) walkable += 1;
-      return { cols, rows, cellSize, cells: cols * rows, walkable, sampled: [...cells].filter((v) => v !== -1).length };
+      return {
+        cols,
+        rows,
+        cellSize,
+        cells: cols * rows,
+        walkable,
+        sampled: [...cells].filter((v) => v !== -1).length,
+        // t88：本图的可走性全部经由 `solver.probe → groundAt`，因此**继承**
+        // `layout.CONNECTORS` 的坡道/台阶过渡面；这里把消费情况一并报出（图不再对 connector 零引用）。
+        connectors: typeof solver.connectorStats === 'function' ? solver.connectorStats() : null,
+        connectorDeclared: Array.isArray(layout.CONNECTORS) ? layout.CONNECTORS.length : 0,
+      };
     },
   };
 }

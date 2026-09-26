@@ -374,10 +374,12 @@ await runner.test('可行走面 1 面回显 layout、坡道斜率 ≤ rampMaxSlo
     const src = LAYOUT.WALKABLE.find((x) => x.id === w.id);
     assert(src && w.y === src.y && w.kind === src.kind, `${w.id} 必须回显 layout`);
     if (w.kind === 'interior') {
-      // t63：内景地面 = 该栋台基地坪（= layout 注册值），不是庭院地坪
-      const slotId = (result.stats.interiors ?? []).find((i) => i.walkableId === w.id)?.slotId ?? null;
-      assert(slotId, `${w.id} 应能对上本区已布景的内景栋`);
-      assertClose(w.y, LAYOUT.getSlot(slotId).baseY, 1e-6, `${w.id} 标高应等于该栋台基地坪`);
+      // 内景地面标高以 layout 注册值为唯一权威（本卡不自行推断）：区域回显 = layout 值 + kit 用于布景的 groundY 一致
+      const info = (result.stats.interiors ?? []).find((i) => i.walkableId === w.id) ?? null;
+      assert(info, `${w.id} 应能对上本区已布景的内景栋`);
+      assertClose(w.y, src.y, 1e-6, `${w.id} 标高必须回显 layout`);
+      assertClose(info.groundY, w.y, 1e-6, `${w.id} 布景地面必须等于 layout 注册的室内地面`);
+      assert(w.y >= groundY - 1e-6, `${w.id} 内景地面不得低于庭院地坪`);
     } else if (w.kind === 'passage') {
       // t75 门洞通道面：门槛标高 = 该栋台基地坪（室外侧由外伸段搭到庭院地面）
       assert(w.y >= groundY - 1e-6, `${w.id} 通道面不得低于庭院地坪`);
@@ -528,6 +530,21 @@ await runner.test('碰撞可达性（真实碰撞数据）：9 栋每栋室内�
   runner.info('9 栋内景：室内可站立 + 门洞可走入 + 外墙不可穿（逐栋断言）');
 });
 
+await runner.test('内景灯体守卫（t92 措施①）：不再额外加灯体，灯位与天花仍在', () => {
+  const extraLamps = [];
+  result.root.traverse((node) => {
+    if (!(node.isMesh || node.isInstancedMesh)) return;
+    if (/-lamp-LA-/.test(node.name ?? '')) extraLamps.push(node.name);
+  });
+  assertEqual(extraLamps.length, 0, `内景不得再额外加灯体（§12 截断措施① 已删除），实际 ${extraLamps.length} 个：${extraLamps.slice(0, 4).join(', ')}`);
+  const lamps = result.lightAnchors.filter((a) => a.role === 'interiorLantern');
+  assertEqual(lamps.length, (result.stats.interiors ?? []).length * 2, '每栋内景仍须登记 2 条灯位（环境系统按距离点亮）');
+  for (const info of result.stats.interiors ?? []) {
+    assert(info.ceilingY > info.groundY + 1.5, `${info.slotId} 天花高度异常（${info.ceilingY} vs ${info.groundY}）`);
+  }
+  runner.info(`内景灯体守卫：额外灯体 ${extraLamps.length} 个（措施①），室内灯位 ${lamps.length} 条、天花 ${(result.stats.interiors ?? []).length} 层 ✓`);
+});
+
 /* ========================================================================== */
 runner.section('6. 预算与实例化（§8.2；队长口径：约束是整城 ≤350）');
 /* ========================================================================== */
@@ -537,13 +554,12 @@ await runner.test('整区合批 + 树群实例化：批次与三角面在预算�
   assertEqual(result.stats.drawCallBudget, budget, '区域必须声明正确预算');
   assert(result.stats.merge, '必须执行整区合批（kit.mergeZone）');
   assert(result.stats.merge.after <= result.stats.merge.before, '合批必须降低批次');
-  // t63：47 栋内景新增需求引入 kit 内景部位词表（~11 桶/区）。E 区实测 49/40，超出 9 桶，
-  // 属"新增需求 vs 初始配额"的偏差（见 docs/handoffs/zone-inner.md §B3 的配额申请），已文档化：
-  const INTERIOR_QUOTA_ALLOWANCE = 12;
+  // t92：配额申请已被采纳（config.BUDGET.drawCalls.perZone.E 40 → 56），故收紧回严格断言（去掉 t63 的临时余量）
   assert(
-    result.stats.drawCalls <= budget + INTERIOR_QUOTA_ALLOWANCE,
-    `E 区绘制调用 ${result.stats.drawCalls} 超过"初始配额 ${budget} + t63 内景文档化余量 ${INTERIOR_QUOTA_ALLOWANCE}"`,
+    result.stats.drawCalls <= budget,
+    `E 区绘制调用 ${result.stats.drawCalls} 超过现行分区配额 ${budget}（§8.2 config.BUDGET.drawCalls.perZone）`,
   );
+  assert(result.stats.layoutDrawCallBudget !== null, '应留档 layout.ZONES.drawCallBudget 供口径对比');
   assert(result.stats.triangles <= BUDGET.triangles.visibleMax / 4, 'E 区三角面不应接近全城上限');
   assert(result.stats.treeBuild === 'instanced(kit.instance)', '树木必须用 kit.instance 实例化');
   const inst = result.stats.treeInstances ?? [];

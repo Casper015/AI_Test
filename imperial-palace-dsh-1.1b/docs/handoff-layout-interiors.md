@@ -111,3 +111,83 @@ t74（LAYOUT 1.1.3）：node tests/layout.test.mjs → 通过 1736 项，失败 
 
 ### 5.4 断言（`tests/layout.test.mjs`，只增不减）
 `区域地坪表与 LAYOUT.ZONES 逐值一致` · `43 处内景 WK.y = 区域地坪 + baseY（±0.01，城门/内廷门为显式例外）` · `INTERIOR_BY_SLOT.groundY 同步` · `例外集合恰等于表键` · `内景机位 y = 面高 + 1.65m 逐栋成立` · `C/D/E 受影响 25 栋全部抬到区域地坪`。既有 t73/t75 断言随新基准**更新**（非删除）；内景包围盒哈希随 y 修正更新为 `f2b4884e`。
+
+## 6. t85（LAYOUT 1.1.6）：连通性模型定位 + 台阶容差回退 0.8 + 配额 pin 同步 + wart 登记
+
+### 6.1 模型定位：**surfaces-only 启发式**（可 grep）
+在 `tests/layout.test.mjs` 的连通性断言块与输出中写明（grep 关键词：`surfaces-only` / `不构成可达性结论` / `生产口径`）：
+> **surfaces-only 诊断模型（不含 connector 丹陛/台阶）** ⇒ 其数字**只是诊断，不构成可达性结论**；可达性的约束口径是**生产口径（含 connector）**，由 **t77** 复验负责。
+
+### 6.2 台阶容差：**由 1.0 回退到 0.8**（t83 的 1.0 无物理依据）
+**相邻可行走面高差直方图（实测，194 对 xz 重叠面）：**
+
+| 高差区间 | 对数 | 说明 |
+| --- | --- | --- |
+| 0 ~ 0.05m | 48 | 同面/铺装接缝 |
+| 0.05 ~ 0.5m | 81 | **真实可跨**（走查求解器台阶阈值 0.5m，t13 实测） |
+| 0.5 ~ 0.8m | 11 | 模型容差内（诊断口径） |
+| **0.8 ~ 1.0m** | **27** | **不可跨**（>0.5m 阈值）⇒ 靠丹陛/台阶 connector |
+| 1.0 ~ 2.0m | 22 | 同上 |
+| ≥ 2.0m | 5 | 台基/月台层级差（例：`WK-B-terrace-tier1↔WK-B-terrace-tier3 Δ3.00`） |
+
+**结论**：0.8 → 1.0 **没有物理依据**（0.9m 高差不是“能走过去的台阶”，其真实服务由 connector 提供，而本模型按设计不含 connector）⇒ **按裁定回退 `DY = 0.8`**，并接受弱模型下的诊断结果：
+- `Δy ≤ 0.8` 时：**42/43** 内景有同层可达邻居（另 1 处需 connector 台阶）；**去掉通道面后 15 处**内景同层不可达（突变证明期望按实测同步为 **15**，此前 t83 的 3 系在 1.0 容差下得出）。
+- `Δy ≤ 0.5`（与求解器阈值一致）时为 38/43 —— 作为诊断参考一并记录，**不作为判据**。
+- **明确禁止**“以让红项/期望变少为由保留 1.0”。
+
+### 6.3 同步 t84 的分区配额 pin（本卡持有 `tests/layout.test.mjs`）
+| 行 | 旧值 | **新值** | 依据 |
+| --- | --- | --- | --- |
+| `tests/layout.test.mjs:202` | `reserve` 70 | **28** | §8.2 重分配：Σ perZone 322 + 28 = 350 |
+| `tests/layout.test.mjs:201` | `{B:70,C:50,D:40,E:40,F:80}` | **`{B:70,C:60,D:56,E:56,F:80}`** | t84 回执 §1 与 CONTRACTS §8.2.1（需求变更：43 栋内景） |
+| `tests/layout.test.mjs:71` | `CONFIG 版本 = 1.0.6` | **1.0.7** | t84 递增 CONFIG（§8.2 配额重分配） |
+断言**未删除**；204–206 行的“分区合计 + 保留 = 350”断言在新值下仍成立（322 + 28 = 350）。
+
+### 6.4 已知 wart（登记不修）+ 例外表逐条理由
+- **`C-gate-inner.baseY` 存的是绝对标高**（其余 66 个槽位为**相对本区地坪的偏移**）——同一名词、两种基准。
+  证据：`WP-fp-07`（内廷门）`y=2.55 = 0.9 + 1.65` 与 `floorYAt(0,95)=0.9`。
+  **不修理由**：修它需同时改 `WP-fp-07` 与该处 `floorYAt` 解析（既有走查语义/公共 API 变更）；正确修法是给槽位新增显式 `baseYMode: 'absolute'|'relative'`（布局 schema 变更 + 全量回归），收益不抵风险 ⇒ 以例外表 + wart 登记收口，待专门卡处理。
+- **例外表逐条理由**（`src/shared/layout.js:INTERIOR_PASSAGE_FLOOR`，5 条，代码注释内逐条写明）：
+  | 例外 | 值 | 理由 |
+  | --- | --- | --- |
+  | `F-gate-south/north/west/east` | 0.4 | 城楼跨压宫墙，`baseY=12.4` 是墙顶门房；行人走墙下**门洞通道**（实测四门 `floorYAt(door.center)=0.4`）⇒ t72 Q5 裁定 ① |
+  | `C-gate-inner` | 0.9 | 见上 wart：`baseY` 已是绝对标高（证据 `WP-fp-07`/`floorYAt`），按区域地坪叠加会破坏既有走查断言 |
+
+### 6.5 冻结与 verify
+`连接 32 / 墙 60 / 可行走面 112 / 障碍 81` · `视角 61 / 导览 10 / 走查 50` 未动；未新增 CXN；`LAYOUT_VERSION → 1.1.6`；断言**只增不减**。
+```
+$ node tests/layout.test.mjs            → 全部通过 ✓（0 失败；摘要 config 1.0.7）
+$ grep -n "surfaces-only\|不构成可达性\|生产口径" tests/layout.test.mjs
+  → 命中注释块、A/B 断言标题与控制台定位声明（可 grep）
+```
+
+## 7. t97（LAYOUT 1.1.8）：F10 真正修点 —— `S()` 内补区域地坪（24 栋 C/D/E 基准统一）
+
+### 7.1 修点（file:line）
+- **`src/shared/layout.js` 的 `S()`**：`ZONE_GROUND_Y` / `zoneGroundY` **上提到 `S()` 之前**；`door` 派生式由
+  `sillY: +baseY`（本地台基）→ **`sillY: +(zoneGroundY(zone) + baseY)`**（门外门槛面标高）。
+- **通道面**：`WK-<slot>-door-passage` 的 `groundY` 同步改为 `INTERIOR_PASSAGE_FLOOR ?? INTERIOR_LEGACY_FLOOR ?? (zoneGroundY(zone) + baseY)`（与内景地面同源）。
+- **重要事实（t89 结论，本卡再次确认）**：`S()` **完全忽略 `opts.door` 字面量** —— `door`/`doorWidth` 全部在 `S()` 内部派生。因此早期“改 24 处 `door.sillY:` 字面量”注定无效（t89 已干净还原），修点只能在 `S()` 内。
+
+### 7.2 24 栋清单（修前 `sillY/passage.y` 低 0.9/0.4/0.4）
+`C-annex-west/east`、`C-hall-bed-rear`、`C-side-west/east-main`、`C-side-west/east-rear`、
+`D-court1..4-hall`、`D-court1..4-house`、`E-court1..4-hall`、`E-court1..4-house`、`E-court3-annex`
+（C +0.9；D/E +0.4）。修后逐栋 `sillY === 区域地坪 + 本地台基 === WK.y`。
+
+### 7.3 pin 更新前后（同义替换，未删断言）
+| 断言 | 修前期望 | **修后期望（实测）** |
+| --- | --- | --- |
+| `WK-*-door-passage.y` 未补区域地坪的栋数 | 24（已知缺陷 pin） | **0** |
+| `door.sillY` 未补区域地坪的栋数（非例外） | 24 | **0** |
+| surfaces-only 诊断「内景有同层邻居」 | 42/43 | **43/43** |
+| `sillY` 偏离集合 | 29 = 24 ∪ 5 | **5**（F 四城门双标高 + `C-gate-inner` 绝对标高；`C-hall-bed-main` 已随 `S()` 修复归位） |
+
+### 7.4 例外表（`DOOR_SILL_EXCEPTIONS`，6 条，逐条理由）
+| 例外 | 值 | 理由 |
+| --- | --- | --- |
+| `F-gate-south/north/west/east`（4） | 城楼门 `sillY=12.4` / 通道地面 0.4 | **双标高**（行人走墙下门洞通道；内景取通道面，t72 Q5 裁定 ①） |
+| `C-hall-bed-main` | `sillY` 与内景地面**已归位一致**（=0.9+1.5=2.4） | 该栋一致，保留在表中作历史登记（原 wart 由本卡修复） |
+| `C-gate-inner` | `sillY=1.8` vs 内景 0.9 | 该槽位 `baseY=0.9` 是**绝对标高**（其余为相对偏移）⇒ 绝对标高 wart |
+
+### 7.5 与 t98 的接口（下一页/下一卡）
+10 栋不可达内景（`B-side-{west,east}-{south,main,rear}` 6 + `B-hall-mid`、`B-hall-rear` + `E-court{1,2}-hall`）的**可行走过渡**由 t98 承接；本卡已把门内外基准统一（`sillY = 区域地坪 + 本地台基`），t98 可在**正确基准**上登记过渡，不会返工。

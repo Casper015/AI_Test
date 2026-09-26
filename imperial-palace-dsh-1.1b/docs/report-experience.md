@@ -258,3 +258,73 @@
 | verify-completeness | 与 t12 同批（本次未重跑；其红项亦来自同一迁移） | 同一迁移 |
 
 **结论**：本卡（G3/G4）的判据在 14:12 的"真天空掩码"版本上已验证到位（§11.1–§11.3）；14:40 之后的迁移把整棵树带到"大面积红"，属**外部在飞迁移**，需其 owner 完成 core/zones/UI 同步后才能给出最终 G4 判定。我不把这段状态算作 G3/G4 的实现回归，但也不会在它未收口时宣布通过。
+
+---
+
+## 13. t94 追加：真实浏览器灯位池核对（`?stats=1`，4 机位 × 三时辰）
+
+> 口径与来源：全部读数来自**真实 headless Chrome**（chrome-headless-shell + SwiftShader）在最终构建上的运行，
+> 命令 `node scripts/shot.mjs <view> --preset=<p> --out-dir=/tmp/t94-shots --keep-invalid`（图与 manifest 全写 /tmp，
+> 不落 repo）；灯位字段取自 DOM 报告 `<pre id="palace-stats-json">`（由 `src/main.js` 的 `compactReport()` 生成）。
+> **未使用 t90 的 Node 构造样本充当验证**；Node 侧只做“真实输入复算 + 与浏览器计数交叉校验”（见 §13.3）。
+
+### 13.1 逐组原始读数（12 组）
+
+| 机位 | 时辰 | 内容暗区 | 高光截断 | 判定行 | 实时宫灯(活跃/容量) | 锚点 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 南城门内景 `VP-F-gate-south-interior` | golden | 0.00% ≤15%(city) | 0.06% ≤5% | `可读性判据 PASS` | **3/3** | 152 |
+| 南城门内景 | dusk | 0.00% ≤30%(near) | 0.09% | `PASS` | **4/4** | 152 |
+| 南城门内景 | night | 8.77% | 0.02% | `PASS` | **6/6** | 152 |
+| 北城门内景 `VP-F-gate-north-interior` | golden | 0.11% | 0.02% | `PASS` | **3/3** | 152 |
+| 北城门内景 | dusk | 0.10% | 0.02% | `PASS` | **4/4** | 152 |
+| 北城门内景 | night | 10.07% | 0.01% | `PASS` | **6/6** | 152 |
+| 金銮殿内景 `VP-B-interior` | golden | 4.13% | 0.68% | `PASS` | **3/3** | 152 |
+| 金銮殿内景 | dusk | 0.00% | **5.69% > 5%** | **`FAIL（内容高光截断 5.69% > 5%）`** | **4/4** | 152 |
+| 金銮殿内景 | night | 0.00% | **5.05% > 5%** | **`FAIL（内容高光截断 5.05% > 5%）`** | **6/6** | 152 |
+| 全城鸟瞰 oblique | golden | 2.21% ≤15% | 0.00% | `PASS` | **0/3** | 152 |
+| 全城鸟瞰 | dusk | 1.80% | 0.00% | `PASS`（掩码配对降级，见 F15） | **0/4** | 152 |
+| 全城鸟瞰 | night | 10.48% ≤15% | 0.00% | `PASS` | **0/6** | 152 |
+
+- **t64/t90 报的形态在真实路径上确认已消失**：两个城门内景的实时灯池**全部饱和**（golden 3/3、dusk 4/4、night 6/6），且（§13.3 复算）池内 **#1–#2 就是该机位的真实室内灯** `LA-F-int-F-gate-south-1/2`（windowGlow@16.4m/20.5m）与 `LA-F-int-F-gate-north-1/2`（@15.1m/19.4m）——即“室内灯被远处中轴灯挤出”的现象在真实锚点集上已不成立。
+- **新发现（F14，擦线）**：金銮殿内景 dusk/night 触发 §12 的**高光截断**主判据（5.69% 与 5.05%，上限 5%）。超出量分别为 **+0.69pp / +0.05pp**，**均 ≤1pp 运行噪声底** ⇒ 按主理人口径**不构成确定性失败**，但工具判定行为 FAIL，需复测确认后再派单（复测命令即上表命令）。
+- 全城鸟瞰三时辰实时灯 0/3、0/4、0/6：与“距离上限 120m 外无灯”一致（见 §13.3 H3/H4），不是漏灯。
+
+### 13.2 可追溯性（字段 → 真实灯位对象）
+
+| 环节 | 证据 |
+| --- | --- |
+| 入口 | `?stats=1` → `src/main.js` `compactReport()` → DOM `<pre id="palace-stats-json">`；本次读数取自该 DOM 的 `lampAnchors/lampRealtime/lampActive/lampEmissiveIntensity` |
+| 对象来源 | `src/core/environment.js:895-897` `lampState.anchors = registry.allLightAnchors()`；`main.js:237` 先 `registry.registerLayoutLightAnchors(LAYOUT.LIGHT_ANCHORS)`，区域装载后再合并运行时锚点 |
+| 计数一致性 | 浏览器 12 组全部报 **锚点 152**；Node 侧 `registry.allLightAnchors()`（真 5 区装配）= **152**，角色分布 `{axisLantern:36, gardenOrCourtLantern:60, interiorLantern:36, courtGateLantern:4, pondLantern:2, windowGlow:14}` ⇒ **逐值一致**，证明读的是同一批真实对象 |
+| 池容量 | 浏览器逐时辰实测 `lampRealtime` = golden **3** / dusk **4** / night **6**（= `min(maxRealtimePointLights, 质量档/时辰预算)`），与 Node 复算所用的预算逐一对应 |
+
+### 13.3 Node 复算（真实输入 + 生产同源纯函数）与交叉校验
+
+方法：`createEnvironment({registry 真锚点})` → 用**生产同名纯函数** `environment.rankLampPool(anchors, focus, {budget})` 复算；`focus` 取**真实机位**（内景取登记机位坐标；oblique 取生产相机 rig 实测位置）。这不是 t90 的构造样本：锚点、机位、预算三项输入全部来自真实运行数据。
+
+| 机位 | 池容量(golden/dusk/night) | 与浏览器 `lampActive` 对照 | 池内 #1–#3（真实 id/角色/距离/得分） |
+| --- | --- | --- | --- |
+| 南城门内景 | 3/4/6（饱和） | 3/3、4/4、6/6 **一致** | `LA-F-int-F-gate-south-1` windowGlow@16.4m 0.5116 · `LA-F-int-F-gate-south-2` @20.5m 0.4925 · `LA-001` axisLantern@69.5m 0.4267 |
+| 北城门内景 | 3/4/6（饱和） | 3/3、4/4、6/6 **一致** | `LA-F-int-F-gate-north-1` windowGlow@15.1m 0.5174 · `LA-F-int-F-gate-north-2` @19.4m 0.4980 · `LA-F-int-F-garden-hall-north-1` @54.9m 0.2994 |
+| 金銮殿内景 | 3/4/6（饱和） | 3/3、4/4、6/6 **一致** | `LA-015` axisLantern@20.1m 0.8989 · `LA-016` @20.1m 0.8989 · `LA-B-interior-hall-main-xa` gardenOrCourtLantern@17.0m 0.6481 |
+| 全城鸟瞰 | 0/0/0 | 0/3、0/4、0/6 **一致（池为空）** | （120m 上限内无锚点） |
+
+**与 t90 Node 侧数字的差异（并列说明）**：t90 的构造样本为“机位 15m 内一盏 windowGlow，score 0.518”；真实锚点集下南/北城门内景的第一名分别是 `windowGlow@16.4m 0.5116` 与 `@15.1m 0.5174`——**量级一致、数值因真实距离/角色分布而略异**（0.5116/0.5174 vs 0.518）。t90 假设“池容量 8”，真机为 **3/4/6（随时辰）**；本次复算一律用真机容量，故池内清单比 t90 的 8 项更短（这正是它未验证的那一段）。
+
+### 13.4 判据与预算（同批复核，原始行）
+
+- 上表 12 组即为 §12 原始判定行（`可读性判据 PASS ×10 / FAIL ×2`，阈值 15%/30%/5% 一字未动；`?ui=0&shot=1` 隐藏口径未动）。
+- `node scripts/audit.mjs` → **exit 0**：`主场景绘制调用 333 / 上限 350 ✓`、`可见三角面 306269 / 上限 1500000 ✓`、`结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`。
+- **口径提示（F16，观察项）**：以上 12 组取自**内景/近景机位**，shot 报告同时给出 `整帧调用 1142–1160 · 可见三角面 1,189,758–1,191,390 · 主场景可绘制对象 374`（对照 oblique 的 1158/1,191,390）。§8.2 的 ≤350 是**主场景单次调用**口径（audit 333 ✓），整帧含阴影 pass + Bloom + 内景陈设，**不受 §8.2 直接约束**；如主理人希望给“内景机位”单列预算，本表即为基线。
+
+### 13.5 未通过项与最小修法
+
+- **F12（medium，owner：core/environment + main.js）**：`?stats=1` 只暴露**计数**（`lampAnchors/lampRealtime/lampActive/lampEmissiveIntensity`），**没有逐灯清单**（id/角色/距离/得分/池内排名）⇒ 本卡要求的“真实入池灯位清单”无法直接读数（我只做到：真实计数 + 真实输入的复算交叉校验）。最小修法（6–10 行，纯新增只读字段）：在 `updateLampSelection()` 里把 `rankLampPool` 结果存入 `lampState.pool = pool.map((h,i)=>({rank:i+1,id:h.anchor.id,role:h.anchor.role,distance:+h.distance.toFixed(1),score:+h.score.toFixed(4)}))`，`describe().lamps.pool` 暴露前 N 条，并在 `compactReport()` 转发 `lampPool`（可截断 top-8）。落地后 `tests/verify-experience.test.mjs` H5 的“条件升级断言”会自动把它变成硬断言。
+- **F14（medium，owner：kit/scene 光照与材质高光；需先复测）**：金銮殿内景 dusk `高光截断 5.69%`、night `5.05%`，超出 5% 上限 **+0.69pp / +0.05pp（≤1pp 噪声底）**。修法方向：复测三次确认稳定后，降内景高光（Bloom 阈值/强度、金砖与金饰 roughness/emissive 或法器高光），**不得**改 §12 阈值。复测命令：`node scripts/shot.mjs --interior=VP-B-interior --preset=dusk --out-dir=/tmp/t94-shots --keep-invalid`。
+- **F15（low，owner：scripts/shot.mjs 掩码口径）**：`oblique/dusk` 出现 `❌ 真天空掩码配对失败：掩码未生效（唯一色 1、前二主色 100.00%）`，随后按“无天空视角”降级（整帧即内容）。该组两种口径均 PASS（内容暗区 1.80%、整帧暗区 0.54%），但说明“2 色真掩码”在**看不见天空的机位**会走降级分支；建议口径文档明确该分支为预期（非缺陷）。
+- **非本卡红项（并列）**：`tests/verify-experience.test.mjs` 仍红 3 项 —— B1/B10（= t77-F8：10 处内景在生产走查口径不可达，owner layout/interaction）与 F1（= t13 的 24 格矩阵门，3 格需在 docs/shots 刷新，owner t13）。本卡新增的 H1–H6 全部通过（断言只增不减：28 → 34 项）。
+
+### 13.6 结论
+
+- **真实路径确认**：灯位池按真实锚点（152）+ 距离感知排序运行，南/北城门内景池饱和且 #1–#2 为**真实室内灯**；全城鸟瞰 0 盏（120m 上限外），与设计一致 ⇒ **t90 的排序修复在真实路径上成立**（计数与复算双向一致）。
+- **未闭合**：逐灯清单字段缺失（F12，交回派单）；金銮殿内景 dusk/night 高光截断擦线（F14，需复测后派单）；掩码降级分支文档化（F15）。

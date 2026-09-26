@@ -1,0 +1,462 @@
+{
+ "url": "http://127.0.0.1:55358/index.html?ui=1",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "phase": {
+  "enterFp": {
+   "mode": "fp",
+   "isFp": true,
+   "position": {
+    "x": -58,
+    "y": 1.65,
+    "z": -376
+   },
+   "view": {
+    "x": 0.855,
+    "z": 0.519
+   },
+   "zones": []
+  },
+  "aim0": {
+   "wantDeg": 180,
+   "curDeg": 58.76,
+   "afterDeg": 180,
+   "resid": 121.24
+  },
+  "aim1": {
+   "wantDeg": 180,
+   "curDeg": 180,
+   "afterDeg": 180,
+   "resid": 0
+  },
+  "timeline": [
+   {
+    "t": 0,
+    "pos": {
+     "x": -58,
+     "z": -376.347
+    },
+    "panels": [
+     "brand",
+     "hud",
+     "info",
+     "views",
+     "zones",
+     "env",
+     "loading",
+     "help",
+     "minimap",
+     "tour",
+     "stuck",
+     "toast",
+     "labels"
+    ],
+    "stuckVisible": false,
+    "toastVisible": true,
+    "texts": [
+     "好像卡住了",
+     "回到最近安全点（G）"
+    ]
+   },
+   {
+    "t": 1000,
+    "pos": {
+     "x": -58,
+     "z": -376.693
+    },
+    "panels": [
+     "brand",
+     "hud",
+     "info",
+     "views",
+     "zones",
+     "env",
+     "loading",
+     "help",
+     "minimap",
+     "tour",
+     "stuck",
+     "toast",
+     "labels"
+    ],
+    "stuckVisible": false,
+    "toastVisible": true,
+    "texts": [
+     "好像卡住了",
+     "回到最近安全点（G）"
+    ]
+   },
+   {
+    "t": 1741,
+    "pos": {
+     "x": -58,
+     "z": -377.04
+    },
+    "panels": [
+     "brand",
+     "hud",
+     "info",
+     "views",
+     "zones",
+     "env",
+     "loading",
+     "help",
+     "minimap",
+     "tour",
+     "stuck",
+     "toast",
+     "labels"
+    ],
+    "stuckVisible": false,
+    "toastVisible": true,
+    "texts": [
+     "好像卡住了",
+     "回到最近安全点（G）"
+    ]
+   },
+   {
+    "t": 2392,
+    "pos": {
+     "x": -58,
+     "z": -377.387
+    },
+    "panels": [
+     "brand",
+     "hud",
+     "info",
+     "views",
+     "zones",
+     "env",
+     "loading",
+     "help",
+     "minimap",
+     "tour",
+     "stuck",
+     "toast",
+     "labels"
+    ],
+    "stuckVisible": false,
+    "toastVisible": true,
+    "texts": [
+     "好像卡住了",
+     "回到最近安全点（G）"
+    ]
+   },
+   {
+    "t": 2936,
+    "pos": {
+     "x": -58,
+     "z": -377.56
+    },
+    "panels": [
+     "brand",
+     "hud",
+     "info",
+     "views",
+     "zones",
+     "env",
+     "loading",
+     "help",
+     "minimap",
+     "tour",
+     "stuck",
+     "toast",
+     "labels"
+    ],
+    "stuckVisible": false,
+    "toastVisible": true,
+    "texts": [
+     "好像卡住了",
+     "回到最近安全点（G）",
+     "门殿西翼亭 · 开敞构筑物"
+    ]
+   },
+   {
+    "t": 5808,
+    "pos": {
+     "x": -58,
+     "z": -377.647
+    },
+    "panels": [
+     "brand",
+     "hud",
+     "info",
+     "views",
+     "zones",
+     "env",
+     "loading",
+     "help",
+     "minimap",
+     "tour",
+     "stuck",
+     "toast",
+     "labels"
+    ],
+    "stuckVisible": false,
+    "toastVisible": true,
+    "texts": [
+     "好像卡住了",
+     "回到最近安全点（G）",
+     "门殿西翼亭 · 开敞构筑物"
+    ]
+   },
+   {
+    "t": 6267,
+    "pos": {
+     "x": -58,
+     "z": -377.647
+    },
+    "panels": [
+     "brand",
+     "hud",
+     "info",
+     "views",
+     "zones",
+     "env",
+     "loading",
+     "help",
+     "minimap",
+     "tour",
+     "stuck",
+     "toast",
+     "labels"
+    ],
+    "stuckVisible": false,
+    "toastVisible": true,
+    "texts": [
+     "好像卡住了",
+     "回到最近安全点（G）",
+     "门殿西翼亭 · 开敞构筑物"
+    ]
+   },
+   {
+    "t": 7535,
+    "pos": {
+     "x": -58,
+     "z": -377.647
+    },
+    "panels": [
+     "brand",
+     "hud",
+     "info",
+     "views",
+     "zones",
+     "env",
+     "loading",
+     "help",
+     "minimap",
+     "tour",
+     "stuck",
+     "toast",
+     "labels"
+    ],
+    "stuckVisible": false,
+    "toastVisible": true,
+    "texts": [
+     "好像卡住了",
+     "回到最近安全点（G）",
+     "门殿西翼亭 · 开敞构筑物"
+    ]
+   },
+   {
+    "t": 8672,
+    "pos": {
+     "x": -58,
+     "z": -377.647
+    },
+    "panels": [
+     "brand",
+     "hud",
+     "info",
+     "views",
+     "zones",
+     "env",
+     "loading",
+     "help",
+     "minimap",
+     "tour",
+     "stuck",
+     "toast",
+     "labels"
+    ],
+    "stuckVisible": false,
+    "toastVisible": true,
+    "texts": [
+     "好像卡住了",
+     "回到最近安全点（G）",
+     "门殿西翼亭 · 开敞构筑物"
+    ]
+   }
+  ],
+  "pinnedState": {
+   "mode": "fp",
+   "isFp": true,
+   "pos": {
+    "x": -58,
+    "z": -377.647
+   },
+   "stuckDisplay": "none",
+   "stuckRect": {
+    "w": 0,
+    "h": 0
+   }
+  },
+  "hint": {
+   "t": 2936,
+   "pos": {
+    "x": -58,
+    "z": -377.56
+   },
+   "panels": [
+    "brand",
+    "hud",
+    "info",
+    "views",
+    "zones",
+    "env",
+    "loading",
+    "help",
+    "minimap",
+    "tour",
+    "stuck",
+    "toast",
+    "labels"
+   ],
+   "stuckVisible": false,
+   "toastVisible": true,
+   "texts": [
+    "好像卡住了",
+    "回到最近安全点（G）",
+    "门殿西翼亭 · 开敞构筑物"
+   ]
+  },
+  "hud": null,
+  "dom": {
+   "stuck": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "display": "none",
+    "visibility": "visible",
+    "opacity": "1",
+    "color": "rgb(240, 236, 225)",
+    "background": "color(srgb 0.177882 0.125333 0.103216)",
+    "border": "rgb(180, 83, 58)",
+    "zIndex": "auto",
+    "text": "好像卡住了回到最近安全点（G）",
+    "coveredBy": "CANVAS"
+   },
+   "stuckButton": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "display": "inline-block",
+    "visibility": "visible",
+    "opacity": "1",
+    "color": "rgb(240, 236, 225)",
+    "background": "rgba(223, 161, 18, 0.16)",
+    "border": "rgba(223, 161, 18, 0.6)",
+    "zIndex": "auto",
+    "text": "回到最近安全点（G）",
+    "coveredBy": "CANVAS"
+   },
+   "hint": {
+    "rect": {
+     "x": 480,
+     "y": 810.2,
+     "w": 480,
+     "h": 73.8
+    },
+    "display": "block",
+    "visibility": "visible",
+    "opacity": "1",
+    "color": "rgb(240, 236, 225)",
+    "background": "rgba(26, 25, 23, 0.9)",
+    "border": "rgba(223, 161, 18, 0.45)",
+    "zIndex": "auto",
+    "text": "门殿西翼亭 · 开敞构筑物门殿西翼亭（亭阁）四面开敞但登记为不可进入：请沿外侧绕行观赏；这不是隐藏墙体，而是该构筑物的通行语义。",
+    "coveredBy": "CANVAS"
+   },
+   "uiRegion": "toast",
+   "panelsVisible": [
+    "brand",
+    "hud",
+    "views",
+    "zones",
+    "env",
+    "loading",
+    "help",
+    "minimap",
+    "tour",
+    "toast",
+    "labels"
+   ]
+  },
+  "beforeG": {
+   "mode": "fp",
+   "x": -58,
+   "y": 1.65,
+   "z": -377.647
+  },
+  "afterG": {
+   "mode": "oblique",
+   "isFp": false,
+   "x": 0,
+   "y": 520,
+   "z": -1180
+  },
+  "toastAfterG": {
+   "visible": true,
+   "text": "已尝试脱困，但落点未通过校验落点 (0, -1180)｜可站立 false｜原因 envelope"
+  },
+  "hudAfterEscape": {
+   "visible": false,
+   "text": "好像卡住了回到最近安全点（G）"
+  },
+  "walkAfterEscape": {
+   "x": 0,
+   "y": 520,
+   "z": -1180
+  }
+ },
+ "shots": [
+  {
+   "step": "01-fp-stand-before-pavilion",
+   "file": "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b/docs/shots-airwall/t99-01-fp-stand.png",
+   "bytes": 555480,
+   "sha256": "35b7359292f18dfffb61aced79cd71762e03f0fb1ef4acffc3496db76e0f5ecb"
+  },
+  {
+   "step": "02-open-structure-hint",
+   "file": "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b/docs/shots-airwall/t99-02-open-hint.png",
+   "bytes": 633692,
+   "sha256": "19d357d9a19dc9e4e90d6082b602be1273f16d2a01cae8734a030120bf8b10f0"
+  },
+  {
+   "step": "03-stuck-hud-ABSENT",
+   "file": "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b/docs/shots-airwall/t99-03-stuck-hud-absent.png",
+   "bytes": 633717,
+   "sha256": "03e357e081caed20651c37f576e7ca3c29d0e2199f623273104f99d387e5dd1f"
+  },
+  {
+   "step": "04-after-escape",
+   "file": "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b/docs/shots-airwall/t99-04-after-escape.png",
+   "bytes": 331736,
+   "sha256": "e43655251a19b3f31104b1758dd12c7c616a912e7a19fde1c12e76f0b7b67495"
+  },
+  {
+   "step": "05-after-escape-walk",
+   "file": "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b/docs/shots-airwall/t99-05-after-escape-walk.png",
+   "bytes": 331789,
+   "sha256": "6a523f64b4a985a0b9bebaa3f1ef33ab75b33faecab02aa86bf71e529371e641"
+  }
+ ]
+}

@@ -727,6 +727,41 @@ function buildInteriorSets(ctx, group, buildingFacts) {
 }
 
 /**
+ * 配殿/门殿的室内天花（kit 套件只有 hall 档带藻井天花）。
+ *
+ * 问题：`sideHall/gateHall` 档套件没有天花构件 ⇒ 内景机位仰视时画面顶部是**屋面背面**（深色瓦背），
+ * 实测 `B-side-east-south` 内容暗区 30.71% > 30%（§12 内景判据 FAIL）。
+ * 最小修法（调室内材质/构件，**不放宽判据**）：用 `kit.paving` 的薄板补一层白石天花，遮掉深色屋面；
+ * 材质用既有令牌 `stoneWhite`（仅 +1 个绘制批次），尺寸取该栋室内面的完整范围、标高取 kit 檐口 −0.2m。
+ */
+function buildInteriorCeilings(ctx, group, interiorFacts) {
+  const paving = kitFactory(ctx.kit, 'paving', { required: false });
+  const out = [];
+  if (!paving) return out;
+  for (const fact of interiorFacts) {
+    if (fact.kind === 'hall') continue; // hall 档套件自带藻井天花
+    const b = fact.bounds;
+    const slab = paving({
+      id: `ceiling:${fact.id}`,
+      name: `${fact.id} 室内天花`,
+      w: +(b.maxX - b.minX).toFixed(3),
+      d: +(b.maxZ - b.minZ).toFixed(3),
+      x: +((b.minX + b.maxX) / 2).toFixed(3),
+      z: +((b.minZ + b.maxZ) / 2).toFixed(3),
+      y: fact.ceilingY,
+      thickness: 0.3,
+      material: 'stoneWhite',
+      detail: 'far',
+    });
+    slab.userData.zone = ZONE_ID;
+    slab.userData.buildingId = fact.id;
+    group.add(slab);
+    out.push({ id: fact.id, y: fact.ceilingY, w: +(b.maxX - b.minX).toFixed(1), d: +(b.maxZ - b.minZ).toFixed(1) });
+  }
+  return out;
+}
+
+/**
  * 内景补光灯位（§8.3 灯位登记；灯由 t2 的统一环境系统激活，区域不建第二套灯光）。
  *
  * 为什么需要：§12 内景判据（内容暗区 ≤30%）在 goldenHour 下对**配殿/庑房**偏紧——室内净高仅 3~4m，
@@ -1009,6 +1044,7 @@ export async function createZone(ctx) {
   interiorsGroup.name = 'B:interiors';
   root.add(interiorsGroup);
   const interiorSets = buildInteriorSets(ctx, interiorsGroup, built.metrics);
+  const interiorCeilings = buildInteriorCeilings(ctx, interiorsGroup, interiorSets.facts);
   // 内景补光灯位（须在灯体与 lightAnchors 之前算好）
   const interiorLampAnchors = buildInteriorLampAnchors(ctx, interiorSets.facts);
 
@@ -1114,6 +1150,7 @@ export async function createZone(ctx) {
     interiorSets: interiorSets.facts.length,
     interiorFacts: interiorSets.facts,
     interiorKitAvailable: interiorSets.available,
+    interiorCeilings: interiorCeilings.length,
     scenic: scenic.length,
     furnishings: furnishings.length,
     trees: trees.length,

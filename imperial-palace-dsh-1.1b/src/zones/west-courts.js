@@ -193,6 +193,37 @@ function buildInteriorSets(ctx, group, buildingFacts) {
 }
 
 /**
+ * 配房/门殿的室内天花（kit 套件只有 hall 档带藻井天花）：见 B 区同名函数注释——
+ * 用 `kit.paving` 白石薄板补一层天花，遮掉内景仰视时的深色屋面背面（§12 暗区最小修法）。
+ */
+function buildInteriorCeilings(ctx, group, interiorFacts) {
+  const paving = kitFactory(ctx.kit, 'paving', { required: false });
+  const out = [];
+  if (!paving) return out;
+  for (const fact of interiorFacts) {
+    if (fact.kind === 'hall') continue;
+    const b = fact.bounds;
+    const slab = paving({
+      id: `ceiling:${fact.id}`,
+      name: `${fact.id} 室内天花`,
+      w: +(b.maxX - b.minX).toFixed(3),
+      d: +(b.maxZ - b.minZ).toFixed(3),
+      x: +((b.minX + b.maxX) / 2).toFixed(3),
+      z: +((b.minZ + b.maxZ) / 2).toFixed(3),
+      y: fact.ceilingY,
+      thickness: 0.3,
+      material: 'stoneWhite',
+      detail: 'far',
+    });
+    slab.userData.zone = ZONE_ID;
+    slab.userData.buildingId = fact.id;
+    group.add(slab);
+    out.push({ id: fact.id, y: fact.ceilingY, w: +(b.maxX - b.minX).toFixed(1), d: +(b.maxZ - b.minZ).toFixed(1) });
+  }
+  return out;
+}
+
+/**
  * 内景补光灯位（§8.3；灯由 t2 环境系统统一激活，区域不建第二套灯光）。
  * 与 B 区同一手法：每栋内景沿长轴 1/3、2/3 各一盏，落在室内地面（`groundY`），高度 2.6m。
  * 目的：§12 内景判据（暗区 ≤30%）在 goldenHour 下对净高 3~4m 的配房偏紧（深色屋面占比大），
@@ -712,6 +743,7 @@ export async function createZone(ctx) {
    * ====================================================================== */
 
   const interiorSets = buildInteriorSets(ctx, groups.interiors, buildingFacts);
+  const interiorCeilings = buildInteriorCeilings(ctx, groups.interiors, interiorSets.facts);
   const interiorLampAnchors = buildInteriorLampAnchors(ctx, interiorSets.facts);
 
   /* ========================================================================
@@ -1022,6 +1054,8 @@ export async function createZone(ctx) {
     interiorSets: interiorSets.facts.length,
     interiorFacts: interiorSets.facts,
     interiorKitAvailable: interiorSets.available,
+    interiorCeilings: interiorCeilings.length,
+    lamps: lightAnchors.length,
     roadSegments: roadFacts.length,
     trees: treeFacts.length,
     blossom: treeFacts.filter((t) => t.blossom).length,

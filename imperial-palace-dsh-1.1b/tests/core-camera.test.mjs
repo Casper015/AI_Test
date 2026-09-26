@@ -27,14 +27,14 @@ const { createCameraRig, interiorBoundsFor, describeInteriorTarget, INTERIOR_ADD
 
 const DEG = Math.PI / 180;
 
-function makeCore() {
+function makeCore(opts = {}) {
   const events = createEventBus();
   const registry = createRegistry({ config: CONFIG, events, layout: LAYOUT });
   registry.registerLayoutViewpoints(LAYOUT.VIEWPOINTS);
   registry.registerLayoutLightAnchors(LAYOUT.LIGHT_ANCHORS);
   registry.registerBuildings('GREYBOX', LAYOUT.SLOTS.map((s) => ({ ...s })), { replace: true });
   const store = createStateStore({ events });
-  const rig = createCameraRig({ config: CONFIG, registry, store, events });
+  const rig = createCameraRig({ config: CONFIG, registry, store, events, query: opts.query ?? null });
   createStateController({ events, store, camera: rig, config: CONFIG });
   store.subscribe((payload) => rig.onStateChange(payload));
   const settle = (seconds = CONFIG.CAMERA.transitionSeconds + 0.05) => {
@@ -453,6 +453,88 @@ await runner.test('退化包围盒防护（突变证明）：零厚度/NaN 体�
   assert(Number.isFinite(specNan.position.x) && Number.isFinite(specNan.position.z) && Number.isFinite(specNan.position.y), 'NaN 输入下机位仍须有限');
   assertFocusInvariants(specNan, 'SYNTH-nan');
   runner.info(`退化样本：thin-gate 距离 ${specThin.framing.distance}（旧公式 ${legacyDistance.toFixed(2)} < 入镜 ${specThin.framing.fitDistance}）；NaN 输入机位有限 ✓`);
+});
+
+/* ========================================================================== */
+runner.section('t91：逐栋内景取景入口 `?interior=`（slotId / viewpointId）');
+/* ========================================================================== */
+
+const settleFrames = (rig, store, frames) => {
+  const step = 1 / 60;
+  for (let i = 0; i < frames; i += 1) rig.update(step, i * step, store.state);
+};
+
+await runner.test('`?interior=<slotId>`：经 layout 显式映射解析机位 → 复用 view:request-mode 进入该内景', () => {
+  const { store, rig, settle } = makeCore({ query: { interior: 'C-hall-bed-main' } });
+  settleFrames(rig, store, 5);
+  settle(); // 相机过渡走完
+  const expected = interiorBoundsFor({ slotId: 'C-hall-bed-main' }).viewpointId;
+  assertEqual(store.state.viewMode, 'interior', '应进入 interior 模式');
+  assertEqual(store.view.interiorViewpointId, expected, 'store.view 应记录解析出的机位');
+  const d = rig.describe();
+  assertEqual(d.mode, 'interior', 'describe() 应为 interior');
+  assertEqual(d.interiorViewpointId, expected, 'describe() 的机位应与映射一致');
+  assertEqual(d.interiorQuery.requested, 'C-hall-bed-main', '引导应记录请求值');
+  assertEqual(d.interiorQuery.applied, expected, '引导应记录实际应用的机位');
+  const box = interiorBoundsFor({ slotId: 'C-hall-bed-main' });
+  assert(d.position.x >= box.minX && d.position.x <= box.maxX && d.position.z >= box.minZ && d.position.z <= box.maxZ, '机位应被夹在该内景盒内');
+  runner.info(`?interior=C-hall-bed-main → ${expected}（盒 ${box.id}），reason=${d.interiorQuery.reason}`);
+});
+
+await runner.test('`?interior=<viewpointId>` 直接写法等价；`?view=interior` 同时给出时也生效', () => {
+  const a = makeCore({ query: { interior: 'VP-B-hall-mid-interior' } });
+  settleFrames(a.rig, a.store, 5);
+  a.settle();
+  assertEqual(a.store.view.interiorViewpointId, 'VP-B-hall-mid-interior', '直接给机位 id 应生效');
+  assertEqual(a.rig.describe().interiorQuery.applied, 'VP-B-hall-mid-interior');
+
+  const b = makeCore({ query: { interior: 'B-hall-mid', view: 'interior' } });
+  settleFrames(b.rig, b.store, 5);
+  b.settle();
+  assertEqual(b.store.view.interiorViewpointId, 'VP-B-hall-mid-interior', 'view=interior 与 interior= 同时给出时应应用显式机位');
+  runner.info('VP- 直写与 view=interior 组合均生效 ✓');
+});
+
+await runner.test('兼容与失败路径：`?view=<非 interior>` 优先不覆盖；未知 id 明确不切景、给出原因', () => {
+  const iso = makeCore({ query: { interior: 'B-hall-mid', view: 'iso' } });
+  settleFrames(iso.rig, iso.store, 5);
+  iso.settle();
+  // 注：`?view=iso` 本身由 main.js 的 applyQueryView()（:441-447 → view:request-mode）应用；
+  // 本夹具不跑 main.js，故这里只断言"引导**没有**把视角改成 interior"，即八视角优先不被覆盖。
+  assertEqual(iso.store.state.viewMode, 'oblique', '引导不得把视角改成 interior（八视角优先）');
+  assertEqual(iso.rig.describe().interiorQuery.reason, 'view=iso-precedence', '应记录“被显式视角优先”的原因');
+  assertEqual(iso.store.view.interiorViewpointId, null, '不得写入机位');
+
+  const bad = makeCore({ query: { interior: 'Z-不存在' } });
+  settleFrames(bad.rig, bad.store, 1000); // 超过引导重试上限（900）
+  bad.settle();
+  const d = bad.rig.describe();
+  assertEqual(d.interiorQuery.reason, 'unresolved:Z-不存在', '未知 id 应给出 unresolved 原因（不静默）');
+  assertEqual(d.interiorQuery.applied, null, '未知 id 不得应用任何机位');
+  assertEqual(bad.store.state.viewMode, 'oblique', '未知 id 不应改变视角');
+  runner.info('八视角优先 + 未知 id 不静默 ✓');
+});
+
+await runner.test('引导只在需要时发起一次：成功后不再重复请求（复用唯一入口、不新建取景路径）', () => {
+  const { events, store, rig, settle } = makeCore({ query: { interior: 'B-hall-mid' } });
+  let interiorRequests = 0;
+  events.on(EVENTS.requestViewMode, (p) => {
+    if (p?.mode === 'interior') interiorRequests += 1;
+  });
+  settleFrames(rig, store, 300);
+  settle();
+  assertEqual(interiorRequests, 1, `引导成功后不得重复请求（实际 ${interiorRequests} 次）`);
+  assertEqual(rig.describe().interiorQuery.applied, 'VP-B-hall-mid-interior');
+  // 没有 interior= 时不得发任何内景请求
+  const none = makeCore({});
+  let noneRequests = 0;
+  none.events.on(EVENTS.requestViewMode, (p) => {
+    if (p?.mode === 'interior') noneRequests += 1;
+  });
+  settleFrames(none.rig, none.store, 60);
+  assertEqual(noneRequests, 0, '无 interior= 时不得发起内景请求');
+  assertEqual(none.rig.describe().interiorQuery.reason, 'no-param');
+  runner.info('引导一次性且仅在有参数时发起 ✓');
 });
 
 /* ========================================================================== */

@@ -25,7 +25,7 @@ import {
   deepFreeze,
 } from './config.js';
 
-export const LAYOUT_VERSION = '1.1.5'; // t83：C/D/E 派生内景 y 基准 = 区域地坪 + slot.baseY（修正漏加地坪） // t75：43 条门洞通道可行走面（kind:'passage'）使内景与室外连通 // t74 切片 B2：23 座 sideHall 派生门规格 + 内景 // t73 切片 B1：12 座 hall 派生门规格 + 内景（障碍 blocks 由 visitable 自动派生） // t70 切片 A（有门建筑内景）+ t72（4 座城门**通道级**内景）
+export const LAYOUT_VERSION = '1.1.8'; // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
 
 /* =============================================================================
  * 一、包络、区域边界与外墙（§2.3）
@@ -280,6 +280,12 @@ const PASSABLE_KINDS = Object.freeze(['gateHall', 'courtyardGate']);
  * 构造一个建筑槽位（全部字段一次说清，下游按此注册）。
  * opts: bays / terraceH / roofType / grade / facing / visitable / usage / onWall
  */
+/* t83：**区域地坪**（与 layout.ZONES[].groundY 逐值一致，由 layout.test 交叉断言）。
+   派生内景的地面/机位/走查点必须 = 区域地坪 + slot.baseY —— 早期版本漏加此项，
+   导致 C(−0.9)/D(−0.4)/E(−0.4) 三区内景整体偏低（家具会埋进台明）。 */
+const ZONE_GROUND_Y = Object.freeze({ B: 0, C: 0.9, D: 0.4, E: 0.4, F: 0 });
+const zoneGroundY = (zone) => ZONE_GROUND_Y[zone] ?? 0;
+
 function S(id, name, kind, zone, x, z, w, d, opts = {}) {
   const facing = opts.facing ?? 'south';
   const grade = opts.grade ?? 2;
@@ -329,7 +335,7 @@ function S(id, name, kind, zone, x, z, w, d, opts = {}) {
     hasDoor,
     doorWidth,
     door: hasDoor
-      ? { axis: facing === 'south' || facing === 'north' ? 'z' : 'x', center: { x, z }, width: doorWidth, height: Math.min(9, +(MODULES.eaveHeight * 0.7).toFixed(2)), sillY: +baseY.toFixed(2) }
+      ? { axis: facing === 'south' || facing === 'north' ? 'z' : 'x', center: { x, z }, width: doorWidth, height: Math.min(9, +(MODULES.eaveHeight * 0.7).toFixed(2)), sillY: +(zoneGroundY(zone) + baseY).toFixed(2) } // t97/F10：sillY = 区域地坪 + 本地台基（门外门槛面），原实现漏加区域地坪
       : null,
     bounds: b(+(x - w / 2).toFixed(2), +(x + w / 2).toFixed(2), +(z - d / 2).toFixed(2), +(z + d / 2).toFixed(2)),
     entrance,
@@ -789,11 +795,6 @@ function WK(id, zone, kind, name, minX, maxX, minZ, maxZ, y, enterable = true) {
    （legacy FP 走查点 WP-fp-02 恰在 (0,-445)、地面 0.4）⇒ 直接注册会在同一 xz 上叠一层 12.4 的可行走面，
    使 `floorYAt()` 解析到 12.4、破坏既有的"视线高 = 面高 + 1.65m"断言。城门需要"门洞通道 vs 墙顶门房"的分层规则，
    属切片 B 的范围（见 docs/handoff-layout-interiors.md）。 */
-/* t83：**区域地坪**（与 layout.ZONES[].groundY 逐值一致，由 layout.test 交叉断言）。
-   派生内景的地面/机位/走查点必须 = 区域地坪 + slot.baseY —— 早期版本漏加此项，
-   导致 C(−0.9)/D(−0.4)/E(−0.4) 三区内景整体偏低（家具会埋进台明）。 */
-const ZONE_GROUND_Y = Object.freeze({ B: 0, C: 0.9, D: 0.4, E: 0.4, F: 0 });
-const zoneGroundY = (zone) => ZONE_GROUND_Y[zone] ?? 0;
 
 const INTERIOR_SLICE_A_IDS = Object.freeze([
   'B-gate-front', 'C-gate-inner',
@@ -845,11 +846,34 @@ const INTERIOR_LEGACY_FLOOR = Object.freeze({ 'B-hall-main': 4.5, 'C-hall-bed-ma
 /* 既有两栋内景的 WK 内缩更大（B: 6m / C: 5m），通道向内段需相应加长才能搭到室内面 */
 const INTERIOR_LEGACY_IN = Object.freeze({ 'B-hall-main': 6.6, 'C-hall-bed-main': 6.6 });
 
+/* t89 / F10：`door.sillY` 语义冻结为「**门外门槛面标高**」，即应等于该栋登记内景地面（= WK.y）。
+   下列 5 栋例外（**逐条理由**，均由既有设计/遗留数据结构决定，非漏算）：
+   · F-gate-*（4 栋）：**双标高** —— 城楼门 `sillY=12.4`（墙顶门房）与**通道地面 0.4**；行人走的是通道 ⇒ 内景取 0.4。
+   · C-hall-bed-main（1 栋）：**遗留基准 wart** —— 该槽位无显式 `door` 字面量，`sillY=terraceH=1.5` 是**台基输入值**；
+     而其内景设计地面为 **2.4**（`INTERIOR_LEGACY_FLOOR`，= C 区地坪 0.9 + baseY 1.5）。改 `terraceH` 会改变建筑几何（kit 输入）
+     ⇒ 不在此处“修正”，而是登记为走廊高差 0.9m 的既有设计（由 t89 的可行走过渡 / t88 的 connector 消费承接）。 */
+export const DOOR_SILL_EXCEPTIONS = Object.freeze([
+  /* ① F 四城门：双标高（城楼门 sillY=12.4 / 通道地面 0.4） */
+  'F-gate-south', 'F-gate-north', 'F-gate-west', 'F-gate-east',
+  /* ② C-hall-bed-main：无显式 door 字面量，sillY=terraceH=1.5，而内景设计地面 2.4（遗留基准 wart） */
+  'C-hall-bed-main',
+  /* ③ C-gate-inner：baseY=0.9 存的是**绝对标高**（其余槽位为相对偏移）⇒ sillY=区域地坪+baseY=1.8 与其内景地面 0.9 不符（INTERIOR_PASSAGE_FLOOR 已登记，同属绝对标高 wart） */
+  'C-gate-inner',
+]);
+
 export const INTERIOR_PASSAGE_FLOOR = Object.freeze({
+  /* **例外表：逐条理由**（每一条都必须能独立解释，禁止宽泛豁免） */
+  /* ① F 四城门（4 条）：城楼跨压宫墙，`baseY=12.4` 是**墙顶门房**标高，行人实际走的是
+        墙下**门洞通道**（实测四门 `floorYAt(door.center)=0.4`）⇒ 内景取通道面 0.4（t72 Q5 裁定 ①）。 */
   'F-gate-south': 0.4, 'F-gate-north': 0.4, 'F-gate-west': 0.4, 'F-gate-east': 0.4,
-  /* t83 追加例外（实测证据）：C-gate-inner（内廷门）的 `baseY=0.9` 已是**绝对标高**
-     —— 既有手工走查点 `WP-fp-07`（内廷门，y=2.55=0.9+1.65）与 `floorYAt(0,95)=0.9` 为准；
-     若按“区域地坪(0.9)+baseY(0.9)=1.8”处理会与既有走查契约冲突，故内景保持 0.9。 */
+  /* ② C-gate-inner（内廷门，1 条）：**已知 wart（登记不修）** —— 该槽位的 `baseY=0.9` 存的是
+        **绝对标高**，而其它 66 个槽位的 `baseY` 是**相对该区地坪的偏移**（同一名词、两种基准）。
+        证据：既有手工走查点 `WP-fp-07`（内廷门）`y=2.55 = 0.9 + 1.65` 与 `floorYAt(0,95)=0.9`
+        ⇒ 该处地面就是 0.9（绝对）。若按“区域地坪 0.9 + baseY 0.9 = 1.8”处理，会立刻破坏
+        既有「视线高 = 面高 + 1.65m」走查断言（t83 实测报红）。
+        **不修理由**：修它需要同时改 `WP-fp-07` 与该处 `floorYAt` 解析（属既有走查语义/公共 API 变更），
+        而正确修法是**给槽位新增显式的 `baseYMode: 'absolute' | 'relative'` 字段**（属布局 schema 变更、需全量回归），
+        收益不抵风险 ⇒ 本轮以例外表 + 本条 wart 登记收口，待专门卡处理。 */
   'C-gate-inner': 0.9,
 });
 const INTERIOR_DEFERRED_CITY_GATES = Object.freeze([
@@ -910,7 +934,7 @@ function buildInteriorSliceA() {
   for (const id of [...INTERIOR_SLICE_A_IDS, 'B-hall-main', 'C-hall-bed-main']) {
     const slot = SLOT_BY_ID[id];
     if (!slot?.door) continue;
-    const groundY = INTERIOR_PASSAGE_FLOOR[id] ?? INTERIOR_LEGACY_FLOOR[id] ?? slot.baseY;
+    const groundY = INTERIOR_PASSAGE_FLOOR[id] ?? INTERIOR_LEGACY_FLOOR[id] ?? (zoneGroundY(slot.zone) + slot.baseY); // t97：与内景地面同源
     const half = (slot.door.width ?? slot.doorWidth) / 2;
     const OUT = 6.0; const IN = INTERIOR_LEGACY_IN[id] ?? 0.6; // 外伸 6m 搭到室外地面；既有两栋向内加长
     const b = slot.bounds;
@@ -1557,6 +1581,7 @@ export default deepFreeze({
   LIGHT_ANCHORS,
   LAYOUT_STATS,
   INTERIOR_BY_SLOT,
+  DOOR_SILL_EXCEPTIONS,
   interiorFor,
   interiorViewpointFor,
   interiorsByZone,

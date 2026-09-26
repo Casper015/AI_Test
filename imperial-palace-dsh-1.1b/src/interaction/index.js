@@ -20,6 +20,7 @@ import * as LAYOUT from '../shared/layout.js';
 import { createRequester, VIEW_MODE_BY_INDEX } from './requests.js';
 import { resolveKey, MOVEMENT_CODES } from './keymap.js';
 import { createWalkSolver } from './walk-solver.js';
+import { createTraversalAudit } from './traversal.js';
 import { buildCatalog } from './catalog.js';
 import { createPicker } from './pick.js';
 import { createHighlighter } from './highlight.js';
@@ -103,6 +104,18 @@ export function createInteraction({
     takeovers: 0,
     hints: 0,
     ticks: 0,
+    // t87：通行性守卫 / 防卡死
+    escapes: 0,
+    stuckEvents: 0,
+    stuckSeconds: 0,
+    stuckIntent: false,
+    stuckMoved: 0,
+    stuckIntentSource: 'internal',
+    inputEvents: 0,
+    traversalGuarded: false,
+    traversalReadyAtTick: null,
+    traversal: null,
+    lastEscape: null,
   };
   const listeners = [];
   const log = [];
@@ -121,6 +134,35 @@ export function createInteraction({
   const catalog = buildCatalog({ registry, layout, config });
   const solver = createWalkSolver({ config, layout, registry });
   rig.setCollisionSolver(solver);
+
+  /* ------------------------------------------------------------------ t87 通行性守卫与防卡死 */
+  /**
+   * 通行性审计（四类糟糕阻挡 + 单向陷阱守卫 + 最近安全点）。
+   * 采样是唯一重活：生产环境**分帧预热**（`warmupRowsPerTick` 行/帧），预热完成后才装守卫 ——
+   * 未就绪期间守卫一律放行（绝不误伤），且脱困兜底始终可用。测试可用 `warmupAll()` 一次算完。
+   */
+  const traversal = createTraversalAudit({
+    solver,
+    layout,
+    config,
+    cellSize: options.traversalCellSize ?? 3,
+    start: options.traversalStart ?? null,
+  });
+  const STUCK_SECONDS = options.stuckSeconds ?? 1.5;
+  const warmupRowsPerTick = options.traversalWarmupRows ?? 6;
+  let stuckFlag = false;
+  let traversalProblems = null;
+  let lastEscapeProbe = null;
+  /**
+   * t104（t99-F1）：卡死检测的**真实路径输入**。
+   *   · `movementKeys`：被动观察玩家按下的移动键（`MOVEMENT_CODES`，与 core 消费同一事件流，**不拦不吞**：
+   *     不加 capture、不 stopPropagation、不 preventDefault）⇒ 意图来源；
+   *   · `lastStuckPos`：上一帧 `rig.position` ⇒ 位移来源。
+   * 之所以不直接用 `rig.describe()`：它目前不暴露 `moving`/按键（最小改法 = core 在 describe() 里加 `moving`，
+   * 属 src/core/** 范围，本卡按纪律未改，已在回执量化交回）。
+   */
+  const movementKeys = new Set();
+  let lastStuckPos = null;
 
   const highlightParent = options.highlightParent ?? api.sceneRoot ?? api.scene ?? null;
   const highlighter = highlightParent ? createHighlighter({ config, parent: highlightParent }) : null;
@@ -342,6 +384,57 @@ export function createInteraction({
     return true;
   }
 
+  /**
+   * t87：一键脱离卡死 —— **确定性**回到最近的安全可行走点。
+   *   · 只用 §7.2 的请求事件（先退出第一人称、再重新进入）：core 会用 `nearestFpSpawn(position)`
+   *     把玩家放到**最近的已登记出生点**——出生点在 `registry` 里经契约校验（可行走面 + 眼高），
+   *     因此"不穿墙、不落水面/障碍内/包络外"由数据契约保证，本函数再逐项复核；
+   *   · **不做随机传送**、不放宽任何阻挡；返回落点与判定结果供 HUD/测试核对。
+   */
+  function escapeToSafePoint(source = 'escape-api') {
+    stats.escapes += 1;
+    if (rig.isFp !== true) {
+      pushHint({ tone: 'warn', kind: 'escape', title: '当前不在第一人称', detail: '脱困只在第一人称走查中生效：按 F 进入第一人称后再试。' }, { kind: 'escape' });
+      return { ok: false, reason: 'not-fp' };
+    }
+    const before = { ...rig.describe().position };
+    // 退出 → 再进入：两步都走同一条请求事件，core 负责选最近出生点（本模块不碰相机）
+    requester.send(EVENTS.requestViewMode, { mode: 'fp' });
+    requester.send(EVENTS.requestViewMode, { mode: 'fp' });
+    const after = { ...rig.describe().position };
+    lastEscapeProbe = { x: after.x, z: after.z };
+    const probe = solver.probe(after.x, after.z);
+    const region = traversal.ready ? traversal.regionAt(after.x, after.z) : 'unknown';
+    const moved = +Math.hypot(after.x - before.x, after.z - before.z).toFixed(2);
+    const feet = +(after.y - config.CAMERA.fpEyeHeight).toFixed(3);
+    const inBounds =
+      after.x >= layout.TERRAIN_EXTENT.minX &&
+      after.x <= layout.TERRAIN_EXTENT.maxX &&
+      after.z >= layout.TERRAIN_EXTENT.minZ &&
+      after.z <= layout.TERRAIN_EXTENT.maxZ;
+    const safe = probe.ok === true && inBounds && (region === 'main' || region === 'unknown');
+    solver.resetStuckTimer();
+    stuckFlag = false;
+    stats.lastEscape = { moved, region, safe, reasons: probe.reasons, feetY: feet, at: { x: after.x, z: after.z } };
+    pushHint(
+      safe
+        ? {
+            tone: 'info',
+            kind: 'escape',
+            title: '已脱离 · 回到最近安全点',
+            detail: `落点 (${after.x.toFixed(0)}, ${after.z.toFixed(0)})｜可站立 ✓｜区域 ${region}｜位移 ${moved}m`,
+          }
+        : {
+            tone: 'warn',
+            kind: 'escape',
+            title: '已尝试脱困，但落点未通过校验',
+            detail: `落点 (${after.x.toFixed(0)}, ${after.z.toFixed(0)})｜可站立 ${probe.ok}｜原因 ${probe.reasons.join('/') || '—'}`, 
+          },
+      { kind: 'escape' },
+    );
+    return { ok: true, safe, moved, region, reasons: probe.reasons, before, after, feetY: feet, inBounds, source };
+  }
+
   function exitInterior(source = 'interior-api') {
     if (store.state.viewMode !== 'interior') return false;
     const back = interiorReturn?.mode ?? 'oblique';
@@ -367,6 +460,25 @@ export function createInteraction({
     return true;
   }
 
+  /** t104：被动记录移动键（意图来源；不改变 core 的输入所有权）。 */
+  function onMovementKeyDown(event) {
+    const code = event?.code ?? '';
+    if (!MOVEMENT_CODES.includes(code)) return;
+    movementKeys.add(code);
+    stats.inputEvents = (stats.inputEvents ?? 0) + 1;
+  }
+
+  function onMovementKeyUp(event) {
+    const code = event?.code ?? '';
+    if (!code) return;
+    movementKeys.delete(code);
+  }
+
+  /** 失焦时清空（否则"按键卡住"会造成恒 intent ⇒ HUD 恒显示）。 */
+  function onWindowBlur() {
+    movementKeys.clear();
+  }
+
   function handleResolvedKey(resolved, event) {
     stats.keyRequests += 1;
     if (resolved.local) {
@@ -374,6 +486,8 @@ export function createInteraction({
         fp.exitPointerLock();
       } else if (resolved.local === 'notifyTourPaused') {
         pushHint({ tone: 'warn', kind: 'tour-pause', title: '导览已暂停', detail: '按 Space 或「继续」恢复导览。' }, { kind: 'tour-pause' });
+      } else if (resolved.local === 'escapeStuck') {
+        escapeToSafePoint('key:G');
       } else if (resolved.local === 'enterInterior' || resolved.local === 'notifyInteriorUnavailable') {
         // 后者即"不可进入"分支：enterInterior 内部只提示、不改视角
         enterInterior(store.state.selectedBuildingId, 'keyboard:F');
@@ -516,6 +630,48 @@ export function createInteraction({
     if (dt < 0) return false;
     lastTickAt = Date.now();
     stats.ticks += 1;
+    // t87：分帧预热通行性审计 → 完成后装上"单向陷阱守卫"（只加约束：宁可禁入，不许进得去出不来）
+    if (!traversal.ready) {
+      const warm = traversal.warmupStep({ rows: warmupRowsPerTick });
+      if (warm.done) {
+        traversal.ensureFields();
+        solver.setTraversalGuard(traversal.guardStep);
+        stats.traversalGuarded = true;
+        stats.traversalReadyAtTick = stats.ticks;
+        stats.traversal = traversal.stats();
+      }
+    }
+    // t87/t104：防卡死 —— 意图取"真实按下的移动键"、位移取"rig.position 逐帧增量"（生产路径输入）
+    if (rig.isFp) {
+      const pos = rig.position;
+      const moved = lastStuckPos ? Math.hypot(pos.x - lastStuckPos.x, pos.z - lastStuckPos.z) : 0;
+      lastStuckPos = { x: pos.x, z: pos.z };
+      const intent = movementKeys.size > 0;
+      const stuck = solver.noteStuckTick(dt, { intent, moved, threshold: STUCK_SECONDS });
+      stats.stuckIntent = stuck.intent;
+      stats.stuckMoved = stuck.moved;
+      stats.stuckIntentSource = stuck.source;
+      stats.stuckSeconds = stuck.seconds;
+      if (stuck.stuck && !stuckFlag) {
+        stuckFlag = true;
+        stats.stuckEvents += 1;
+        pushHint(
+          {
+            tone: 'warn',
+            kind: 'stuck',
+            title: '好像卡住了',
+            detail: `连续 ${STUCK_SECONDS}s 走不动：按 G 或点「回到最近安全点」脱离（确定性回到最近登记出生点，不会穿墙）。`,
+          },
+          { kind: 'stuck' },
+        );
+      } else if (!stuck.stuck) {
+        stuckFlag = false;
+      }
+    } else {
+      lastStuckPos = null;
+      solver.resetStuckTimer();
+      stuckFlag = false;
+    }
     highlighter?.update(dt, elapsed);
     tour.update(dt);
     // 同一帧内把 UI（标签定位、小地图、提示条淡出）也推进一步：由 mountInterface 注入
@@ -543,6 +699,13 @@ export function createInteraction({
     if (win?.addEventListener) {
       win.addEventListener('keydown', onKeyDown, { capture: true });
       disposers.push(() => win.removeEventListener('keydown', onKeyDown, { capture: true }));
+      // t104：被动观察移动键（不拦事件，core 仍是唯一移动处理者）
+      win.addEventListener('keydown', onMovementKeyDown, { passive: true });
+      win.addEventListener('keyup', onMovementKeyUp, { passive: true });
+      win.addEventListener('blur', onWindowBlur, { passive: true });
+      disposers.push(() => win.removeEventListener('keydown', onMovementKeyDown, { passive: true }));
+      disposers.push(() => win.removeEventListener('keyup', onMovementKeyUp, { passive: true }));
+      disposers.push(() => win.removeEventListener('blur', onWindowBlur, { passive: true }));
     }
     if (container?.addEventListener) {
       const opts = { passive: true };
@@ -622,7 +785,44 @@ export function createInteraction({
     },
     select,
     hover,
-    /** t59：进入选中建筑的内景（机位由数据推导）；不可进入/无机位 → 只提示、不改视角。 */
+    /** t87：一键脱离卡死 —— 确定性回到最近的安全可行走点（详见函数注释）。 */
+    escapeToSafePoint,
+    /** 生产求解器实例（core 每帧调用的同一个；t87 起供通行性诊断/测试使用）。 */
+    solver,
+    /** t87：通行性/防卡死状态（HUD 与测试读取）。 */
+    traversalState() {
+      const empty = traversal.stats();
+      return {
+        ready: traversal.ready,
+        guarded: solver.hasTraversalGuard(),
+        cellSize: traversal.cellSize,
+        sampledRows: empty.sampledRows ?? empty.rows,
+        totalRows: empty.rows,
+        walkable: empty.walkable ?? 0,
+        main: empty.main ?? 0,
+        trap: empty.trap ?? 0,
+        sealed: empty.sealed ?? 0,
+        refusals: solver.traversalState().refusals,
+        stuckSeconds: solver.traversalState().stuckSeconds,
+        stuck: stuckFlag,
+        stuckThreshold: STUCK_SECONDS,
+        nearestSafePoint: traversal.ready && lastEscapeProbe ? traversal.nearestSafePoint(lastEscapeProbe.x, lastEscapeProbe.z) : null,
+        lastEscape: stats.lastEscape,
+        // t104：卡死检测的真实路径输入（浏览器 ?stats=1 / __PALACE_UI__.stats().traversal 可核对）
+        stuckIntent: stats.stuckIntent,
+        stuckMoved: stats.stuckMoved,
+        stuckIntentSource: stats.stuckIntentSource,
+        movementKeysDown: [...movementKeys],
+        solverStepAttempts: solver.traversalState().attempts,
+        solvedByCore: solver.traversalState().attempts === 0,
+        traversalProblems,
+      };
+    },
+    /** t87：完整四类阻挡审计（离线/测试用；生产只在需要时调用）。 */
+    auditTraversal({ paired = [] } = {}) {
+      traversalProblems = traversal.audit({ paired });
+      return traversalProblems;
+    },
     enterInterior,
     /** t59：从内景返回进入前的模式与登记机位。 */
     exitInterior,

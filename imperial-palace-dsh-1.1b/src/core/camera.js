@@ -24,6 +24,7 @@ import * as THREE from 'three';
 import { CONFIG, CAMERA, INTERACTION, ORIENTATION, EVENTS, QUALITY } from '../shared/config.js';
 import { ENVELOPE, TERRAIN_EXTENT, TOUR_POINTS, VIEWPOINTS, WALKABLE, OBSTACLES, floorYAt, walkableAt } from '../shared/layout.js';
 import {
+  obstacleBlocksPoint,
   interiorRecordForViewpointId,
   interiorRecordForSurfaceId,
   interiorRecordForSlot,
@@ -541,15 +542,16 @@ export function createFpSolver({ config = CONFIG } = {}) {
     return Math.abs(z - door.center.z) <= halfWidth && x >= bounds.minX - player.radius && x <= bounds.maxX + player.radius;
   };
 
-  const blocks = (obstacle, x, z, feetY) => {
-    const b = obstacle.bounds;
-    if (x < b.minX - player.radius || x > b.maxX + player.radius) return false;
-    if (z < b.minZ - player.radius || z > b.maxZ + player.radius) return false;
-    // 站在障碍顶面之上（例如台基上的建筑）不算被挡
-    if (feetY >= (obstacle.y1 ?? 0) - step.maxStepHeight * 0.5) return false;
-    if (obstacle.blocks === 'exceptDoor' && insideDoor(obstacle.door, b, x, z)) return false;
-    return true;
-  };
+  /**
+   * t86：口径统一 —— 求解器不再自带一套"简易阻挡判定"，**委托谓词层** `obstacleBlocksPoint`（唯一真相源）。
+   *
+   * 旧实现（t86 前）与谓词层有两处不一致，正是 DEFECT-T76-01 的温床：
+   *   ① 旧 `blocks()` 只判 `feetY >= y1 - step/2 ⇒ 站立在顶面不挡`，**完全没有 y0 下界测试**；
+   *   ② 旧 `insideDoor()` 用的是自己的门洞判定（不带半径、且轴线语义与 `insideObstacleDoor` 不完全一致）。
+   * 现在两边共用同一个函数，测试里再加"求解器 ≡ 谓词层"的等价性断言（见 tests/core-collision.test.mjs）。
+   */
+  const blocks = (obstacle, x, z, feetY) =>
+    obstacleBlocksPoint(obstacle, { x, z, feetY, height: player.height, radius: player.radius });
 
   /** 求解一步移动：返回 {x, z, y, blocked} */
   function step1(from, dirX, dirZ, distance, options = {}) {
@@ -558,6 +560,10 @@ export function createFpSolver({ config = CONFIG } = {}) {
     let x = from.x;
     let z = from.z;
     const blocked = [];
+    /** t86：blocked 只记**去重原因**（子步进会反复命中同一障碍；旧实现只跳一次故无此问题） */
+    const pushReason = (reason) => {
+      if (reason && !blocked.includes(reason) && blocked.length < 8) blocked.push(reason);
+    };
 
     const tryMove = (dx, dz) => {
       const nx = x + dx;
@@ -565,26 +571,26 @@ export function createFpSolver({ config = CONFIG } = {}) {
       if (collision.clampToEnvelope) {
         const clampedX = clamp(nx, TERRAIN_EXTENT.minX + player.radius, TERRAIN_EXTENT.maxX - player.radius);
         const clampedZ = clamp(nz, TERRAIN_EXTENT.minZ + player.radius, TERRAIN_EXTENT.maxZ - player.radius);
-        if (Math.abs(clampedX - nx) > EPS || Math.abs(clampedZ - nz) > EPS) blocked.push('envelope');
+        if (Math.abs(clampedX - nx) > EPS || Math.abs(clampedZ - nz) > EPS) pushReason('envelope');
         if (Math.abs(clampedX - nx) > EPS) return false;
         if (Math.abs(clampedZ - nz) > EPS) return false;
       }
       const surfaceY = floorYAt(nx, nz);
       if (surfaceY === null) {
-        blocked.push('noSurface');
+        pushReason('noSurface');
         return false;
       }
       if (surfaceY - feetY > step.maxStepHeight + EPS) {
-        blocked.push('stepTooHigh');
+        pushReason('stepTooHigh');
         return false;
       }
       if (surfaceY - feetY < -step.snapDownDistance) {
-        blocked.push('dropTooDeep');
+        pushReason('dropTooDeep');
         return false;
       }
       for (const obstacle of obstacles) {
         if (blocks(obstacle, nx, nz, feetY)) {
-          blocked.push(obstacle.buildingId ?? obstacle.id);
+          pushReason(obstacle.buildingId ?? obstacle.id);
           return false;
         }
       }
@@ -592,27 +598,44 @@ export function createFpSolver({ config = CONFIG } = {}) {
     };
 
     const iterations = Math.max(1, collision.slideIterations);
-    const dx = dirX * distance;
-    const dz = dirZ * distance;
-    if (tryMove(dx, dz)) {
-      x += dx;
-      z += dz;
-    } else {
-      // 滑动：先尝试单轴全量位移，再逐级衰减（最多 slideIterations 次）
+    /**
+     * t86（DEFECT-T76-01）：**必须子步进**，否则会"隧穿"——
+     * 旧实现把整段 `distance` 一次性位移，只对**终点**做阻挡判定；当距离大于建筑进深时
+     * 终点落在建筑另一侧之外 ⇒ 判定放行、`blocked` 为空、整栋穿过去（实测 30/34/28m）。
+     * 步长取 `min(player.radius, maxStepHeight)`：任何厚度 ≥ 玩家直径的障碍都不可能被跨过。
+     */
+    const maxIncrement = Math.max(EPS, Math.min(player.radius, step.maxStepHeight));
+    const totalDistance = Math.max(0, distance);
+    const subSteps = Math.max(1, Math.ceil(totalDistance / maxIncrement));
+    const inc = totalDistance / subSteps;
+    for (let s = 0; s < subSteps; s += 1) {
+      const dx = dirX * inc;
+      const dz = dirZ * inc;
+      if (tryMove(dx, dz)) {
+        x += dx;
+        z += dz;
+        continue;
+      }
+      // 滑动：先尝试单轴位移，再逐级衰减（最多 slideIterations 次）；仍失败则**就地停住**
       if (tryMove(dx, 0)) {
         x += dx;
-      } else if (tryMove(0, dz)) {
+        continue;
+      }
+      if (tryMove(0, dz)) {
         z += dz;
-      } else {
-        for (let i = 1; i <= iterations; i += 1) {
-          const scale = 1 / 2 ** i;
-          if (tryMove(dx * scale, dz * scale)) {
-            x += dx * scale;
-            z += dz * scale;
-            break;
-          }
+        continue;
+      }
+      let moved = false;
+      for (let i = 1; i <= iterations; i += 1) {
+        const scale = 1 / 2 ** i;
+        if (tryMove(dx * scale, dz * scale)) {
+          x += dx * scale;
+          z += dz * scale;
+          moved = true;
+          break;
         }
       }
+      if (!moved) break; // 子步被挡且无法滑动 ⇒ 停在障碍之前（blocked 已记录原因）
     }
 
     const surfaceY = floorYAt(x, z);
@@ -641,6 +664,7 @@ export function createCameraRig({
   domElement = null,
   input = false,
   collisionSolver = null,
+  query = null,
 } = {}) {
   if (!events) throw new Error('createCameraRig 需要事件总线');
   const cam = config.CAMERA;
@@ -944,6 +968,83 @@ export function createCameraRig({
     return { restoredMode };
   }
 
+  /* ------------------------------------------------------------------ *
+   * t91：`?interior=<slotId|viewpointId>` 引导
+   *
+   * 为什么在 camera.js 里做：既有参数 `?focus=`/`?view=` **在 src/main.js 解析**（`parseQuery` :46、
+   * `applyQueryView()` :434-447，focus 走 `requestFocusBuilding`、view 走 `requestViewMode`），
+   * 而本卡 inScope 不含 `src/main.js`（与 t14 争用）。相机装置是唯一取景入口，按 §6.4 它本就负责
+   * `state.view.interiorViewpointId → 内景机位`，因此引导逻辑放在这里即可**复用同一装置与
+   * `view:request-mode` 请求**，无需第二套相机/取景路径。
+   *
+   * 行为：
+   *   · 取值：`options.query.interior`（Node/测试显式注入）→ 否则浏览器内 `location.search` 的 `interior`；
+   *   · 解析：`VP-<…>-interior` 直接用；否则视作**建筑 slotId**，经 layout 显式映射（t65/t70）解析出机位；
+   *   · 时机：`update()` 内**重试引导**直到机位在注册表中可用（区域是异步注册的），最多 `attempts` 次；
+   *   · 与八视角兼容：URL 显式给了 `?view=<非 interior>` 时**不覆盖**（八视角优先）；
+   *   · 出口：`events.request(EVENTS.requestViewMode, { mode:'interior', viewpointId, source:'query-interior' })`。
+   * ------------------------------------------------------------------ */
+  const interiorQueryState = { requested: null, applied: null, reason: null, attempts: 0, done: false };
+
+  function interiorQueryValue() {
+    if (query && typeof query.interior === 'string' && query.interior.length > 0) return query.interior;
+    if (!query && typeof location !== 'undefined' && location.search) {
+      const v = new URLSearchParams(location.search).get('interior');
+      return v && v.length > 0 ? v : null;
+    }
+    return null;
+  }
+
+  function interiorQueryExplicitView() {
+    if (query && typeof query.view === 'string') return query.view;
+    if (typeof location !== 'undefined' && location.search) return new URLSearchParams(location.search).get('view');
+    return null;
+  }
+
+  /** 解析 `interior=` 的取值 → 已登记的内景机位（slotId 或 VP-*-interior 两种写法都支持）。 */
+  function resolveInteriorQueryTarget(raw) {
+    if (!raw) return null;
+    if (raw.startsWith('VP-')) return nudgeInteriorViewpoint(raw, { registry });
+    const bySlot = interiorRecordForSlot(raw)?.viewpointId ?? null;
+    if (bySlot) return nudgeInteriorViewpoint(bySlot, { registry });
+    // 兜底：也许传的是 `WK-<slotId>-interior` 这样的面 id
+    const bySurface = interiorRecordForSurfaceId(raw)?.viewpointId ?? null;
+    if (bySurface) return nudgeInteriorViewpoint(bySurface, { registry });
+    return nudgeInteriorViewpoint(raw, { registry });
+  }
+
+  function bootstrapInteriorQuery({ maxAttempts = 900 } = {}) {
+    if (interiorQueryState.done) return interiorQueryState;
+    const raw = interiorQueryValue();
+    if (!raw) {
+      interiorQueryState.reason = 'no-param';
+      interiorQueryState.done = true;
+      return interiorQueryState;
+    }
+    interiorQueryState.requested = raw;
+    const explicitView = interiorQueryExplicitView();
+    if (explicitView && explicitView !== 'interior') {
+      interiorQueryState.reason = `view=${explicitView}-precedence`;
+      interiorQueryState.done = true;
+      return interiorQueryState;
+    }
+    interiorQueryState.attempts += 1;
+    const target = resolveInteriorQueryTarget(raw);
+    if (target) {
+      events.request(EVENTS.requestViewMode, { mode: 'interior', viewpointId: target.id, source: 'query-interior' });
+      interiorQueryState.applied = target.id;
+      interiorQueryState.reason = `applied:${target.id}`;
+      interiorQueryState.done = true;
+      return interiorQueryState;
+    }
+    if (interiorQueryState.attempts >= maxAttempts) {
+      interiorQueryState.reason = `unresolved:${raw}`;
+      interiorQueryState.done = true;
+      console.warn(`[camera] ?interior=${raw} 在 ${maxAttempts} 帧内未匹配到已登记内景机位（slotId / VP-*-interior / WK-*-interior）`);
+    }
+    return interiorQueryState;
+  }
+
   /* ----------------------------- state 反应 ----------------------------- */
 
   function onStateChange({ state, source }) {
@@ -1221,6 +1322,8 @@ export function createCameraRig({
   }
 
   function update(dt, elapsed, state) {
+    // t91：每帧尝试引导 `?interior=`（区域异步注册 ⇒ 需要重试；成功后 done）
+    if (!interiorQueryState.done) bootstrapInteriorQuery();
     if (transition.active) {
       transition.elapsed += Math.max(0, dt);
       const t = clamp(transition.elapsed / Math.max(EPS, transition.duration), 0, 1);
@@ -1274,6 +1377,8 @@ export function createCameraRig({
       interiorBox,
       /** t65：interior 模式实际使用的机位与解析来源（一区多内景时用于断言"用的是哪一个"） */
       interiorViewpointId: interiorAddressing.viewpointId,
+      /** t91：`?interior=` 引导状态（诊断/跨卡核对） */
+      interiorQuery: { requested: interiorQueryState.requested, applied: interiorQueryState.applied, reason: interiorQueryState.reason },
       interiorSlotId: interiorAddressing.slotId,
       interiorResolvedBy: interiorAddressing.resolvedBy,
       /** 同步可读的视线方向（t31）：rotate 之后无需等待下一帧 */

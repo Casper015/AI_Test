@@ -281,3 +281,146 @@ $ node scripts/audit.mjs                 # exit 0
 - 其余事实测数值（墙环 6100 点 100% 覆盖、河道闭合采样 100%、体积重叠 0、14 栋 |底面−地坪| ≤0.0004m、树 104 株 5 批次、灯 7 处 6 批次）与 §6.4 一致，未受上游变化影响。
 - 未验证项与已知条件（§6.6 第 1–5 条桥拱脚/城台重叠/临水栈道/水中灯座/岸台标高口径、§6.7 全部）**仍然有效**，不因本次复验而改变。
 - 复验窗口内 `tests/run.mjs` 曾两次因**同期其他成员正在写入的文件**短暂红灯：第一次命中 t9 的 `src/interaction/index.js`+`tour.js`（core.test.mjs 单一动画循环扫描），第二次命中 07:44 刚落地的 `tests/zone-west.test.mjs`（D 区 2 条断言）。两者均由对应负责人在数分钟内自行修复；F 区代码在这两次红灯期间**零改动**，最终稳定状态即上表 **11/11 全绿**（2026-09-26 07:49）。
+
+
+---
+
+# t64（T6.1）F 区 7 栋内景布陈设 —— 交付回执
+
+> ROOT：`imperial-palace-dsh-1.1b`（LAYOUT **1.1.4**、CONFIG **1.0.6**）
+> 版本对应：`CONTRACTS`（现 §12 可读性判据 v1.0.10）⇄ `CONFIG 1.0.6` ⇄ `LAYOUT 1.1.4` ⇄ `KIT_VERSION 1.0.0` + t61 `kit.interiorSet`
+> attempt 1 · `e4ae0f6a-e03c-47f1-b88d-52d6dd7e1455`
+
+## §1 本卡集合（以 layout 实测清单为准，未按旧卡文字扩展）
+
+`LAYOUT.interiorsByZone('F')` 实测 **7 栋**，本卡逐一布陈设：
+
+| slotId | 档位 | grade | 内景地面 y | 天花 y | 陈设项（套件实测 items） | 三角面 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `F-gate-south` | gateHall | 3 | **0.4** | 3.6 | floor,table,bench,drum,doorBolt,lantern×2 | 288 |
+| `F-gate-north` | gateHall | 3 | **0.4** | 3.6 | 同上 | 288 |
+| `F-gate-west` | gateHall | 2 | **0.4** | 3.6 | 同上 | 288 |
+| `F-gate-east` | gateHall | 2 | **0.4** | 3.6 | 同上 | 288 |
+| `F-garden-hall-north` | hall | 2 | 0.8 | 4.8 | floor,runner,dais,throne,screen,column,ceiling,table,censer,lantern×2 | 856 |
+| `F-garden-hall-west` | sideHall | 1 | 0.5 | 3.49 | floor,couch,table,cabinet,screen,lantern×2 | 360 |
+| `F-garden-hall-east` | sideHall | 1 | 0.5 | 3.49 | 同上 | 360 |
+
+- **角楼 4 座已按 Q3 排除**（`doorWidth=0`、`entrance` 与塔体中心重合、无门洞）；**3 座开敞亭**（中央亭阁 + 东西亭）本就不在集合内 → 全部**未**自行扩展。
+- 地面一律取 `WK-<slotId>-interior.y`（layout 登记的**内景可行走面**）：城门 = t72 登记的**门洞通道面 0.4**（不是墙顶门房 12.4）；北殿 = 台基顶 0.8；配殿 = 0.5。
+- 天花取 kit 实测举架：非墙上建筑 `组原点(baseY−terraceH) + metrics.eaveHeight − 0.6`，并与建筑实测包围盒取小（`maxY ≤ worldBounds.maxY − 0.8`）→ 实测无一穿顶（见 §3）。
+
+## §2 城门按通道语义布陈设（本轮唯一有几何改动的部分）
+
+要求「内景地面 = 门洞通道标高、陈设不得占用通行横断面（净宽 ≥ layout 门洞净宽 26m）」在 26m 宽的门洞里无法同时成立（套件会在洞中央放更鼓、并在 1.5m 高处横一道门闩）⇒ 做法：**把城台做成带"值房壁龛"的加厚体量**：
+
+- 城台墩体由 2 块实心改为 **6 块**（龛前/龛后/龛外/龛上 + 对侧墩 + 龛地坪 0→0.4），在**洞壁之外**开一处 `8m 深 × 10m 长 × 3.2m 高`、龛口朝洞内的值房（龛地坪顶 = 通道面 0.4）；
+- 陈设（`kind:'gateHall'`：值守案 / 长凳 / 更鼓 / 门闩 / 灯 ×2）全部落在壁龛 `inner` 内 → **洞内 26m 通行横断面零占用**；
+- 几何断言（`tests/zone-garden.test.mjs` §9）：沿洞轴以 0.5m 步长扫过 `|v| ≤ 13` 全带，**被非门额实体挡住的采样点 = 0**；陈设 rect 距洞轴线 ≥ 13m；龛上补砌把 gate 城台 footprint 盖满（上部结构与角楼/门楼承托不受影响，原「城台承托 footprint」断言改为「各角/边中点/中心均被城台覆盖」仍全绿）。
+- 壁龛**不在通行集合内**：`OB-F-gate-*` 的门洞通道仅 26m 宽（`blocks:'exceptDoor'`），故墩体处 `probe().ok === false`（真实碰撞数据，见 §5）——壁龛是"看得见的值房"，不是可走进的房间；门洞通道本身可从门外走入 ✓。
+
+## §3 预算（内景全布后实测，对照 §8.2）
+
+| 项目 | 实测 | 预算 | 判定 |
+| --- | --- | --- | --- |
+| **分区 F 绘制调用**（audit 合批后） | **72** | 80 | ✓（内景增量 +11 桶：floor/runner/dais/daisCap/throne/furniture/screenPanel/trim/ceiling/lanternGlow…） |
+| F 三角面 | 65224（其中内景 **2728**） | — | ✓ |
+| 主场景绘制调用（全城） | 333 | 350 | ✓ |
+| 可见三角面 | 308861 | 1500000 | ✓ |
+
+**LOD 档位决策（预算证据）**：`kit.interiorSet` 默认 `lod:'auto'`（近/中两档有几何、远档空组）。若用 `auto`，`audit` 的**全量口径**会把近/中两档各计一批（+24 调用）→ F 会到 **85 > 80 ✗**；故本区取 **`lod:'near'` 单档**（+11 调用）→ **72 ≤ 80 ✓**，真实渲染成本与 `auto` 的近档相同。t61 的"远档为空"语义在 F 不适用（区预算本身足够），已在此登记。
+
+## §4 内景可读性实测（§12 双约束：内容暗区 ≤30%、高光截断 ≤5%；`interior` 类）
+
+**测量口径与工具**：`scripts/shot.mjs` 的 `decodePngStats(..., {view:'interior'}) + judgeShot({view:'interior', stats})`（同源口径，原样判定行）。相机寻址走 app 自身入口 `__PALACE__.events.request('view:request-mode', {mode:'interior', interiorViewpointId})`（= UI/键盘同源），1440×900 / DPR1 / quality medium。脚本位于 `/tmp/t64-measure.mjs`（**故意写在 ROOT 之外**，遵守 inScope），过程图 21 张在 `/tmp/t64-interiors/`。
+
+**21/21 PASS（7 栋 × 3 时辰），原始判定行**：
+
+```
+PASS goldenHour   interior [near] F-garden-hall-east     内容均值 0.4730 内容暗区 6.02% 内容截断 0.00% · 机位(235.0,2.15,399.8) 实时灯 3/3
+PASS goldenHour   interior [near] F-garden-hall-north    内容均值 0.4569 内容暗区 0.29% 内容截断 0.00% · 机位(0.0,2.45,399.8) 实时灯 3/3
+PASS goldenHour   interior [near] F-garden-hall-west     内容均值 0.4198 内容暗区 27.08% 内容截断 0.00% · 机位(-235.0,2.15,399.8) 实时灯 3/3
+PASS goldenHour   interior [near] F-gate-east            内容均值 0.6357 内容暗区 0.00% 内容截断 0.00% · 机位(309.0,2.05,0.0) 实时灯 3/3
+PASS goldenHour   interior [near] F-gate-north           内容均值 0.6929 内容暗区 0.11% 内容截断 0.02% · 机位(0.0,2.05,459.0) 实时灯 3/3
+PASS goldenHour   interior [near] F-gate-south           内容均值 0.6963 内容暗区 0.00% 内容截断 0.06% · 机位(0.0,2.05,-459.0) 实时灯 3/3
+PASS goldenHour   interior [near] F-gate-west            内容均值 0.6387 内容暗区 0.00% 内容截断 0.00% · 机位(-309.0,2.05,0.0) 实时灯 3/3
+PASS sunset       interior [near] F-garden-hall-east     内容均值 0.4798 内容暗区 1.26% 内容截断 0.26%
+PASS sunset       interior [near] F-garden-hall-north    内容均值 0.5047 内容暗区 0.15% 内容截断 0.06%
+PASS sunset       interior [near] F-garden-hall-west     内容均值 0.4444 内容暗区 18.66% 内容截断 0.00%
+PASS sunset       interior [near] F-gate-east            内容均值 0.6543 内容暗区 0.00% 内容截断 0.01%
+PASS sunset       interior [near] F-gate-north           内容均值 0.6925 内容暗区 0.10% 内容截断 0.02%
+PASS sunset       interior [near] F-gate-south           内容均值 0.6988 内容暗区 0.00% 内容截断 0.09%
+PASS sunset       interior [near] F-gate-west            内容均值 0.6622 内容暗区 0.00% 内容截断 0.00%
+PASS moonlitNight interior [near] F-garden-hall-east     内容均值 0.4652 内容暗区 0.28% 内容截断 0.10%
+PASS moonlitNight interior [near] F-garden-hall-north    内容均值 0.4320 内容暗区 0.31% 内容截断 0.00%
+PASS moonlitNight interior [near] F-garden-hall-west     内容均值 0.4393 内容暗区 19.75% 内容截断 0.00%
+PASS moonlitNight interior [near] F-gate-east            内容均值 0.5046 内容暗区 9.39% 内容截断 0.00%
+PASS moonlitNight interior [near] F-gate-north           内容均值 0.5044 内容暗区 10.59% 内容截断 0.01%
+PASS moonlitNight interior [near] F-gate-south           内容均值 0.5075 内容暗区 9.32% 内容截断 0.02%
+PASS moonlitNight interior [near] F-gate-west            内容均值 0.5168 内容暗区 7.44% 内容截断 0.03%
+```
+
+- 最紧的一格：**`F-garden-hall-west` @ goldenHour 暗区 27.08%**（≤30%，余量 2.9pp）；**未放宽任何判据**。
+- 布灯（t61 套件不含灯光 ⇒ 本区自行布灯）：每栋 **2 处 `windowGlow` 灯位**（与套件可见灯体同址：`inner.minX+1.2 / inner.maxX−1.2`，`lz = cz + frontSign·min(spanZ·0.25, 3)`，`height = clamp(headroom·0.45, 2.0, 2.6)`），共 **14 处新增**；layout 基线 F 灯位 7 处**逐条保留**（可见灯体仍只按基线实例化，室内实体灯由套件灯体承担 → 不重复造灯）。
+- 一次"最小修法"记录：最初把补光灯位放在室内中心（3 处/栋），在 sunset/night 因灯体发光面正对机位导致 **高光截断 9.89% / 12.65%（>5% FAIL）**；改为**与套件灯体同址的 2 处**（灯体贴侧墙、避开机位正前方）后回到 **≤0.26%** ✓（记录以备复用，不是"未发现"）。
+
+## §5 碰撞与可达性（真实碰撞数据：`src/interaction/walk-solver.js` + `walk-graph.js`）
+
+`tests/zone-garden.test.mjs` §9 以真实可行走图（cellSize=2）逐栋验证（原样输出）：
+
+```
+F-garden-hall-east: 花园→殿内 可达、室内可站立 y=0.50 ✓ | F-garden-hall-north: 可达、y=0.80 ✓ | F-garden-hall-west: 可达、y=0.50 ✓
+F-gate-east: 门外→室内 可达、室内 y=0.40、墩体不可站立 ✓ | F-gate-north: 同 ✓ | F-gate-south: 同 ✓ | F-gate-west: 同 ✓
+```
+
+- **4 座城门**：从门外（岸台侧 `(0,∓464)` / `(∓320,0)`）经门洞走进室内（登记 FP 走查点）✓；室内中心可站立且面高 = 0.4 ✓；**门洞通道之外的城台墩体 `probe().ok === false`** ⇒ 无法从外部穿墙进入 ✓；`WK-<gate>-interior` 与通道面同高、不掉出（无悬空面）✓。
+- **3 座殿**：从御花园步道（FP 走查点 `(0,340)`）经 t75 门洞通道面进入殿内 ✓（高差 ≤ 0.5m 可跨）。
+- **护城河与城墙既有约束未破坏**：F 的 26 个障碍、15 个可行走面、14 段坡道仍逐条回显 layout；水体/陆地/墙基/道路"体积重叠 0"与墙环 6100 点 100% 覆盖等既有断言全绿（本卡只**新增**灯位与内景几何，未改障碍/可行走面）。
+- 已知条件：**室内家具不参与碰撞**（本轮不改 `layout.OBSTACLES`，避免影响其他区/全城计数）；城门壁龛不可进入（值房展示位，见 §2）。
+
+## §6 verify 三条（原样）
+
+```
+$ cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b" && node tests/zone-garden.test.mjs
+ 通过 37 / 37        （原 31 项 + 本卡新增 6 项内景断言）        exit 0
+
+$ node scripts/audit.mjs
+ 分区 F         : 72 / 预算 80  ✓
+ 主场景绘制调用   : 333 / 上限 350  ✓
+ 可见三角面       : 308861 / 上限 1500000  ✓
+ 问题： 分区 C 55 超预算 50 / 分区 D 49 超预算 40 / 分区 E 49 超预算 40      exit 0（无 --enforce）
+
+$ node tests/run.mjs
+ 通过 17 / 21，失败 4        exit 1
+ FAIL  tests/core-audit.test.mjs          ← 归因：C/D/E 三分区超预算（其内景卡并行施工中），非 F
+ FAIL  tests/verify-completeness.test.mjs ← 归因：5.3/5.4/5.4b 红项集中在 B/C/D/E/E 的"殿内走查点连通性"与"通道面 y ≠ 内景地面"，F 侧 4 门为 t72 设计取值（0.4 vs sillY 12.4）已在 5.4b 显式登记；F 的 7 栋均不在不可达清单中
+ FAIL  tests/verify-experience.test.mjs   ← 归因：B1/B10（同上 B/C/E 连通性）、C1（C/D/E 预算）、F1（24 张 shot 的 fp/orbit 掩码口径，属 t2/shot 域）
+ FAIL  tests/zone-forecourt.test.mjs      ← 归因：B 区自身断言（该文件在复验窗口内被其负责人持续修改）
+ 通过 37/37 的 tests/zone-garden.test.mjs / tests/zones.test.mjs 均 PASS
+```
+
+**结论**：F 侧三命令中，`tests/zone-garden.test.mjs` 与 `scripts/audit.mjs` 全绿；`tests/run.mjs` 的红项**经逐条核对无一由 F 引起**（F 的区预算 72/80 ✓、F 的 7 栋内景全部连通、F 未改 layout 障碍/可行走面），已按卡片验收条款「全绿或如实列出仍红项与非本卡归因」逐条列出。
+
+## §7 已知条件 / 建议（不是"未发现"）
+
+1. **灯位池竞争（全局公式，非本卡可修）**：`updateLampSelection` 的评分 = `ROLE_IMPORTANCE[role]·(1 − d/360)`，`windowGlow = 0.55` 而 `axisLantern = 1.0` ⇒ 室内灯（距机位 11–20m）会被 70–110m 外的中轴灯压过。实测：golden/sunset 下 **`F-gate-south`/`F-gate-north` 的 2 处室内灯未进实时池**（池被 B 区中轴灯占满），但**可读性仍 21/21 PASS**（环境/半球光 + 已激活的其它灯足以达标）。建议（属 `src/core/environment.js` 域）：内景类灯位提高 role 权重或改为"距离优先"；本卡未改环境代码。
+2. **`INTERIOR_BY_SLOT[].groundY` 元数据与门洞通道面不一致**：4 座城门登记记录 `groundY = 12.4`（取 `slot.baseY`），而 `WK-<gate>-interior.y = 0.4`（t72 裁定）。本卡几何**以 WK 为准**（验收明确要求 0.4），`verify-completeness` 的 5.4b 已把该差异显式登记为数据集缺陷（共 5 栋，含 `C-hall-bed-main`）。
+3. **壁龛陈设不可进入**（值房展示位）：若后续要求"步入值房"，需 layout 侧把 `OB-F-gate-*` 的门洞通道加宽或增加第二个门洞（本卡 inScope 不含 layout）。
+4. **室内家具不参与碰撞**（见 §5）。
+
+## §8 未验证项
+
+1. 真实 GPU 帧率/显存与 resize（本机 headless + SwiftShader，帧率不具代表性；t13 域）。
+2. 47/43 栋全城内景的**整体**观感与灯位池在其它区的表现（本卡只对 F 的 7 栋逐栋实测）。
+3. 夜景下"仅靠室内灯、关掉环境光"的极端口径（CONFIG 冻结，未做诊断性覆盖实验）。
+4. 内景家具与玩家圆柱的逐件碰撞（未注册障碍，见 §7-4）。
+5. `dist` 发布包体积/首屏传输（t14 域）。
+
+## §9 本卡改动（严格 inScope）
+
+| 路径 | 改动 |
+| --- | --- |
+| `src/zones/garden-boundary.js` | ① 城门城台加"值房壁龛"（6 块拼砌 + 龛地坪 0→0.4，`GATE_NICHE={depth:8,along:10,height:3.2,inset:0.6}`）；② 新增 §3b 室内陈设段（7 栋 `kit.interiorSet`，`lod:'near'`，天花由 kit 举架推得）；③ 新增 14 处 `windowGlow` 室内灯位（`lightAnchors` = layout 基线 + 室内；可见灯体仍只按基线实例化）；④ `stats/audit` 增补 interiors/interiorTriangles/interiorLightAnchors 与平台 `niche` 记录 |
+| `tests/zone-garden.test.mjs` | 新增 §9（6 项内景断言：集合一致 / 与 WK 对齐 / 城门通道语义与 26m 零占用 / 室内灯位 / 预算 / 真实碰撞可达性）；并把 3 处**因上游数据演进过期**的断言改为数据驱动（南轴竖向链连续性、灯位=基线+室内、visitable 语义按 t72/t73/t74 的 `exceptDoor`） |
+| `docs/handoffs/zone-garden.md` | 本 t64 章节 |
+
+未触碰：`src/shared/**`、`src/kit/**`、`src/core/**`、`src/ui/**`、`src/interaction/**`、`src/zones/` 其他区域、`index.html`、`scripts/**`、`docs/handoffs/` 他人回执，以及 `imperial-palace-commandcode-36m/`、`imperial-palace-opencode-424k/`、`imperial-palace-opencode-516k/`。

@@ -17,6 +17,9 @@
 
 import { CONFIG, INTERACTION } from '../shared/config.js';
 import * as LAYOUT from '../shared/layout.js';
+// t87（闭合 t86-F1）：阻挡判定委托**谓词层唯一真相源**（core 的 `obstacleBlocksPoint`），
+// 与 core 内置求解器同构；本文件不再自带一套"简易阻挡判定"（旧实现缺 `y0` 下界与门洞轴线语义）。
+import { obstacleBlocksPoint } from '../core/layout-slice.js';
 
 const EPS = 1e-6;
 const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
@@ -117,7 +120,15 @@ export function mergeObstacles({ layout = LAYOUT, registry = null, obstacles = n
  *   onBlocked?: null | ((info: { obstacles: string[], reasons: string[], x: number, z: number, feetY: number }) => void)
  * }} [options]
  */
-export function createWalkSolver({ config = CONFIG, obstacles = null, layout = LAYOUT, registry = null, onBlocked = null } = {}) {
+export function createWalkSolver({
+  config = CONFIG,
+  obstacles = null,
+  layout = LAYOUT,
+  registry = null,
+  onBlocked = null,
+  traversalGuard = null,
+  connectorRamps = true,
+} = {}) {
   const player = config.INTERACTION.player;
   const step = config.INTERACTION.step;
   const collision = config.INTERACTION.collision;
@@ -161,8 +172,145 @@ export function createWalkSolver({ config = CONFIG, obstacles = null, layout = L
   }
 
   /** 支撑面高度（含道路/坡道/台阶线性插值）。 */
+  /* ------------------------------------------------------------------ t88：消费 layout.CONNECTORS（坡道/台阶语义） */
+  /**
+   * `layout.CONNECTORS` 是"跨区通道"的**权威登记**（唯一 id + owner + 两端 position/width/elevation；
+   * `kind='stairs'` 额外给 `elevationLow`）。旧走查层对它**引用数为 0** ⇒ 任何**只在 connector 里登记**的
+   * 高差（丹陛/台阶）在碰撞层不成立。本实现对每个"确有台阶落差"的 connector 生成一条**有界坡道带**：
+   *
+   *   · **依据**：connector 自报的 `elevationLow → elevation`（layout 的几何真值），不发明任何标高；
+   *   · **边界**：横向 |lateral| ≤ `width/2`（仅该 connector 覆盖的**横断面**）∩ 沿轴位于
+   *     `[edge - run, edge]`（edge = 数据实测的台阶边缘，run = clamp(|Δelev| / RAMP_SLOPE, 1.5, 8)）；
+   *   · **带内**：有效地面 = 沿轴线性插值的过渡面（起点 = elevationLow，终点 = elevation），
+   *     与带外既有地面**取较高者**（绝不把玩家沉进地形）；
+   *   · **带外**：完全走原判据（全局 `maxStepHeight 0.5` / `snapDownDistance 0.6` 一字未改）。
+   *
+   * 因此这是"**局部放行有界的过渡面**"，不是"放宽全局阈值"。
+   */
+  const RAMP_SLOPE = 0.75; // 过渡面最陡坡度（1:1.33 ≈ 36.9°）；只为让每一步 ≤ 全局阈值，不代表真实踏步数
+  const RAMP_RUN_MIN = 1.5;
+  const RAMP_RUN_MAX = 8;
+  /**
+   * connector 清单 = `layout.CONNECTORS` ∪ 注册表 `registry.allConnectors()`（同 id 去重，layout 优先）。
+   * 联合口径（与 layout 侧 F8-① 不冲突）：layout 侧负责登记过渡（可行走面/connector），
+   * 本层负责消费；任一侧新增"有落差的通道"，只要形状合法就会被本层纳入坡道带评估（cliff ⇒ ramp）。
+   */
+  function collectConnectors() {
+    const list = [];
+    const seen = new Set();
+    const push = (c) => {
+      if (!c || typeof c.id !== 'string' || !c.position || !Number.isFinite(c.elevation)) return;
+      if (seen.has(c.id)) return;
+      seen.add(c.id);
+      list.push(c);
+    };
+    for (const c of Array.isArray(layout.CONNECTORS) ? layout.CONNECTORS : []) push(c);
+    const fromRegistry = typeof registry?.allConnectors === 'function' ? registry.allConnectors() : null;
+    if (Array.isArray(fromRegistry)) for (const c of fromRegistry) push(c);
+    return list;
+  }
+  const connectors = collectConnectors();
+  const connectorRampsDisabled = connectorRamps === false;
+
+  /**
+   * 只为"**数据里确实存在落差（cliff）**"的 connector 生成坡道带：
+   *   · 沿 4 个候选轴从中心向外逐 0.25m 扫描，找到第一处 `|Δy| > maxStepHeight` 的**突变**（台阶边缘，
+   *     取两侧采样点的中点作为边缘线 —— 上升/下降两种朝向都识别）；
+   *   · 依据只取**实测两侧地面**，并要求高端 ≈ connector 自报 `elevation`（±0.5m），**不发明标高**；
+   *   · 找不到突变（说明既有地面已把这段高差铺成连续面）⇒ **不生成坡道**，行为与既有完全一致（零足迹）；
+   *   · 过渡带铺在**低侧**、坡向高端：低端 = 边缘沿低侧外推 `run`，高端 = 边缘本身，
+   *     因此与带外既有地面**在边缘处连续**（端点值 = 高端地面），不会在脚下造出新的陡坎。
+   */
+  function findRampFor(connector) {
+    const tol = step.maxStepHeight + 1e-6;
+    const declaredHigh = connector.elevation;
+    if (!Number.isFinite(declaredHigh)) return null;
+    let best = null;
+    for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      let prev = null;
+      for (let d = 0; d <= 12; d += 0.25) {
+        const x = connector.position.x + ax * d;
+        const z = connector.position.z + az * d;
+        const y = floor(x, z);
+        if (y === null) { prev = null; continue; }
+        if (prev && Math.abs(y - prev.y) > tol) {
+          const lowY = Math.min(prev.y, y);
+          const highY = Math.max(prev.y, y);
+          if (Math.abs(highY - declaredHigh) <= 0.5 && highY - lowY > tol) {
+            const score = Math.abs(highY - declaredHigh);
+            if (!best || score < best.score) {
+              // 边缘 = 两采样点中点；低侧方向 = 从边缘指向较低的那个采样点
+              const edge = { x: (prev.x + x) / 2, z: (prev.z + z) / 2 };
+              const lowIsPrev = prev.y < y;
+              const lowPoint = lowIsPrev ? prev : { x, z, y };
+              const dx = lowPoint.x - edge.x;
+              const dz = lowPoint.z - edge.z;
+              const len = Math.hypot(dx, dz) || 1;
+              best = {
+                score,
+                edge,
+                lowDir: { x: dx / len, z: dz / len },
+                lowY,
+                highY,
+                edgeDistance: +d.toFixed(2),
+                axis: { x: ax, z: az },
+              };
+            }
+          }
+          break; // 只看第一处突变
+        }
+        prev = { x, z, y, d };
+      }
+    }
+    if (!best) return null;
+    const { edge, lowDir, lowY, highY } = best;
+    const run = Math.min(RAMP_RUN_MAX, Math.max(RAMP_RUN_MIN, (highY - lowY) / RAMP_SLOPE));
+    const halfWidth = Math.max(0.5, connector.width / 2);
+    const lateral = { x: -lowDir.z, z: lowDir.x };
+    const lowEnd = { x: edge.x + lowDir.x * run, z: edge.z + lowDir.z * run };
+    return {
+      id: connector.id,
+      kind: connector.kind,
+      width: connector.width,
+      elevationLow: +lowY.toFixed(4),
+      elevation: +highY.toFixed(4),
+      declared: { elevation: declaredHigh, elevationLow: connector.elevationLow ?? null },
+      run: +run.toFixed(3),
+      edgeDistance: best.edgeDistance,
+      axis: { x: -lowDir.x, z: -lowDir.z }, // 指向高侧（从低端到边缘）
+      lateral,
+      lowEnd,
+      edge,
+      halfWidth,
+    };
+  }
+
+  const ramps = connectorRampsDisabled ? [] : connectors.map(findRampFor).filter(Boolean);
+
+  /** 该点的"connector 过渡面"标高（不在任何坡道带内 ⇒ null）。 */
+  function connectorRampAt(x, z) {
+    for (const ramp of ramps) {
+      const relX = x - ramp.lowEnd.x;
+      const relZ = z - ramp.lowEnd.z;
+      const along = relX * ramp.axis.x + relZ * ramp.axis.z; // 从低端指向台阶边缘（axis 指向高侧）
+      if (along < -1e-6 || along > ramp.run + 1e-6) continue;
+      const lateral = relX * ramp.lateral.x + relZ * ramp.lateral.z;
+      if (Math.abs(lateral) > ramp.halfWidth + 1e-6) continue;
+      const t = Math.min(1, Math.max(0, along / ramp.run));
+      return { id: ramp.id, kind: ramp.kind, y: ramp.elevationLow + (ramp.elevation - ramp.elevationLow) * t, t, ramp };
+    }
+    return null;
+  }
+
+  /**
+   * 有效地面：**带内**取"过渡面与既有地面较高者"（不会把玩家沉进地形），**带外**完全走 layout 原值。
+   */
   function groundAt(x, z) {
-    return floor(x, z);
+    const base = floor(x, z);
+    const ramp = connectorRampAt(x, z);
+    if (!ramp) return base;
+    if (base === null) return ramp.y;
+    return Math.max(base, ramp.y);
   }
 
   /** 该点是否位于"桥面通道"上（`bridgeDeck` 可行走面 或 `bridgeRamp`/`bridgeDeck` 道路段）。 */
@@ -187,21 +335,26 @@ export function createWalkSolver({ config = CONFIG, obstacles = null, layout = L
     return null;
   }
 
-  /** 单个障碍是否阻挡玩家（精确 AABB，含玩家半径膨胀）。 */
+  /** t87：单向陷阱守卫（由 `traversal.js` 提供；未装/未就绪时一律放行，绝不误伤）。 */
+  let guard = typeof traversalGuard === 'function' ? traversalGuard : null;
+  /** t87：卡死追踪 —— core 每帧的位移意图 vs 实得位移（驱动"HUD 提示 + 一键脱困"）。 */
+  const stuck = { seconds: 0, lastDistance: 0, lastMoved: 0, attempts: 0, refusals: 0, lastIntent: false, lastMovedValue: 0, intentSource: 'internal' };
+
+  /**
+   * 单个障碍是否阻挡玩家（精确判定）。
+   *   · **非水面**：委托谓词层 `obstacleBlocksPoint`（与 core 求解器同源：足迹圆 ∩ 包围盒 +
+   *    玩家垂直区间 `[feetY, feetY+height]` ∩ `[y0, y1]` + 门洞通道豁免）——t87 起这里**不再**自己判，
+   *    以免再次出现"求解器与谓词层两套口径"（DEFECT-T76-01 的温床）；
+   *   · **水面**：保留 g 侧的有意口径（只有登记桥面/桥坡道之上才可通过；见模块头注释），
+   *    该差异由 E7 的"仅水面允许不同"豁免覆盖，且有 E5/E6 的正反断言守着。
+   */
   function blocks(obstacle, x, z, feetY) {
     const b = obstacle.bounds;
     if (!b) return false;
     if (x < b.minX - player.radius || x > b.maxX + player.radius) return false;
     if (z < b.minZ - player.radius || z > b.maxZ + player.radius) return false;
-    if (obstacle.sourceType === 'water') {
-      // 水面：只有位于登记的桥面通道（桥面可行走面 / 桥坡道路段）上才允许通过；
-      // 水池位于地坪矩形之内，必须先判水面，否则"站在水面之上"会被误判为可走。
-      return !bridgeSurfaceAt(x, z);
-    }
-    // 站在障碍顶面之上（例如台基上的建筑顶）不算被挡
-    if (feetY >= (obstacle.y1 ?? 0) - step.maxStepHeight * 0.5) return false;
-    if (obstacle.blocks === 'exceptDoor' && insideDoorChannel(obstacle.door, b, x, z, player.radius)) return false;
-    return true;
+    if (obstacle.sourceType === 'water') return !bridgeSurfaceAt(x, z);
+    return obstacleBlocksPoint(obstacle, { x, z, feetY, height: player.height, radius: player.radius });
   }
 
   /** 只判定"该点能否站立"，不移动（UI 提示、出生点校验、测试用）。 */
@@ -248,6 +401,10 @@ export function createWalkSolver({ config = CONFIG, obstacles = null, layout = L
     let x = from.x;
     let z = from.z;
     const blocked = [];
+    /** t87：子步进会反复命中同一障碍，`blocked` 只记去重原因（上限 8，与 core 一致）。 */
+    const pushReason = (reason) => {
+      if (reason && !blocked.includes(reason) && blocked.length < 8) blocked.push(reason);
+    };
 
     const tryMove = (dx, dz) => {
       const nx = x + dx;
@@ -256,40 +413,65 @@ export function createWalkSolver({ config = CONFIG, obstacles = null, layout = L
         const clampedX = clamp(nx, extent.minX + player.radius, extent.maxX - player.radius);
         const clampedZ = clamp(nz, extent.minZ + player.radius, extent.maxZ - player.radius);
         if (Math.abs(clampedX - nx) > EPS || Math.abs(clampedZ - nz) > EPS) {
-          blocked.push('envelope');
+          pushReason('envelope');
           return false;
         }
       }
       const surfaceY = groundAt(nx, nz);
       if (surfaceY === null) {
-        blocked.push('noSurface');
+        pushReason('noSurface');
         return false;
       }
       if (surfaceY - feetY > step.maxStepHeight + EPS) {
-        blocked.push('stepTooHigh');
+        pushReason('stepTooHigh');
         return false;
       }
       if (surfaceY - feetY < -step.snapDownDistance) {
-        blocked.push('dropTooDeep');
+        pushReason('dropTooDeep');
         return false;
       }
       for (const index of g.candidates(nx, nz)) {
         const obstacle = list[index];
         if (obstacle && blocks(obstacle, nx, nz, feetY)) {
-          blocked.push(obstacle.id);
+          pushReason(obstacle.id);
+          return false;
+        }
+      }
+      /**
+       * t87：单向陷阱守卫 —— 目标格若"进得去出不来"则拒绝踏进去
+       * （主理人原则：宁可禁止进入，也不允许进得去出不来；只加约束，不放宽任何既有判据）。
+       */
+      if (guard) {
+        const verdict = guard({ x, z, feetY }, { x: nx, z: nz, feetY });
+        if (verdict && verdict.allowed === false) {
+          stuck.refusals += 1;
+          pushReason(verdict.reason ?? 'oneWayTrap');
           return false;
         }
       }
       return true;
     };
 
-    const dx = dirX * distance;
-    const dz = dirZ * distance;
-    if (tryMove(dx, dz)) {
-      x += dx;
-      z += dz;
-    } else {
-      const iterations = Math.max(1, collision.slideIterations);
+    /**
+     * t87（DEFECT-T76-01，与 core t86 同构修法）：**必须子步进**。
+     * 旧实现把整段 `distance` 一次性位移、只对**终点**判阻挡：当一步长度大于建筑进深时，
+     * 终点已落在建筑另一侧之外 ⇒ 判定放行、`blocked` 为空 ⇒ **整栋穿过去**（实测 30m+）。
+     * 步长取 `min(player.radius, step.maxStepHeight)`：任何厚度 ≥ 玩家直径的阻挡体都不可能被跨过。
+     * 未放宽任何判据（阈值/门洞/包络语义一概不动），只是把"判定采样"加密到不可能跳过。
+     */
+    const maxIncrement = Math.max(EPS, Math.min(player.radius, step.maxStepHeight));
+    const totalDistance = Math.max(0, distance);
+    const subSteps = Math.max(1, Math.ceil(totalDistance / maxIncrement));
+    const inc = totalDistance / subSteps;
+    const iterations = Math.max(1, collision.slideIterations);
+    for (let s2 = 0; s2 < subSteps; s2 += 1) {
+      const dx = dirX * inc;
+      const dz = dirZ * inc;
+      if (tryMove(dx, dz)) {
+        x += dx;
+        z += dz;
+        continue;
+      }
       let moved = false;
       // 单轴滑动：只在对应分量非零时尝试（零位移的"成功"是假成功，会卡住）
       if (Math.abs(dx) > EPS && tryMove(dx, 0)) {
@@ -314,6 +496,10 @@ export function createWalkSolver({ config = CONFIG, obstacles = null, layout = L
 
     const surfaceY = groundAt(x, z);
     const y = surfaceY === null ? from.y : surfaceY + config.CAMERA.fpEyeHeight;
+    // t87：记录"这一步想走多远 / 实际走了多远"（卡死检测的唯一输入；时间由调用方 dt 累加，测试可注入）
+    stuck.lastDistance = Math.max(0, distance);
+    stuck.lastMoved = Math.hypot(x - from.x, z - from.z);
+    stuck.attempts += 1;
     if (blocked.length > 0 && typeof onBlocked === 'function') {
       onBlocked({ obstacles: blocked, reasons: [...new Set(blocked)], x, z, feetY });
     }
@@ -326,6 +512,68 @@ export function createWalkSolver({ config = CONFIG, obstacles = null, layout = L
     probe,
     groundAt,
     blocks,
+    /** t87：安装/替换单向陷阱守卫（传 null 卸载）。 */
+    setTraversalGuard(next) {
+      guard = typeof next === 'function' ? next : null;
+    },
+    hasTraversalGuard: () => guard !== null,
+    /** t88：connector 坡道带清单（走查层确实消费 layout.CONNECTORS 的证据）。 */
+    connectorRamps: () => ramps.map((r) => ({ ...r })),
+    connectorAt: (x, z) => connectorRampAt(x, z),
+    connectorStats() {
+      return {
+        declared: connectors.length,
+        ramps: ramps.length,
+        disabled: connectorRampsDisabled,
+        ids: ramps.map((r) => r.id),
+      };
+    },
+    /**
+     * t87：卡死计时推进（由交互层唯一 `update(dt)` 调用，故测试可注入 dt，不依赖挂钟）。
+     *
+     * **t104（t99-F1）修复**：意图/位移**必须由调用方按真实移动路径传入**
+     *   · `intent`：玩家是否正在按移动键（rig 输入态）；
+     *   · `moved` ：本帧 `rig.position` 的实得位移。
+     * 历史缺陷：本函数原先只读 `step()/move()` 写入的内部记录，而**生产路径从不调用本求解器的 step**
+     * （真实移动由 core 自带 `createFpSolver` 承担）⇒ 意图恒 false、计时恒 0、卡死 HUD 不可达（t99-F1）。
+     * 兼容：`intent/moved` 传 undefined 时退回内部记录（仅供旧测试/离线诊断），并如实标注来源。
+     * @returns {{seconds:number, stuck:boolean, intent:boolean, moved:number, source:'explicit'|'internal'}}
+     */
+    noteStuckTick(dt, { intent = null, moved = null, threshold = 1.5, minIntent = 1e-4, minMoved = 1e-4 } = {}) {
+      const explicit = intent !== null || moved !== null;
+      const hasIntent = intent === null ? stuck.lastDistance > minIntent : intent === true;
+      const movedValue = moved === null ? stuck.lastMoved : moved;
+      const hasMoved = movedValue > minMoved;
+      stuck.lastIntent = hasIntent;
+      stuck.lastMovedValue = movedValue;
+      stuck.intentSource = explicit ? 'explicit' : 'internal';
+      if (hasIntent && !hasMoved) stuck.seconds += dt;
+      else stuck.seconds = 0;
+      return {
+        seconds: +stuck.seconds.toFixed(3),
+        stuck: stuck.seconds >= threshold,
+        intent: hasIntent,
+        moved: +movedValue.toFixed(4),
+        source: stuck.intentSource,
+      };
+    },
+    resetStuckTimer() {
+      stuck.seconds = 0;
+    },
+    traversalState() {
+      return {
+        guarded: guard !== null,
+        refusals: stuck.refusals,
+        stuckSeconds: +stuck.seconds.toFixed(3),
+        attempts: stuck.attempts,
+        // t87/t104：卡死检测的输入（意图 / 实得位移）与来源，便于诊断"为何判/未判卡死"
+        lastDistance: +stuck.lastDistance.toFixed(4),
+        lastMoved: +stuck.lastMoved.toFixed(4),
+        intent: stuck.lastIntent,
+        movedValue: +stuck.lastMovedValue.toFixed(4),
+        intentSource: stuck.intentSource,
+      };
+    },
     insideDoorChannel: (door, bounds, x, z) => insideDoorChannel(door, bounds, x, z, player.radius),
     stats() {
       const list = currentObstacles();

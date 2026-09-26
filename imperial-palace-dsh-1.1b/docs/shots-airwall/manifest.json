@@ -1,0 +1,90 @@
+{
+ "task": "t99",
+ "attempt": "50b9afd6-4b03-45f1-80a2-e394c79faebf",
+ "viewport": "1440x900",
+ "browser": "chrome-headless-shell 1243 + SwiftShader",
+ "driver": "t99-cdp-driver.mjs",
+ "shots": [
+  {
+   "id": "01",
+   "file": "t99-01-fp-stand.png",
+   "role": "第一人称站在门殿西翼亭南侧 2m（基线）",
+   "bytes": 555480,
+   "sha256": "35b7359292f18dfffb61aced79cd71762e03f0fb1ef4acffc3496db76e0f5ecb",
+   "luma": {
+    "mean": 0.3897,
+    "std": 0.3027,
+    "darkPct": 10.027,
+    "clipPct": 0.051,
+    "min": 0.033,
+    "max": 0.955
+   },
+   "empty": false
+  },
+  {
+   "id": "02",
+   "file": "t99-02-open-hint.png",
+   "role": "真实按住 W 撞亭 → 「门殿西翼亭 · 开敞构筑物」提示可见（像素实测对比度 0.55）",
+   "bytes": 633692,
+   "sha256": "19d357d9a19dc9e4e90d6082b602be1273f16d2a01cae8734a030120bf8b10f0",
+   "luma": {
+    "mean": 0.3483,
+    "std": 0.3053,
+    "darkPct": 17.735,
+    "clipPct": 0.051,
+    "min": 0.038,
+    "max": 0.955
+   },
+   "empty": false
+  },
+  {
+   "id": "03",
+   "file": "t99-03-stuck-hud-absent.png",
+   "role": "连续顶住 8.56s（>5.7×1.5s 阈值）→ 卡死 HUD 仍 display:none（反证，见 F-1）",
+   "bytes": 633717,
+   "sha256": "03e357e081caed20651c37f576e7ca3c29d0e2199f623273104f99d387e5dd1f",
+   "luma": {
+    "mean": 0.3483,
+    "std": 0.3053,
+    "darkPct": 17.735,
+    "clipPct": 0.051,
+    "min": 0.038,
+    "max": 0.955
+   },
+   "empty": false
+  },
+  {
+   "id": "04",
+   "file": "t99-04-after-escape.png",
+   "role": "按 G 脱困后：相机停在 oblique 全城视图 (0,520,-1180)，非最近出生点（F-2）",
+   "bytes": 331736,
+   "sha256": "e43655251a19b3f31104b1758dd12c7c616a912e7a19fde1c12e76f0b7b67495",
+   "luma": {
+    "mean": 0.5175,
+    "std": 0.2942,
+    "darkPct": 0.833,
+    "clipPct": 0.052,
+    "min": 0.002,
+    "max": 0.955
+   },
+   "empty": false
+  },
+  {
+   "id": "05",
+   "file": "t99-05-after-escape-walk.png",
+   "role": "脱困后再按 W 0.9s：位置未变 (0,520,-1180)——已不在第一人称走查中",
+   "bytes": 331789,
+   "sha256": "6a523f64b4a985a0b9bebaa3f1ef33ab75b33faecab02aa86bf71e529371e641",
+   "luma": {
+    "mean": 0.5175,
+    "std": 0.2942,
+    "darkPct": 0.833,
+    "clipPct": 0.052,
+    "min": 0.002,
+    "max": 0.955
+   },
+   "empty": false
+  }
+ ],
+ "emptinessCriterion": "bytes<20000 或 lumaStd<0.03（0..1 尺度，≈8/255）"
+}

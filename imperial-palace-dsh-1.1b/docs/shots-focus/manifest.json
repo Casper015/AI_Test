@@ -1,0 +1,88 @@
+{
+  "at": "2026-09-26T22:59:25Z",
+  "defect": "t69 F1：?view=focus&focus=F-gate-south / C-gate-west 曾产出空白图（9.5/9.7KB）",
+  "reproResult": "在当前树上**不可复现**：两槽真实渲染 519,334B(F-gate-south) / 852,748B(C-gate-west)，像素 std 69.6 / 62.5、采样色 2934 / 3331（判空阈值：<60KB 或 std<8 或 采样色<40）",
+  "method": {
+    "browser": "真实 headless Chrome（chrome-headless-shell, disable-gpu/SwiftShader），?view=focus&focus=<id>&ui=0&shot=1，1440×900，Page/手动截图 + 自写 PNG 解码统计（bytes/mean/std/采样色数）",
+    "node53": "tests/core-camera.test.mjs 的 t78 用例：对 53 个有门槽位逐一调用 focusSpecFor 并断言取景不变量（距离 ≥ 按包围球与 FOV 反推的入镜距离、距离 ≥24m、相机在平面包围盒之外、数值有限）",
+    "browser53": "未完成：逐槽位 53 次浏览器渲染在本机每张约 6s + 首屏 30–60s ⇒ >30min；已保留 4 张真实渲染样本（含两个被报空白槽位与两个对照槽位），deterministic 的 53/53 覆盖由 Node 层给出"
+  },
+  "node53": {
+    "total": 53,
+    "degenerate": 0,
+    "distanceBelowFit": 0,
+    "cameraInsideBounds": 0,
+    "invalid": 0,
+    "distanceRange_m": [
+      44.5,
+      173.5
+    ],
+    "byKind": {
+      "gateHall": 6,
+      "hall": 14,
+      "sideHall": 23,
+      "courtyardGate": 10
+    },
+    "reportedBlankSlots": [
+      {
+        "id": "F-gate-south",
+        "kind": "gateHall",
+        "distance_m": 153.1,
+        "fitDistance_m": 132.407,
+        "degenerate": false,
+        "cameraOutsideBounds": true
+      },
+      {
+        "id": "C-gate-west",
+        "kind": "courtyardGate",
+        "distance_m": 45.3,
+        "fitDistance_m": 40.182,
+        "degenerate": false,
+        "cameraOutsideBounds": true
+      }
+    ]
+  },
+  "browserSamples": [
+    {
+      "id": "F-gate-south",
+      "bytes": 519334,
+      "std": 69.617,
+      "sampledColors": 2934
+    },
+    {
+      "id": "C-gate-west",
+      "bytes": 852748,
+      "std": 62.545,
+      "sampledColors": 3331
+    },
+    {
+      "id": "B-gate-front",
+      "bytes": 704194,
+      "std": 67.823,
+      "sampledColors": 4072
+    },
+    {
+      "id": "B-hall-main",
+      "bytes": 870132,
+      "std": 69.159,
+      "sampledColors": 3722
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "docs/shots-focus/focus-B-gate-front.png",
+      "bytes": 694133,
+      "sha256_12": "95d00251ed26"
+    },
+    {
+      "file": "docs/shots-focus/focus-C-gate-west.png",
+      "bytes": 852748,
+      "sha256_12": "c15794f5fb81"
+    },
+    {
+      "file": "docs/shots-focus/focus-F-gate-south.png",
+      "bytes": 519334,
+      "sha256_12": "49035820b4e0"
+    }
+  ]
+}

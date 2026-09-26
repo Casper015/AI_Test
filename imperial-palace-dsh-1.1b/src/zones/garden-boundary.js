@@ -924,18 +924,18 @@ export async function createZone(ctx) {
   };
 
   // 4.5 宫灯（layout.LIGHT_ANCHORS 的 F 条目；灯体实例化，灯光由环境系统生成）
-  const lightAnchors = [
-    ...zoneLayout.lightAnchors.map((a) => ({ ...a, position: { ...a.position } })),
-    ...interiorLightAnchors, // t64：室内补光灯位（windowGlow），与 layout 基线灯位并存
-  ];
+  /** layout 基线灯位（F 条目）：可见灯体只按这批实例化（t64：室内补光只发灯位，实体灯由套件灯体承担） */
+  const baselineLightAnchors = zoneLayout.lightAnchors.map((a) => ({ ...a, position: { ...a.position } }));
+  /** 返回给注册表的灯位 = layout 基线 + 室内补光（t64） */
+  const lightAnchors = [...baselineLightAnchors, ...interiorLightAnchors];
   const lanternInstances = [];
-  if (typeof kit.instance === 'function' && typeof kit.lantern === 'function' && lightAnchors.length > 0) {
+  if (typeof kit.instance === 'function' && typeof kit.lantern === 'function' && baselineLightAnchors.length > 0) {
     const proto = kit.lantern({ id: 'F-lantern-proto', height: 3.2, detail: 'mid', kind: 'post' });
     const parts = [];
     proto.traverse((n) => {
       if (n.isMesh) parts.push(n);
     });
-    const placed = lightAnchors.map((a) => {
+    const placed = baselineLightAnchors.map((a) => {
       const w = waterAt(a.position.x, a.position.z);
       if (w) {
         // layout 把 2 处宫灯登记在水池上：用落到池底的石座承托，灯体立在水面之上

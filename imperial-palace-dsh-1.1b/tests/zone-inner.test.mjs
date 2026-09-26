@@ -574,6 +574,21 @@ await runner.test('碰撞可达性（真实碰撞数据）：9 栋每栋可从�
   runner.info(`9 栋内景：室内可站立 + 门洞可走入 + 外墙不可穿（逐栋断言）`);
 });
 
+await runner.test('内景灯体守卫（t92 措施①）：不再额外加灯体，灯位与天花仍在', () => {
+  const extraLamps = [];
+  result.root.traverse((node) => {
+    if (!(node.isMesh || node.isInstancedMesh)) return;
+    if (/-lamp-LA-/.test(node.name ?? '')) extraLamps.push(node.name);
+  });
+  assertEqual(extraLamps.length, 0, `内景不得再额外加灯体（§12 截断措施① 已删除），实际 ${extraLamps.length} 个：${extraLamps.slice(0, 4).join(', ')}`);
+  const lamps = result.lightAnchors.filter((a) => a.role === 'interiorLantern');
+  assertEqual(lamps.length, (result.stats.interiors ?? []).length * 2, '每栋内景仍须登记 2 条灯位（环境系统按距离点亮）');
+  for (const info of result.stats.interiors ?? []) {
+    assert(info.ceilingY > info.groundY + 1.5, `${info.slotId} 天花高度异常（${info.ceilingY} vs ${info.groundY}）`);
+  }
+  runner.info(`内景灯体守卫：额外灯体 ${extraLamps.length} 个（措施①），室内灯位 ${lamps.length} 条、天花 ${(result.stats.interiors ?? []).length} 层 ✓`);
+});
+
 await runner.test('登记 ≥1 zone 机位 + ≥1 fp-spawn，且 fp-spawn 在可行走面上、朝向中轴', () => {
   const byMode = result.viewpoints.reduce((acc, v) => {
     acc[v.mode] = (acc[v.mode] ?? 0) + 1;
@@ -776,13 +791,12 @@ runner.section('6. 资源与预算（§8.2 分区预算 C=50）');
 await runner.test('合批后绘制调用 ≤ 分区预算；三角面在可见上限内', () => {
   const budget = BUDGET.drawCalls.perZone[ZONE];
   assertEqual(result.stats.drawCallBudget, budget, '区域必须声明正确预算');
-  // t63：47 栋内景新增需求引入 kit 内景部位词表（~11 桶/区）。C 区实测 55/50，超出 5 桶，
-  // 属"新增需求 vs 初始配额"的偏差（见 docs/handoffs/zone-inner.md §B3 的配额申请），已文档化：
-  const INTERIOR_QUOTA_ALLOWANCE = 8;
+  // t92：配额申请已被采纳（config.BUDGET.drawCalls.perZone.C 50 → 60），故收紧回严格断言（去掉 t63 的临时余量）
   assert(
-    result.stats.drawCalls <= budget + INTERIOR_QUOTA_ALLOWANCE,
-    `C 区绘制调用 ${result.stats.drawCalls} 超过"初始配额 ${budget} + t63 内景文档化余量 ${INTERIOR_QUOTA_ALLOWANCE}"`,
+    result.stats.drawCalls <= budget,
+    `C 区绘制调用 ${result.stats.drawCalls} 超过现行分区配额 ${budget}（§8.2 config.BUDGET.drawCalls.perZone）`,
   );
+  assert(result.stats.layoutDrawCallBudget !== null, '应留档 layout.ZONES.drawCallBudget 供口径对比');
   assert(result.stats.triangles <= BUDGET.triangles.visibleMax, 'C 区三角面不应超过全城可见上限');
   assert(result.stats.merge, '必须执行整区合批（kit.mergeZone）');
   assert(result.stats.merge.after <= result.stats.merge.before, '合批必须降低（或不增加）批次');

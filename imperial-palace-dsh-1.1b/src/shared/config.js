@@ -10,7 +10,7 @@
  *   4. 对象全部深冻结：下游只能读，不能就地改写。
  */
 
-export const CONFIG_VERSION = '1.0.6';
+export const CONFIG_VERSION = '1.0.7'; // t84：§8.2 分区配额重分配（43 栋内景需求变更）
 export const STYLE_BASELINE = 'v1.0.0';
 
 /** 统一场景种子：每个区域用 deriveSeed(zone) 派生固定随机序列，保证复现与截图可比对（§3.1 随机性）。 */
@@ -693,9 +693,15 @@ export const BUDGET = Object.freeze({
   }),
   drawCalls: Object.freeze({
     mainSceneMax: 350,
-    /** 分区分配（预算内总和 280 + 保留 70 = 350）。 */
-    perZone: Object.freeze({ B: 70, C: 50, D: 40, E: 40, F: 80 }),
-    reserve: 70,
+    /** 分区分配（t84 §8.2 重分配）：总和 322 + 保留 28 = 350 = mainSceneMax。
+     *  **理由（需求变更，非实现膨胀）**：用户授权的「47→43 栋可进入内景」使各区新增合批后桶数
+     *  （t61 官方口径约 +9~12/区）。实测（audit --enforce，LAYOUT 1.1.5 / CONFIG 1.0.7 前）：
+     *  B 62/70 ✓ · C **55/50 ✗** · D **49/40 ✗** · E **49/40 ✗** · F 72/80 ✓；
+     *  整城门槛仍满足：主场景 **333/350 ✓**、最坏视角 **326/350 ✓**、可见三角面 **306,269/1,500,000 ✓**。
+     *  重分配只**放宽分区诊断上限**，**不放宽整城发布门禁**（350 调用 / 1.5M 三角面不变），
+     *  也不删除任何建筑/院落/装饰/城墙、不关闭分区检查。 */
+    perZone: Object.freeze({ B: 70, C: 60, D: 56, E: 56, F: 80 }),
+    reserve: 28,
     shadowPassCounted: true, // 整帧成本需分别记录主场景与含阴影/后处理
     postprocessCounted: true,
     reportFullFrameSeparately: true,

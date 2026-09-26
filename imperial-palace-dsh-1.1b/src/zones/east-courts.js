@@ -745,17 +745,7 @@ export async function createZone(ctx) {
         buildingId: slot.id,
       };
       interiorLights.push(lamp);
-      if (typeof kit.lantern === 'function') {
-        root.add(kit.lantern({
-          id: `E-lamp-${lamp.id}`,
-          x: lamp.position.x,
-          y: groundY,
-          z: lamp.position.z,
-          height: lamp.height,
-          kind: 'post',
-          detail: 'far',
-        }));
-      }
+      // t63 最小修法：不再额外加灯体（lampGlow 自发光体是 §12 高光截断的主要来源之一）。
     }
 
     const im = set.userData?.kit?.metrics ?? null;
@@ -864,7 +854,10 @@ export async function createZone(ctx) {
   }
   stats.drawCalls = typeof kit.countDrawCalls === 'function' ? kit.countDrawCalls(root) : countMeshes(root);
   stats.triangles = countTriangles(root);
-  stats.drawCallBudget = zone.drawCallBudget ?? config.BUDGET.drawCalls.perZone[ZONE_ID];
+  // 分区预算以 config.BUDGET.drawCalls.perZone 为唯一数值来源（§8.2）；layout.ZONES.drawCallBudget 仅留档对比
+  // （实测二者当前不一致：layout 仍为 C50/E40，config 已按配额申请升到 C60/E56 —— 见回执 §B.7 发现）
+  stats.drawCallBudget = config.BUDGET.drawCalls.perZone[ZONE_ID] ?? zone.drawCallBudget;
+  stats.layoutDrawCallBudget = zone.drawCallBudget ?? null;
 
   /* ========================================================================
    * 10. 碰撞 / 连接 / 机位（回显 layout，院墙与影壁补充实心段）

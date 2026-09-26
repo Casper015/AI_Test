@@ -23,8 +23,16 @@ function labelForObstacle(obstacle, buildingById) {
     blocks: obstacle.blocks ?? 'all',
     visitable: building?.visitable === true,
     hasDoor: !!obstacle.door,
+    // t87：构筑物类型 —— 亭/廊/院门等"视觉开放"者被整足迹阻挡时，提示要说明"看得进去但进不去"
+    kind: building?.kind ?? obstacle.buildingKind ?? null,
   };
 }
+
+/** t87：视觉开放、但被整足迹阻挡的构筑物类型（"空气墙"清单来源；见 docs/report-airwall.md）。 */
+export const OPEN_STRUCTURE_KINDS = Object.freeze(new Set(['pavilion', 'corridor', 'courtyardGate']));
+
+/** 开敞构筑物的中文名（提示文案用）。 */
+export const OPEN_STRUCTURE_LABELS = Object.freeze({ pavilion: '亭阁', corridor: '廊', courtyardGate: '院门' });
 
 /**
  * 不可通行提示文案（§6.4："不可进入的建筑给出可见提示"）。
@@ -42,6 +50,15 @@ export function blockedHint(entry) {
     default:
       if (entry.blocks === 'exceptDoor') {
         return { title: `${entry.name} · 墙体阻挡`, detail: '该建筑仅门洞可通行，请对准门洞正面进入。', tone: 'warn' };
+      }
+      // t87（空气墙）：亭 / 廊 / 院门这类"四面开敞"的构筑物，若整体阻挡，必须**说明为什么进不去**，
+      // 不能只留一堵看不见的墙（数据侧本次不改，故取"可见提示"分支；量化清单见 docs/report-airwall.md）。
+      if (OPEN_STRUCTURE_KINDS.has(entry.kind)) {
+        return {
+          title: `${entry.name} · 开敞构筑物`,
+          detail: `${entry.name}（${OPEN_STRUCTURE_LABELS[entry.kind] ?? '开敞构筑物'}）四面开敞但登记为不可进入：请沿外侧绕行观赏；这不是隐藏墙体，而是该构筑物的通行语义。`,
+          tone: 'info',
+        };
       }
       return {
         title: `${entry.name} 不可进入`,

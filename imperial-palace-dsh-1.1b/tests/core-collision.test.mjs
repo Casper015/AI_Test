@@ -194,69 +194,144 @@ await runner.test('B/C/D/E/F 每区 ≥1 栋高台基建筑：地面高度"从�
   assert(synthClamped, '合成对照：下钳到足迹地坪（y0=0m）后必须阻挡（防护有效）');
 });
 
-await runner.test('真实第一人称求解器 vs 障碍谓词：门洞墙面侧翼、门洞中心、以及**求解器与谓词一致性**（t76 重表述）', () => {
+await runner.test('t86：门洞墙面侧翼实心处**必须被阻挡**（t76 的 DEFECT-T76-01 已修，skip 升级为真实断言）', () => {
   const registry = makeRegistry();
   const obstacles = registry.allObstacles();
   const solver = createFpSolver({ config: CONFIG });
   const cases = ['OB-D-court1-hall', 'OB-E-court1-hall', 'OB-F-garden-hall-north'];
-  let predicateChecked = 0;
-  const solverDiscrepancies = [];
+  const rows = [];
   for (const id of cases) {
     const entry = baselineById.get(id);
     const b = entry.bounds;
     const door = entry.door;
-    // 门洞所在墙面的**法线轴**（门可能朝 ±x，此时必须沿 x 接近、沿 z 横向偏移）
     const axis = door?.axis === 'x' ? 'x' : 'z';
     const perpSpan = axis === 'z' ? b.maxX - b.minX : b.maxZ - b.minZ;
-    const cx = (b.minX + b.maxX) / 2;
-    const cz = (b.minZ + b.maxZ) / 2;
-
-    // ① 谓词层（确定性、与门朝向无关）：墙面侧翼 1m 处**必须阻挡**；门洞中心**必须可通**
     const off = Math.max(door ? door.width / 2 + INTERACTION.player.radius + 1 : 0, perpSpan / 2 - INTERACTION.player.radius - 1.5);
-    const wallProbe = axis === 'z'
-      ? { x: cx + Math.min(off, perpSpan / 2 - 0.5), z: axis === 'z' ? b.maxZ - 1 : b.maxZ - 1 }
-      : { x: b.maxX - 1, z: cz + Math.min(off, perpSpan / 2 - 0.5) };
-    const floorProbe = LAYOUT.floorYAt(wallProbe.x, wallProbe.z) ?? entry.y0;
-    assert(
-      obstacleBlocksPoint(entry, { x: wallProbe.x, z: wallProbe.z, feetY: floorProbe }),
-      `${id} 墙体内 1m（${wallProbe.x},${wallProbe.z}，feetY=${floorProbe}）必须被阻挡`,
-    );
-    predicateChecked += 1;
-    if (door) {
-      assert(
-        !obstacleBlocksPoint(entry, { x: door.center.x, z: door.center.z, feetY: entry.y0 + 0.1 }),
-        `${id} 的设计门洞中心必须可通（门 ≠ 实心）`,
-      );
-    }
-
-    // ② 求解器层：沿法线轴从外侧走向侧翼实心处
-    const start = axis === 'z' ? { x: cx + off, z: b.maxZ + 6 } : { x: b.maxX + 6, z: cz + off };
+    const start = axis === 'z' ? { x: (b.minX + b.maxX) / 2 + off, z: b.maxZ + 6 } : { x: b.maxX + 6, z: (b.minZ + b.maxZ) / 2 + off };
     const dir = axis === 'z' ? [0, -1] : [-1, 0];
     const edge = axis === 'z' ? b.maxZ : b.maxX;
     const distance = (axis === 'z' ? b.maxZ - b.minZ : b.maxX - b.minX) + 12;
     const floor = LAYOUT.floorYAt(start.x, start.z);
+    assert(floor !== null, `${id} 起点应有可行走面`);
+    const r = solver.step({ x: start.x, y: floor + CONFIG.CAMERA.fpEyeHeight, z: start.z }, dir[0], dir[1], distance, { obstacles });
+    const stoppedShortOfWall = axis === 'z' ? r.z >= edge - INTERACTION.player.radius - 0.2 : r.x >= edge - INTERACTION.player.radius - 0.2;
+    assert(stoppedShortOfWall, `${id} 侧翼实心处必须停在墙面之外（axis=${axis}，停在 ${axis === 'z' ? r.z.toFixed(2) : r.x.toFixed(2)}，墙面 ${edge}）`);
+    assert(r.blocked.length > 0, `${id} 侧翼实心处被挡时必须给出原因（实际 blocked=${JSON.stringify(r.blocked)}）`);
+    assert(r.blocked.some((x) => String(x).includes(id.replace(/^OB-/, ''))), `${id} 阻挡原因应点名该建筑（实际 ${JSON.stringify(r.blocked)}）`);
+    rows.push(`${id}: 停在 ${axis === 'z' ? r.z.toFixed(2) : r.x.toFixed(2)}（距墙 ${Math.abs((axis === 'z' ? edge - r.z : edge - r.x)).toFixed(2)}m）blocked=${JSON.stringify(r.blocked)}`);
+  }
+  runner.info(`侧翼实心 3/3 被挡：${rows.join(' | ')}`);
+});
+
+await runner.test('t86：全部 43 栋可进入建筑逐栋验证 —— 门洞通道不被墙盒阻挡、侧翼实心必挡', () => {
+  const registry = makeRegistry();
+  const obstacles = registry.allObstacles();
+  const solver = createFpSolver({ config: CONFIG });
+  const interiors = LAYOUT.WALKABLE.filter((w) => w.kind === 'interior');
+  assertEqual(interiors.length, 43, `可进入内景应为 43 栋（实际 ${interiors.length}）`);
+  const failures = [];
+  const notPassable = [];
+  let checked = 0;
+  for (const surface of interiors) {
+    // 用显式映射解析 slotId（既有两栋内景的 id 与建筑 id 不同名：WK-C-bed-interior → C-hall-bed-main）
+    const slotId = slice.interiorRecordForSurfaceId(surface.id)?.slotId ?? surface.id.replace(/^WK-/, '').replace(/-interior$/, '');
+    const entry = baselineById.get(`OB-${slotId}`);
+    assert(entry, `${slotId} 应有障碍条目`);
+    const door = entry.door;
+    assert(door, `${slotId} 为可进入建筑，应有门规格`);
+    const b = entry.bounds;
+    const axis = door.axis === 'x' ? 'x' : 'z';
+    const edge = axis === 'z' ? b.maxZ : b.maxX;
+    const perpSpan = axis === 'z' ? b.maxX - b.minX : b.maxZ - b.minZ;
+    const cx = (b.minX + b.maxX) / 2;
+    const cz = (b.minZ + b.maxZ) / 2;
+    // ① 门洞通道：中轴线上（体块内 1m 处）谓词层必须放行
+    const doorPoint = axis === 'z' ? { x: door.center.x, z: edge - 1 } : { x: edge - 1, z: door.center.z };
+    const feetAtDoor = LAYOUT.floorYAt(doorPoint.x, doorPoint.z) ?? entry.y0;
+    if (obstacleBlocksPoint(entry, { x: doorPoint.x, z: doorPoint.z, feetY: feetAtDoor })) {
+      notPassable.push(`${slotId}(门洞中轴被墙盒挡住 @${doorPoint.x},${doorPoint.z})`);
+    }
+    // ② 侧翼实心：沿墙面法线轴从外侧走，必须停在墙外且给出原因
+    const off = Math.max(door.width / 2 + INTERACTION.player.radius + 1, perpSpan / 2 - INTERACTION.player.radius - 1.5);
+    const start = axis === 'z' ? { x: cx + off, z: edge + 6 } : { x: edge + 6, z: cz + off };
+    const sign = axis === 'z' ? -1 : -1;
+    const floor = LAYOUT.floorYAt(start.x, start.z);
     if (floor === null) {
-      runner.skip(`${id} 求解器穿越判定`, '起点无可行走面');
+      // 该栋侧翼起点落在无可行走面处（体型/环境所致）⇒ 退化为**谓词层等价判定**（墙外 0.1m 必挡），
+      // 仍逐栋计入检查数（不得因取不到地坪就跳过该栋）
+      const outside = axis === 'z' ? { x: start.x, z: edge + 0.1 } : { x: edge + 0.1, z: start.z };
+      const probeFloor = entry.y0;
+      if (!obstacleBlocksPoint(entry, { x: outside.x, z: outside.z, feetY: probeFloor })) {
+        failures.push(`${slotId}(侧翼墙外谓词层未阻挡、且起点无面无法求解)`);
+      }
+      checked += 1;
       continue;
     }
-    const result = solver.step({ x: start.x, y: floor + CONFIG.CAMERA.fpEyeHeight, z: start.z }, dir[0], dir[1], distance, { obstacles });
-    const travelled = axis === 'z' ? edge - result.z : edge - result.x;
-    const entered = travelled > 0.01;
-    if (entered || result.blocked.length === 0) {
-      solverDiscrepancies.push(`${id}(axis=${axis}, 前进 ${travelled.toFixed(2)}m, blocked=${JSON.stringify(result.blocked)})`);
-    }
+    const r = solver.step({ x: start.x, y: floor + CONFIG.CAMERA.fpEyeHeight, z: start.z }, axis === 'z' ? 0 : sign, axis === 'z' ? sign : 0, perpSpan + 12, { obstacles });
+    const stopped = axis === 'z' ? r.z >= edge - INTERACTION.player.radius - 0.2 : r.x >= edge - INTERACTION.player.radius - 0.2;
+    if (!stopped) failures.push(`${slotId}(侧翼穿行到 ${axis === 'z' ? r.z.toFixed(2) : r.x.toFixed(2)}，墙面 ${edge})`);
+    if (r.blocked.length === 0) failures.push(`${slotId}(侧翼被挡但无原因)`);
+    checked += 1;
   }
-  assertEqual(predicateChecked, cases.length, `三个高台基建筑都应完成谓词层判定（实际 ${predicateChecked}）`);
+  assertEqual(checked, 43, `应逐栋检查 43 栋（实际 ${checked}）`);
+  assertEqual(failures.length, 0, `侧翼必须全挡（失败 ${failures.length} 栋）：${failures.slice(0, 6).join('；')}`);
+  assertEqual(notPassable.length, 0, `门洞通道必须全通（失败 ${notPassable.length} 栋）：${notPassable.slice(0, 6).join('；')}`);
+  runner.info(`43 栋逐栋：侧翼实心 43/43 阻挡（含原因）、门洞通道 43/43 不被墙盒阻挡`);
+});
 
-  // ③ 求解器与谓词一致性：不一致即**真实缺陷**（t76 量化交回，见回执 §3），此处显式跳过并留痕，不改判据、不放宽数字
-  if (solverDiscrepancies.length > 0) {
-    runner.skip(
-      '求解器沿侧翼实心处穿越：不得走进建筑足迹',
-      `DEFECT-T76-01（已量化交回主控）：谓词层判定"墙内必挡"，但求解器在 ${solverDiscrepancies.length}/${cases.length} 例中穿行全程且未给出 blocked 原因 —— ${solverDiscrepancies.join('；')}`,
-    );
-  } else {
-    assert(true, '求解器与谓词层一致：侧翼实心处均被阻挡并给出原因');
+await runner.test('t86：求解器 ≡ 谓词层（等价性）＋ 旧"单跳"实现必隧穿的突变对照', () => {
+  const registry = makeRegistry();
+  const obstacles = registry.allObstacles();
+  const solver = createFpSolver({ config: CONFIG });
+  const entry = baselineById.get('OB-D-court1-hall');
+  const b = entry.bounds;
+  // 代表点：建筑内部若干点 + 四面外墙外的点 + 门洞中轴点
+  const points = [
+    { x: b.minX + 1, z: (b.minZ + b.maxZ) / 2 },
+    { x: (b.minX + b.maxX) / 2, z: b.minZ + 1 },
+    { x: b.maxX - 1, z: b.maxZ - 1 },
+    { x: b.maxX + 0.1, z: (b.minZ + b.maxZ) / 2 },
+    { x: (b.minX + b.maxX) / 2, z: b.minZ - 0.1 },
+    { x: entry.door.center.x, z: (b.minZ + b.maxZ) / 2 },
+  ];
+  let same = 0;
+  for (const p of points) {
+    const feet = LAYOUT.floorYAt(p.x, p.z) ?? entry.y0;
+    const predicate = obstacleBlocksPoint(entry, { x: p.x, z: p.z, feetY: feet });
+    // 求解器口径：向该点走 0.01m（子步进后必落在该点邻域，被挡则停 + 记该障碍原因）
+    const from = { x: p.x + 0.5, y: feet + CONFIG.CAMERA.fpEyeHeight, z: p.z };
+    const r = solver.step(from, -1, 0, 0.5, { obstacles: [entry] });
+    const solverBlocked = r.blocked.some((x) => String(x).includes('D-court1-hall'));
+    const moved = Math.abs(r.x - from.x) > 0.01;
+    // 等价性：谓词说"挡" ⇒ 求解器必须停下并点名该障碍；谓词说"通" ⇒ 求解器必须走完
+    if (predicate) {
+      assert(solverBlocked && !moved, `求解器应被判词层一致地挡住（点 ${p.x},${p.z}：predicate=true, solverBlocked=${solverBlocked}, moved=${moved}）`);
+    } else {
+      assert(!solverBlocked && moved, `谓词层放行时求解器不得凭空阻挡（点 ${p.x},${p.z}）`);
+    }
+    same += 1;
   }
+  assertEqual(same, points.length, '应对全部代表点做等价性判定');
+
+  // 突变对照：复刻旧"单跳全量位移"实现 → 对同一侧翼起点必然隧穿（30m）
+  const axis = 'x';
+  const off = entry.door.width / 2 + INTERACTION.player.radius + 1;
+  const start = { x: b.maxX + 6, z: (b.minZ + b.maxZ) / 2 + off };
+  const dist = b.maxX - b.minX + 12;
+  const floor = LAYOUT.floorYAt(start.x, start.z);
+  const legsLegacy = (() => {
+    // 旧算法：只测终点
+    const nx = start.x - dist;
+    const nz = start.z;
+    const blocked = obstacleBlocksPoint(entry, { x: nx, z: nz, feetY: floor });
+    return { x: nx, blocked };
+  })();
+  const tunneled = !legsLegacy.blocked; // 终点落在建筑之外 ⇒ 旧实现放行 ⇒ 隧穿
+  assert(tunneled, '突变对照：旧"只测终点"实现在该侧翼起点上必然放行（隧穿）');
+  const fixed = solver.step({ x: start.x, y: floor + CONFIG.CAMERA.fpEyeHeight, z: start.z }, -1, 0, dist, { obstacles });
+  const fixedStopped = fixed.x >= b.maxX - INTERACTION.player.radius - 0.2;
+  assert(fixedStopped, `修复后必须停在墙外（实际 x=${fixed.x.toFixed(2)}，墙面 ${b.maxX}）`);
+  runner.info(`等价性 ${same}/${points.length} 通过；突变对照：旧实现终点判定=放行（隧穿）vs 修复后停在距墙 ${(b.maxX - fixed.x).toFixed(2)}m 且 blocked=${JSON.stringify(fixed.blocked)}`);
 });
 
 /* ========================================================================== */

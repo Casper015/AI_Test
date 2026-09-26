@@ -4,19 +4,20 @@
 >
 > | 项目 | 版本 |
 > | --- | --- |
-> | 契约版本 | `CONTRACTS v1.0.12` |
+> | 契约版本 | `CONTRACTS v1.0.14` |
 > | 风格基线 | `STYLE_BASELINE v1.0.0`（见 `docs/STYLE_GUIDE.md`） |
 > | `src/shared/config.js` | `CONFIG_VERSION 1.0.6` |
 > | `src/shared/layout.js` | `LAYOUT_VERSION 1.0.0` |
 > | `src/kit/index.js` | `KIT_VERSION 1.0.1` |
 > | 参考 | `imperial-palace-plan.md` §2.3 §3.1 §6.1 §6.2 §6.3 §6.4 §7.1 §8.2 |
 >
-> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.12` ⇄ `CONFIG_VERSION 1.0.6` ⇄ `LAYOUT_VERSION 1.0.0` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
+> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.14` ⇄ `CONFIG_VERSION 1.0.6` ⇄ `LAYOUT_VERSION 1.0.0` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
 > 以上四项均以**运行时读出值**为准并用命令核对（见 §3.4.8 末尾与 `docs/handoff-contracts-fix.md`）：
 > `node -e "Promise.all([import('./src/shared/config.js'),import('./src/shared/layout.js'),import('./src/kit/index.js')]).then(([c,l,k])=>console.log(c.CONFIG_VERSION,l.LAYOUT_VERSION,k.KIT_VERSION))"` → `1.0.3 1.0.0 1.0.1`。
 > 下游回报必须写明这组版本；不匹配即视为旧版产物。
 >
 > **修订记录**
+> - **v1.0.13（t82 / T2.21）**：新增 **§6.3.1 `y0` canonical 语义**（`y0 = min(记录值, 足迹地坪)`，含 `y0Recorded/y0Source` 与"下钳条数是数据相关量（实测 15/66）"的澄清，取代历史文档里的"73 条"快照）与 **§11.6 audit 输出口径**（预算违规 vs 信息性提示分开成段、退出码只由违规决定）。背景：t59 交回两处口径不一致（y0 代码 vs t27 文档；audit `--enforce` 下"6 项未通过"仍 exit 0）。
 > - **v1.0.11（t79 / T2.20）**：§6.1 `kind` 白名单增补 **`passage`**（门洞通道面，LAYOUT 1.1.4 的 43 条 `WK-<slotId>-door-passage`），新增 §6.1.1 语义（宽 = `doorWidth`、`y = door.sillY`、**不参与内景相机包围盒**），并写明"新增 kind 必须同步 `src/core/context.js:WALKABLE_KINDS` 与本表"的纪律与常驻守卫（`tests/core-kinds.test.mjs`）。背景：该 kind 曾因未同步消费方白名单导致全树 0 区域装载。
 > - `CONFIG 1.0.1`（2026-09-26，t15）：`GRADES[2].roofTypes` 增补 `'pyramidal'`（御花园中央主亭 = grade 2 + 攒尖顶；GRADES[3] 仍仅限 `doubleEaveHip`）。**布局数值零改动**，`LAYOUT_VERSION` 保持 `1.0.0`。
 > - `CONTRACTS v1.0.1`：同上，并明确 `eaveHeight`/`totalHeight` 为**估值（非硬约束）**，见 §4.1。
@@ -45,6 +46,7 @@
 > - `CONTRACTS v1.0.8`（2026-09-26，t46）：**背景引用改为“权威背景色优先”**——新增 §12.1.1：`?stats=1` 的 `backgroundColorHex`（渲染侧只读上报，t45）优先作为背景引用，t44 的像素法降级为**交叉校验/兜底**并报告 `Δ`；新增**「无天空视角」正式口径**（权威背景占比 <0.5% ⇒ 整帧即内容、阈值与分类不变、输出标注依据；**禁止** `--allow-no-sky` 静默退回）。§11.4 的 `?stats=1` 字段表新增背景/雾字段。实测：`fp`（夜）权威口径 26.52% PASS、`axis`（夜）走“无天空视角”15.10% PASS；像素法交叉校验 `Δ=15` 已登记为开放项。
 > - `CONTRACTS v1.0.9`（2026-09-26，t49）：**背景引用改为「实际落屏天空带」**（`backgroundDisplayedTopHex ↔ HorizonHex`），配置清屏色降为仅参考并纳入 **Δ 监控**（Δ > `--content-tol` ⇒ 告警）；§12.1.1 更新优先级表；**关闭 t46 开放项**；复算 `fp`（夜）26.52% → **5.95%**（PASS）、`axis`（夜）走“无天空视角”**15.10%**（PASS）。阈值与分类未动。
 > - **v1.0.12（t81 / T1.28；F6 裁定 (a)）**：§5.2 内景机位口径递增为「**每栋可进入建筑 1 个 `interior` 机位**」（集合 43 栋 = 殿 14 + 配殿/配房 23 + 门殿 6；排除 4 角楼 / 10 亭 / 10 院门），映射由 `INTERIOR_BY_SLOT` 显式给出；新增 §5.2.1「与 `LAYOUT 1.1.4` 实际值对照」表（interior 43 / walkable 112 / viewpoints 61 / FP_ROUTE 50 / CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14）并写明取代关系；**历史条目只追加、旧口径保留并附时点声明**；连通性归 t77、几何开门归 t69/三区/t66，**本版本不宣称“均已可进入”**。
+> - **v1.0.14（t97 / T1.34）**：新增 §5.2.2 —— `door.sillY` = **门外门槛面标高**（`sillY = zoneGroundY(zone) + 本地台基`）；修复 24 栋 C/D/E 漏加区域地坪；`WK-*-interior.y` / `WK-*-door-passage.y` / `INTERIOR_BY_SLOT.groundY` 三者逐栋相等（43/43）；例外表 `DOOR_SILL_EXCEPTIONS` 3 类 6 条（F 四城门双标高 + `C-hall-bed-main` + `C-gate-inner` 绝对标高 wart）。LAYOUT 1.1.8。
 > **数值唯一来源**：所有色板、模数、间距、时长、标高、预算、种子只能取自 `src/shared/config.js`；
 > 所有建筑槽位、院落、连接、道路、可行走面、障碍、视角只能取自 `src/shared/layout.js`。
 > 禁止在区域/核心/UI 代码里散落硬编码数值；需要新数值时先登记（递增版本）再消费。
@@ -485,6 +487,22 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 
 **口径边界（不得夸大）**：本表只声明**数据侧**已注册的三件套（可行走面/机位/走查点）与计数；**“43 栋是否在真实碰撞图上可达”由 t77 按生产口径（含 connector 台阶）逐栋独立复验**，**本契约不宣称“43 栋均已可进入”**；**几何上是否真开门洞**仍归 t69（kit 正面门洞）+ 三区落开 + t66 端到端复核。
 
+#### 5.2.2 `door.sillY` 语义与内景地面口径（`CONTRACTS v1.0.14`，t97）
+
+- **`door.sillY` = 门外门槛面标高**（行人从室外迈进门槛时的地面高度）。派生公式（`src/shared/layout.js` 的 `S()`）：
+  **`sillY = zoneGroundY(zone) + 本地台基(terraceH 等)`**。历史实现漏加 **区域地坪**（C 0.9 / D 0.4 / E 0.4），
+  导致 24 栋 C/D/E 建筑的 `sillY` 与 `WK-<slot>-interior.y` 相差 0.4–0.9m（t89 定位、t97 修复；LAYOUT 1.1.7 → **1.1.8**）。
+- **内景地面同源**：`WK-<slot>-interior.y`、`WK-<slot>-door-passage.y`、`INTERIOR_BY_SLOT[slot].groundY` 三者
+  **必须逐栋相等**（43/43 机器断言），且对非例外栋等于 `sillY`。
+- **例外表**（`DOOR_SILL_EXCEPTIONS`，逐条理由；例外集合必须**恰等于**该表键）：
+  | 例外 | 值 | 理由 |
+  | --- | --- | --- |
+  | `F-gate-south/north/west/east` | 城楼门 `sillY=12.4` / **通道地面 0.4** | **双标高**：城楼门在墙顶、行人走墙下门洞通道；内景取通道面（t72 Q5 裁定 ①） |
+  | `C-hall-bed-main` | `sillY=1.5`（=terraceH）/ 内景地面 2.4 | 无显式 door 字面量，遗留基准 wart（改 `terraceH` 会改建筑几何，属 kit 输入） |
+  | `C-gate-inner` | `sillY=1.8` / 内景地面 0.9 | 该槽位 `baseY=0.9` 存的是**绝对标高**（其余为相对偏移）⇒ 绝对标高 wart（t83 登记、t97 并入例外表） |
+
+> **历史只追加**：旧口径（`sillY = 本地台基`，无区域地坪）在 `LAYOUT ≤1.1.7` 期间为真值，自 `1.1.8`（t97）起由上式取代；历史条目保留不删改。
+
 ### 5.3 八种模式（同一相机装置，`config.CAMERA.viewModes`）
 
 | 编号 | mode | 默认机位与约束 |
@@ -552,7 +570,8 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
   sourceType,             // 'building' | 'wall' | 'water' | 'rockery'
   zone, buildingId,
   bounds: {minX,maxX,minZ,maxZ},   // 世界坐标包围盒（Y 轴由 y0/y1 给出）
-  y0, y1,
+  y0, y1,                 // y0 = min(记录值, 足迹地坪)——**canonical**，见下
+  y0Recorded, y0Source,   // 记录值 / 归一来源：'layout'（min 为恒等）| 'floorYAt'（被下钳）
   blocks,                 // 'all'（整体阻挡）| 'exceptDoor'（仅门洞可通行）
   door,                   // blocks='exceptDoor' 时给出 {axis,center,width,height,sillY}
   note
@@ -572,6 +591,29 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 外侧地形 4 段 + 墙外岸台 4 段 + 四桥桥面 + 南/北门内侧带 + 御花园地坪 + B 广场/主殿侧地面/三层台基顶/金銮殿内景地面/主殿北地面 + C 后宫地面/寝殿台基顶/寝殿内景地面 + D/E 侧院地坪。
 
 ---
+
+> **§6.3.1 `y0` 的 canonical 语义（t82 定论；此前文档表述含糊，以本节为准）**
+>
+> - **权威定义（代码为准）**：`y0 = min( layout.OBSTACLES[].y0（记录值）, footprintFloor(该障碍足迹) )`，
+>   实现见 `src/core/layout-slice.js` 的 `normalizeObstacleY0()`（并回写 `y0Recorded` 与 `y0Source`）。
+>   `layout.OBSTACLES[].y0` 只是**记录值/设计基座标高**（如门洞门槛、台基顶），**不是**权威障碍底。
+> - **足迹地坪 `footprintFloor(bounds)` = 该足迹内最高可行走面**（含台基顶、`kind:'interior'` 内景面、
+>   `kind:'passage'` 门洞通道面）。因此"记录值 ≤ 足迹地坪"时 `min()` 为**恒等**（`y0Source='layout'`），
+>   不表示"没有下钳规则"，只表示该条目的记录值本来就不高于地坪。
+> - **下钳条数是数据相关量，不是常量**：t75 之后多数建筑足迹地坪抬高，实测下钳 **15 条 / 保持 66 条**
+>   （共 81 条；`scripts/audit.mjs` 每次运行都会打印该自检行）。历史文档里"73 条下钳"是旧数据快照，已作废。
+> - **消费方纪律**：碰撞/求解器/审计一律使用 `y0`；**不得**用记录值判断"底部"。
+> - **常驻守卫**：`layout-slice.y0CanonicalProblems()` 逐条复算并要求 `y0` 与 `y0Source` 同时自洽；
+>   `scripts/audit.mjs` 已把它作为一条**违规类**检查项（非空 ⇒ `--enforce` 失败）。
+
+> **§11.6 `scripts/audit.mjs` 输出口径（t82 定论）**
+>
+> - 输出必须把两类条目**分开成段**，措辞固定：
+>   · **`预算违规（会让 --enforce 退出码为 1）`** —— 真违规：主场景/分区绘制调用、可见三角面超预算、契约校验失败、LOD 口径回归失败等；
+>   · **`信息性提示（不计失败）`** —— 仅供背景/口径说明的条目，**永不**影响退出码。
+> - 结论行固定形如：`结论：预算违规 N 项（--enforce 时为失败）；信息性提示 M 项（不计失败）`；
+>   两者皆 0 时输出 `结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`。
+> - 退出码只由**违规**决定（`--enforce` 且 N>0 ⇒ 1）。**禁止**把提示混入"未通过"计数。
 
 ## 7. `state` 与事件命名
 

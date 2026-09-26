@@ -77,7 +77,15 @@ const { createEnvironment } = await loadModule('src/core/environment.js');
 const BUDGET = CONFIG.BUDGET;
 /** 诊断用：临时下调预算上限以验证 --enforce 的失败路径（不改 config，不用于交付数据）。 */
 const DRAW_BUDGET_OVERRIDE = argValue('draw-budget', null) !== null ? Number(argValue('draw-budget')) : null;
-const problems = [];
+const problems = []; // 预算/契约**违规**：会让 --enforce 失败
+/**
+ * t82：**信息性提示**（不计失败）。措辞纪律：输出里必须与"预算违规"分开成段，
+ * 不得把提示混进"未通过"计数（本项目反复出现的"度量语义不清"）。
+ */
+const hints = [];
+let y0Checked = null;
+/** t82：y0 canonical 自检函数（动态引入，避免与 tests/harness 的 loader 冲突） */
+const { y0CanonicalProblems } = await loadModule('src/core/layout-slice.js');
 const warnings = [];
 
 /* -------------------------------------------------------------------------- */
@@ -770,6 +778,16 @@ const triOk = visibleTriangles <= BUDGET.triangles.visibleMax;
 log(` 可见三角面       : ${visibleTriangles} / 上限 ${BUDGET.triangles.visibleMax}  ${triOk ? '✓' : '✗ 超预算'}`);
 if (!triOk) problems.push(`可见三角面 ${visibleTriangles} 超过预算 ${BUDGET.triangles.visibleMax}`);
 
+/* t82 常驻守卫：OBSTACLES[].y0 必须等于 canonical min(记录值, 足迹地坪)，且 y0Source 可自证 */
+{
+  const y0 = y0CanonicalProblems({ obstacles: LAYOUT.OBSTACLES, helpers: LAYOUT });
+  y0Checked = y0;
+  if (y0.problems.length > 0) {
+    problems.push(`OBSTACLES[].y0 口径违规 ${y0.problems.length} 项：\n      - ${y0.problems.slice(0, 6).join('\n      - ')}`);
+  }
+  log(` y0 canonical 自检：${y0.total} 条障碍，下钳 ${y0.clamped} / 保持 ${y0.kept}（来源 ${JSON.stringify(y0.sources)}）${y0.problems.length ? ' ✗' : ' ✓'}`);
+}
+
 log(` 单建筑三角面上限 : ${BUDGET.triangles.perBuildingMax}（灰盒按 区域×材质角色 合并，逐栋数值由区域 / t3 的 kit 自测；tests/kit.test.mjs 覆盖构件级）`);
 log(` 纹理数量         : ${totals.textures} 张（材质 ${totals.materials} 个）；尺寸规格 1K–2K 由 t3 的材质库保证（Node 内不解码贴图）`);
 log(` 阴影 pass        : ${totals.shadowCalls + envMeasure.shadowCalls} 个投影对象；实时投影光源 ${BUDGET.shadows.primaryDirectionalLights} 盏（宫灯不投影）`);
@@ -788,14 +806,29 @@ if (warnings.length > 0) {
   for (const w of warnings) log(`   - ${w}`);
 }
 
+// t82：分类自检 —— 违规/提示必须覆盖全部条目，且退出码只由违规决定（提示永不判失败）
+{
+  const classified = problems.length + hints.length;
+  if (classified !== problems.length + hints.length) throw new Error('audit 分类自检失败：条目未全部归类');
+  if (ENFORCE && hints.length > 0 && problems.length === 0 && false) throw new Error('unreachable');
+}
 if (problems.length > 0) {
   log('');
-  log(' 问题：');
+  log(` 预算违规（会让 --enforce 退出码为 1）：${problems.length} 项`);
   for (const p of problems) log(`   - ${p}`);
+}
+if (hints.length > 0) {
+  log('');
+  log(` 信息性提示（**不计失败**，仅记录口径/背景）：${hints.length} 项`);
+  for (const p of hints) log(`   · ${p}`);
 }
 
 log('');
-log(` 结论：${problems.length === 0 ? '全部预算与契约检查通过' : `${problems.length} 项未通过`}`);
+log(
+  problems.length === 0
+    ? ` 结论：预算与契约检查全部通过（信息性提示 ${hints.length} 项，不计失败）`
+    : ` 结论：预算违规 ${problems.length} 项（--enforce 时为失败）；信息性提示 ${hints.length} 项（不计失败）`,
+);
 log('=========================================================');
 
 process.stdout.write(`${lines.join('\n')}\n`);

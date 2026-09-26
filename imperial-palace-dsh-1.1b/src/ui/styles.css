@@ -563,3 +563,33 @@
     overflow: auto;
   }
 }
+
+/* t87：防卡死兜底条（连续受阻时出现；一次性脱困，不做常驻打扰） */
+#palace-ui .palace-stuck {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--palace-space-12, 12px);
+  max-width: min(64vw, 560px);
+  padding: var(--palace-space-8, 8px) var(--palace-space-12, 12px);
+  border-color: var(--palace-danger, #b4533a);
+  background: color-mix(in srgb, var(--palace-danger, #b4533a) 12%, var(--palace-panel, #1b1916));
+}
+
+#palace-ui .palace-stuck__head {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--palace-danger, #b4533a);
+  white-space: nowrap;
+}
+
+#palace-ui .palace-stuck__text {
+  flex: 1 1 auto;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+#palace-ui .palace-stuck[hidden] {
+  display: none;
+}

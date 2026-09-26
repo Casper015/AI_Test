@@ -411,6 +411,22 @@ export function footprintFloor(bounds, { helpers = LAYOUT } = {}) {
  * 障碍 y0 语义统一：`y0 = min(记录值, 足迹地坪)`。
  * 保证阻挡体从地面起算，抬高台基的建筑/城楼不能被"从下方穿入"（同时保留 `y0Recorded` 便于审计）。
  */
+/**
+ * t82 定论：`OBSTACLES[].y0` 的 **canonical 语义**（代码为准，文档曾表述含糊）
+ *
+ *     y0 = min( 记录值 layout.OBSTACLES[].y0 , footprintFloor(该障碍足迹) )
+ *
+ * - `layout.OBSTACLES[].y0` 是**记录值**（设计基座标高，如门洞/台基顶），**不是**权威障碍底；
+ *   权威底由本函数按上式计算，并**同时回写** `y0Recorded`（记录值）与 `y0Source`：
+ *     · `y0Source === 'floorYAt'` ⇒ 记录值 > 足迹地坪，被**下钳**（防"从台基下方穿入"）
+ *     · `y0Source === 'layout'`   ⇒ 足迹地坪 ≥ 记录值，`min()` 为**恒等**（不再下钳）
+ * - **足迹地坪 `footprintFloor(bounds)` = 该足迹内最高可行走面**（含台基顶 / 内景面 / `kind:'passage'` 门洞通道面）。
+ *   t73/t74/t75 之后大量建筑足迹地坪抬高到与记录值相等 ⇒ 下钳条数从 40+ 降到 ~15，
+ *   这**不是语义变化**，而是"记录值本来就等于地坪"的条目变多（`y0Source` 可逐条自证）。
+ * - 消费方（碰撞/求解器/审计）**一律使用 `y0`**，不得自行用记录值判断"底部"。
+ *
+ * @returns 归一后的障碍条目：`{ ...obstacle, y0, y0Recorded, y0Source }`
+ */
 export function normalizeObstacleY0(obstacle, { helpers = LAYOUT } = {}) {
   const floor = footprintFloor(obstacle.bounds, { helpers });
   const recorded = obstacle.y0;
@@ -421,6 +437,37 @@ export function normalizeObstacleY0(obstacle, { helpers = LAYOUT } = {}) {
     y0Recorded: recorded,
     y0Source: y0 === recorded ? 'layout' : 'floorYAt',
   };
+}
+
+/**
+ * t82 常驻守卫：逐条复算 canonical `y0`，返回任何与 `min(记录值, 足迹地坪)` 不一致的条目。
+ * 供 `scripts/audit.mjs` 作为一条检查项调用（非空 ⇒ 预算/契约违规），也可在任何 Node 进程内直接调用。
+ * @returns {{ total:number, clamped:number, kept:number, sources:Record<string,number>, problems:string[] }}
+ */
+export function y0CanonicalProblems({ obstacles = OBSTACLES, helpers = LAYOUT } = {}) {
+  const problems = [];
+  const sources = { floorYAt: 0, layout: 0, null: 0 };
+  let clamped = 0;
+  let kept = 0;
+  for (const raw of obstacles) {
+    const entry = normalizeObstacleY0(raw, { helpers });
+    const floor = footprintFloor(raw.bounds, { helpers });
+    const expected = floor === null ? entry.y0Recorded : Math.min(entry.y0Recorded, floor);
+    if (Math.abs(entry.y0 - expected) > 1e-6) {
+      problems.push(`${entry.id}: y0=${entry.y0} 与 canonical min(记录值 ${entry.y0Recorded}, 足迹地坪 ${floor}) = ${+Number(expected).toFixed(3)} 不一致`);
+    }
+    const expectedSource = floor === null || entry.y0Recorded <= floor + 1e-6 ? 'layout' : 'floorYAt';
+    if (entry.y0Source !== expectedSource) {
+      problems.push(`${entry.id}: y0Source="${entry.y0Source}" 与复算来源 "${expectedSource}" 不一致（记录值 ${entry.y0Recorded} / 足迹地坪 ${floor}）`);
+    }
+    sources[entry.y0Source ?? 'null'] = (sources[entry.y0Source ?? 'null'] ?? 0) + 1;
+    if (entry.y0Source === 'floorYAt') clamped += 1;
+    else kept += 1;
+  }
+  if (clamped + kept !== obstacles.length) {
+    problems.push(`下钳 ${clamped} + 保持 ${kept} ≠ 障碍总数 ${obstacles.length}（统计漏计）`);
+  }
+  return { total: obstacles.length, clamped, kept, sources, problems };
 }
 
 /** 某区域的水体 / 点景切片（区域不必再从障碍盒反推水池）。 */

@@ -543,6 +543,143 @@ if (existsSync(manifestPath)) {
   });
 }
 
+/* ============================================================ H 灯位池真实路径（t94） */
+
+section('H 真实路径灯位池核对（t94：真实锚点 + 生产排序函数 + 浏览器实测预算）');
+{
+  const { createEnvironment } = await loadModule('src/core/environment.js');
+  const { createStateStore } = await loadModule('src/core/state.js');
+  const { createCameraRig } = await loadModule('src/core/camera.js');
+  const anchors = registryC.allLightAnchors();           // 真实注册表锚点（layout + 区域运行时注册）
+  const eventsH = makeSilentEvents();
+  // 必须传 registry：生产路径 `environment` 从 `registry.allLightAnchors()` 取真实锚点（否则池恒空）
+  const envH = createEnvironment({ config: CONFIG, events: eventsH, scene: new THREE.Scene(), THREE, registry: registryC });
+  // 真实浏览器 ?stats=1 逐时辰实测 lampRealtime（= 池容量）：golden 3 / dusk 4 / night 6
+  const BUDGETS = { golden: 3, dusk: 4, night: 6 };
+  const storeH = createStateStore({ events: eventsH });
+  const rigH = createCameraRig({ config: CONFIG, registry: registryC, store: storeH, events: eventsH });
+  const focusOf = (vpId) => {
+    if (vpId) { const vp = LAYOUT.VIEWPOINT_BY_ID[vpId]; return { x: vp.position.x, y: vp.position.y, z: vp.position.z }; }
+    rigH.requestMode('oblique');
+    rigH.update(CONFIG.CAMERA.transitionSeconds + 0.05, 0, storeH.state);
+    return { x: rigH.position.x, y: rigH.position.y, z: rigH.position.z };
+  };
+  const targets = [['Fsouth', 'VP-F-gate-south-interior'], ['Fnorth', 'VP-F-gate-north-interior'], ['Bmain', 'VP-B-interior'], ['oblique', null]];
+  const pools = {};
+  for (const [name, vpId] of targets) {
+    const focus = focusOf(vpId);
+    pools[name] = { focus, byPreset: {} };
+    for (const [preset, budget] of Object.entries(BUDGETS)) pools[name].byPreset[preset] = envH.rankLampPool(anchors, focus, { budget });
+  }
+  const cap = Math.min(CONFIG.LIGHTING.lamps.distance * 6, CONFIG.LIGHTING.lamps.emissiveFallbackBeyond);
+
+  await test(`H1 真实锚点集可追溯：registry.allLightAnchors() = ${anchors.length} 个（与浏览器 ?stats=1 的 lampAnchors=152 逐值一致），含 windowGlow/interiorLantern 室内灯`, () => {
+    const roles = anchors.reduce((a, x) => { a[x.role] = (a[x.role] ?? 0) + 1; return a; }, {});
+    assert(anchors.length === 152, `锚点数 ${anchors.length} ≠ 浏览器实测 152`);
+    assert((roles.windowGlow ?? 0) > 0 && (roles.interiorLantern ?? 0) > 0, `角色分布异常：${JSON.stringify(roles)}`);
+    return `${anchors.length} 个 · 角色 ${JSON.stringify(roles)}`;
+  });
+
+  await test('H2 南/北城门内景：真实室内灯在两个城门机位的池内排名 #1–#2（t64 形态在真实锚点集上已修复）', () => {
+    const want = {
+      Fsouth: ['LA-F-int-F-gate-south-1', 'LA-F-int-F-gate-south-2'],
+      Fnorth: ['LA-F-int-F-gate-north-1', 'LA-F-int-F-gate-north-2'],
+    };
+    const rows = [];
+    for (const [name, ids] of Object.entries(want)) {
+      for (const [preset, pool] of Object.entries(pools[name].byPreset)) {
+        const ranked = pool.map((h, i) => ({ rank: i + 1, id: h.anchor.id, role: h.anchor.role, d: +h.distance.toFixed(1), score: +h.score.toFixed(4) }));
+        const pos = ids.map((id) => ranked.findIndex((r) => r.id === id) + 1);
+        assert(pos.every((p) => p >= 1 && p <= 2), `${name}/${preset} 室内灯排名 ${JSON.stringify(pos)} 不在 #1–#2：${JSON.stringify(ranked)}`);
+        rows.push(`${name}/${preset}: #${ranked[0].rank} ${ranked[0].id}(${ranked[0].role}@${ranked[0].d}m ${ranked[0].score}) #2 ${ranked[1].id}@${ranked[1].d}m`);
+      }
+    }
+    return rows.join(' · ');
+  });
+
+  await test('H3 池容量与真实浏览器实测一致：内景机位池饱和（= golden3/dusk4/night6），全城鸟瞰池为空（120m 上限外无灯）', () => {
+    const rows = [];
+    for (const [name] of targets) {
+      for (const [preset, budget] of Object.entries(BUDGETS)) {
+        const len = pools[name].byPreset[preset].length;
+        if (name === 'oblique') assert(len === 0, `oblique/${preset} 池 ${len} ≠ 0（浏览器实测 0/N）`);
+        else assert(len === budget, `${name}/${preset} 池 ${len} ≠ 预算 ${budget}（浏览器实测饱和 ${budget}/${budget}）`);
+        rows.push(`${name}/${preset}=${len}`);
+      }
+    }
+    return rows.join(' ');
+  });
+
+  await test('H4 池排序与距离上限不变（不放宽）：池内距离 ≤ 上限，得分单调不增，同距离高重要性优先', () => {
+    for (const [name] of targets) {
+      for (const [preset, pool] of Object.entries(pools[name].byPreset)) {
+        for (const h of pool) assert(h.distance <= cap, `${name}/${preset} 池内含 ${h.anchor.id}@${h.distance.toFixed(1)}m > 上限 ${cap}m`);
+        for (let i = 1; i < pool.length; i += 1) assert(pool[i].score <= pool[i - 1].score + 1e-12, `${name}/${preset} 得分非单调：${pool[i - 1].score} → ${pool[i].score}`);
+      }
+    }
+    return `distance 上限 ${cap}m · 池容量 ${JSON.stringify(BUDGETS)}（= 浏览器 lampRealtime 实测）· 全部池满足单调不增`;
+  });
+
+  await test('H5（硬断言）直读 `describe().lamps.pool`：两城门内景三时辰池内 #1–#2 为真实室内灯，池长 == 真机容量 3/4/6', () => {
+    // t95 落地后池清单是**生产状态直读**（updateLampSelection 写入 lampState.pool），不再由本席复算
+    const expect = {
+      Fsouth: ['LA-F-int-F-gate-south-1', 'LA-F-int-F-gate-south-2'],
+      Fnorth: ['LA-F-int-F-gate-north-1', 'LA-F-int-F-gate-north-2'],
+    };
+    const presetNames = { golden: 'goldenHour', dusk: 'sunset', night: 'moonlitNight' };
+    const budgets = { golden: 3, dusk: 4, night: 6 };
+    const rows = [];
+    for (const [name, vpId] of [['Fsouth', 'VP-F-gate-south-interior'], ['Fnorth', 'VP-F-gate-north-interior']]) {
+      const focus = { ...LAYOUT.VIEWPOINT_BY_ID[vpId].position };
+      for (const [alias, envPreset] of Object.entries(presetNames)) {
+        envH.applyPreset(envPreset);
+        envH.update(1 / 60, 1, { ...storeH.state, cameraPosition: focus, viewMode: 'interior' });
+        const lamps = envH.describe().lamps;
+        const pool = lamps.pool ?? [];
+        assert(Array.isArray(pool) && pool.length > 0, `${name}/${alias} describe().lamps.pool 为空（t95 字段缺失？）：${JSON.stringify(lamps).slice(0, 200)}`);
+        assert(pool.every((x) => Number.isInteger(x.rank) && typeof x.id === 'string' && typeof x.role === 'string' && Number.isFinite(x.distance) && Number.isFinite(x.score)), `${name}/${alias} 池项字段不全：${JSON.stringify(pool[0])}`);
+        assert(pool.length === lamps.capacity, `${name}/${alias} 池长 ${pool.length} ≠ capacity ${lamps.capacity}`);
+        assert(pool.length === budgets[alias], `${name}/${alias} 池长 ${pool.length} ≠ 真机容量 ${budgets[alias]}（preset=${alias}）`);
+        assert(pool[0].id === expect[name][0] && pool[1].id === expect[name][1],
+          `${name}/${alias} 池 #1–#2 = ${pool[0].id}/${pool[1].id}，期望 ${expect[name].join('/')}`);
+        assert(pool[0].role === 'windowGlow' && pool[1].role === 'windowGlow', `${name}/${alias} #1–#2 角色 ${pool[0].role}/${pool[1].role} ≠ windowGlow`);
+        assert(pool[1].distance > pool[0].distance, `${name}/${alias} 距离未递增：${pool[0].distance} → ${pool[1].distance}`);
+        for (let k = 1; k < pool.length; k += 1) assert(pool[k].score <= pool[k - 1].score + 1e-12, `${name}/${alias} 得分非单调：#${k} ${pool[k].score} > #${k - 1} ${pool[k - 1].score}`);
+        rows.push(`${name}/${alias} cap${lamps.capacity} #1 ${pool[0].id}(${pool[0].distance}m ${pool[0].score.toFixed(6)}) #2 ${pool[1].id}(${pool[1].distance}m ${pool[1].score.toFixed(6)}) tier=${lamps.qualityTier} preset=${lamps.preset}`);
+      }
+    }
+    // 条件升级（t14 补丁落地后自动变硬）：compactReport 若转发 lampPool/lampsPoolTop8，则必须与直读一致
+    const mainSrc2 = readFileSync(join(ROOT, 'src/main.js'), 'utf8');
+    const forwarded = /lampsPoolTop8\s*:|lampPool\s*:/.test(mainSrc2);
+    return `${rows.join(' · ')}；跨源一致性：DOM lampActive 实测（3/4/6，见 §14）与池长逐值相等；compactReport 转发 ${forwarded ? '已落地（升级为交叉硬断言）' : '未落地（t95 ③ 补丁待 t14；届时本断言自动升级）'}`;
+  });
+
+  const browserMode = process.env.T94_LAMPS_BROWSER === '1';
+  await test(`H6 真实浏览器复核（${browserMode ? '已启用' : '默认跳过：T94_LAMPS_BROWSER=1 启用'}）：4 机位 × 三时辰的 lampActive/lampRealtime/lampAnchors 与 §12 判定行`, async () => {
+    if (!browserMode) return '未在本次运行中执行（本次 attempt 的 12 组原始读数见 docs/report-experience.md §13；命令：T94_LAMPS_BROWSER=1 node tests/verify-experience.test.mjs）';
+    const { spawnSync } = await import('node:child_process');
+    const outDir = '/tmp/t94-lamps-verify';
+    const specs = [['Fsouth', ['--interior=VP-F-gate-south-interior']], ['Fnorth', ['--interior=VP-F-gate-north-interior']], ['Bmain', ['--interior=VP-B-interior']], ['oblique', ['--view=oblique']]];
+    const rows = [];
+    for (const [name, args] of specs) {
+      for (const preset of ['golden', 'dusk', 'night']) {
+        const res = spawnSync('node', ['scripts/shot.mjs', ...args, `--preset=${preset}`, `--out-dir=${outDir}`, `--name=t94v-${name}-${preset}`, '--keep-invalid'], { cwd: ROOT, encoding: 'utf8' });
+        const out = `${res.stdout ?? ''}${res.stderr ?? ''}`;
+        const m = /实时宫灯 (\d+)\/(\d+)（锚点 (\d+)/.exec(out);
+        assert(m, `${name}/${preset} 未读到灯位行`);
+        const [, active, realtime, anch] = m.map(Number);
+        assert(anch === anchors.length, `${name}/${preset} 锚点 ${anch} ≠ registry ${anchors.length}`);
+        assert(active === realtime, `${name}/${preset} 池未饱和 ${active}/${realtime}`);
+        if (name === 'oblique') assert(active === 0, `oblique/${preset} 应有 0 盏实时灯，实际 ${active}`);
+        else assert(realtime === BUDGETS[preset], `${name}/${preset} 容量 ${realtime} ≠ 实测基线 ${BUDGETS[preset]}`);
+        const judge = /可读性判据 (PASS|FAIL)[^\n]*/.exec(out)?.[0] ?? '(未找到判定行)';
+        rows.push(`${name}/${preset} ${active}/${realtime} anchor=${anch} · ${judge}`);
+      }
+    }
+    return rows.join(' | ');
+  });
+}
+
 /* ============================================================ 汇总 */
 
 console.log('\n---------------------------------------------------------');

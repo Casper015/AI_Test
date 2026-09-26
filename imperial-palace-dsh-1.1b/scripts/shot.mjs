@@ -1112,7 +1112,11 @@ async function main() {
 
   const viewArg = argValue('view', 'oblique');
   const presetArg = argValue('preset', 'golden');
-  const views = viewArg === 'all' ? ['oblique', 'iso', 'axis', 'zone', 'focus', 'interior', 'fp', 'orbit'] : viewArg.split(',').map((v) => v.trim()).filter(Boolean);
+  /* t91：`--interior=<slotId|VP-…>` ⇒ 单进程逐栋内景出图（未显式给 --view 时默认只跑 interior 视角） */
+  const INTERIOR_ARG = argValue('interior');
+  /** t91：`--interior=` ⇒ 未显式给 `--view` 时视角收敛为 interior，且内景本无天空（自动等价 --allow-no-sky） */
+  const INTERIOR_MODE = Boolean(INTERIOR_ARG) && argValue('view') == null; // 显式 --view 优先（八视角不被覆盖）
+  const views = INTERIOR_MODE ? ['interior'] : viewArg === 'all' ? ['oblique', 'iso', 'axis', 'zone', 'focus', 'interior', 'fp', 'orbit'] : viewArg.split(',').map((v) => v.trim()).filter(Boolean);
   const presets = presetArg === 'all' ? ['golden', 'dusk', 'night'] : presetArg.split(',').map((p) => p.trim()).filter(Boolean);
   for (const preset of presets) {
     if (!VIEW_PRESETS[preset]) {
@@ -1164,6 +1168,8 @@ async function main() {
       if (argValue('query')) for (const kv of String(argValue('query')).split(',')) { const [k, v] = kv.split('='); if (k) query.set(k, v ?? '1'); }
       if (argValue('zone')) query.set('zone', argValue('zone'));
       if (argValue('focus')) query.set('focus', argValue('focus'));
+      /* t91：内景逐栋入口（与 --focus/--view 互不冲突；未显式 --view 时视角列表已收敛为 interior） */
+      if (INTERIOR_ARG) { query.set('interior', INTERIOR_ARG); query.set('view', 'interior'); }
       const url = `${base}?${query.toString()}`;
       const defaultName = `t2-${view}-${preset}${hasFlag('stats') ? '-stats' : ''}.png`;
       const name = views.length === 1 && presets.length === 1 ? argValue('name', defaultName) : defaultName;
