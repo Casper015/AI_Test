@@ -243,6 +243,10 @@ export function createInteraction({
   const hoverIntervalMs = Math.max(0, options.hoverIntervalMs ?? UI.spacing.sm);
   const localCommands = new Set();
   const commandHandlers = new Set();
+  /** t59：进入内景前记录"返回点"（模式 + 区/机位/近景目标 + 机位快照），F 再按即恢复。 */
+  let interiorReturn = null;
+  /** t59：最近一次内景操作结果（测试/诊断用，真实结果而非计数器）。 */
+  let lastInterior = null;
   /** 协作模式判定用的请求计数快照（每轮键盘处理结束更新）；`keyCountersAt` 仅供诊断。 */
   const keyCounters = {};
   let keyCountersAt = -Infinity;
@@ -277,6 +281,7 @@ export function createInteraction({
 
   function keyboardContext() {
     const state = store.state;
+    const selectedId = state.selectedBuildingId;
     return {
       viewMode: state.viewMode,
       quality: state.quality,
@@ -284,9 +289,82 @@ export function createInteraction({
       fpActive: rig.isFp,
       tourActive: state.tourState.active,
       tourPaused: state.tourState.paused,
-      hasSelection: !!state.selectedBuildingId,
+      hasSelection: !!selectedId,
+      /** F 能否进入内景由目录数据（visitable）决定，不在这里猜建筑 id。 */
+      selectedVisitable: !!selectedId && catalog.info(selectedId)?.visitable === true,
       pointerLocked: fp.isPointerLocked(),
     };
+  }
+
+  /**
+   * F 的内景分支落地（键盘与面板按钮共用同一实现）：
+   *   进入 = 由 `catalog.interiorViewpointFor()` 从区/布局数据推导内景机位 → 写 `store.view.interiorViewpointId`
+   *   + 请求 interior 模式；不可进入 / 无机位 = 只提示，**不改视角**；已在内景 = 返回进入前的模式与登记机位。
+   */
+  function enterInterior(buildingId = store.state.selectedBuildingId, source = 'interior-api') {
+    const info = buildingId ? catalog.info(buildingId) : null;
+    if (!info) {
+      lastInterior = { ok: false, reason: 'no-selection', buildingId: buildingId ?? null };
+      pushHint({ tone: 'warn', kind: 'interior', title: '未选中建筑', detail: '先点击画面里的建筑，再按 F 进入内景。' });
+      return false;
+    }
+    if (!info.visitable) {
+      lastInterior = { ok: false, reason: 'not-visitable', buildingId: info.id };
+      pushHint({ tone: 'warn', kind: 'interior', title: '此建筑不可进入内景', detail: `${info.name}：${info.info || '未登记内景'}。可点「近景」观看外观。` });
+      return false;
+    }
+    const mapping = catalog.interiorViewpointFor(info.id);
+    if (!mapping) {
+      lastInterior = { ok: false, reason: 'no-interior-viewpoint', buildingId: info.id };
+      pushHint({ tone: 'warn', kind: 'interior', title: '该建筑的内景机位未登记', detail: `${info.name}：layout/区域尚未登记 interior 机位，无法进入内景。` });
+      return false;
+    }
+    if (store.state.viewMode !== 'interior') {
+      interiorReturn = {
+        mode: store.state.viewMode,
+        area: store.view.area ?? null,
+        viewpointId: store.view.viewpointId ?? null,
+        focusBuildingId: store.view.focusBuildingId ?? null,
+        axisIndex: store.view.axisIndex ?? 1,
+        describe: rig.describe(),
+      };
+    }
+    store.patch({}, { source, view: { interiorViewpointId: mapping.viewpointId, area: mapping.area } });
+    requester.send(EVENTS.requestViewMode, { mode: 'interior' });
+    lastInterior = { ok: true, buildingId: info.id, ...mapping };
+    pushHint({
+      tone: 'info',
+      kind: 'interior',
+      title: `进入内景 · ${info.name}`,
+      detail: `机位 ${mapping.viewpointId}（由 ${mapping.area} 区内景地面 ${mapping.surfaceId} 推导）· 再按 F 返回`,
+    });
+    record({ kind: 'interior', action: 'enter', buildingId: info.id, viewpointId: mapping.viewpointId });
+    return true;
+  }
+
+  function exitInterior(source = 'interior-api') {
+    if (store.state.viewMode !== 'interior') return false;
+    const back = interiorReturn?.mode ?? 'oblique';
+    if (interiorReturn) {
+      store.patch(
+        {},
+        {
+          source,
+          view: {
+            area: interiorReturn.area,
+            viewpointId: interiorReturn.viewpointId,
+            focusBuildingId: interiorReturn.focusBuildingId,
+            axisIndex: interiorReturn.axisIndex,
+          },
+        },
+      );
+    }
+    requester.send(EVENTS.requestViewMode, { mode: back });
+    lastInterior = { ok: true, reason: 'exit', restoredMode: back };
+    pushHint({ tone: 'info', kind: 'interior', title: `已返回 · ${back}`, detail: '回到进入内景前的视角模式与登记机位。' });
+    record({ kind: 'interior', action: 'exit', restoredMode: back });
+    interiorReturn = null;
+    return true;
   }
 
   function handleResolvedKey(resolved, event) {
@@ -296,6 +374,11 @@ export function createInteraction({
         fp.exitPointerLock();
       } else if (resolved.local === 'notifyTourPaused') {
         pushHint({ tone: 'warn', kind: 'tour-pause', title: '导览已暂停', detail: '按 Space 或「继续」恢复导览。' }, { kind: 'tour-pause' });
+      } else if (resolved.local === 'enterInterior' || resolved.local === 'notifyInteriorUnavailable') {
+        // 后者即"不可进入"分支：enterInterior 内部只提示、不改视角
+        enterInterior(store.state.selectedBuildingId, 'keyboard:F');
+      } else if (resolved.local === 'exitInterior') {
+        exitInterior('keyboard:F');
       } else {
         localCommands.add(resolved.local);
         notifyCommand(resolved.local, resolved);
@@ -539,6 +622,18 @@ export function createInteraction({
     },
     select,
     hover,
+    /** t59：进入选中建筑的内景（机位由数据推导）；不可进入/无机位 → 只提示、不改视角。 */
+    enterInterior,
+    /** t59：从内景返回进入前的模式与登记机位。 */
+    exitInterior,
+    /** t59：内景状态（真实结果：是否进入、推导到的机位、返回点）。 */
+    interiorState: () => ({
+      active: store.state.viewMode === 'interior',
+      viewpointId: store.view.interiorViewpointId ?? null,
+      area: store.view.area ?? null,
+      returnTo: interiorReturn ? { mode: interiorReturn.mode, description: interiorReturn.describe?.mode ?? null } : null,
+      last: lastInterior ? { ...lastInterior } : null,
+    }),
     onHint(handler) {
       hintHandlers.add(handler);
       return () => hintHandlers.delete(handler);

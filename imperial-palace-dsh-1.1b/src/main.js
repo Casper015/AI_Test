@@ -21,6 +21,7 @@ import { createEventBus } from './core/events.js';
 import { createStateStore, createStateController } from './core/state.js';
 import { createRegistry } from './core/registry.js';
 import { createCameraRig } from './core/camera.js';
+import { mountInterface } from './ui/index.js';
 import { createEnvironment } from './core/environment.js';
 import { createRenderSystem } from './core/renderer.js';
 import { createLoader } from './core/loader.js';
@@ -51,6 +52,7 @@ export function parseQuery(search = typeof location !== 'undefined' ? location.s
     presetRaw,
     focus: params.get('focus'),
     zone: params.get('zone'),
+    mask: params.get('mask'), // t50：`?mask=sky` 只输出真天空掩码（白=天空、黑=其余）
     ui: params.get('ui') !== '0',
     shot: params.get('shot') === '1',
     stats: params.get('stats') === '1',
@@ -108,6 +110,10 @@ export function countRenderables(root) {
 
 export async function bootstrap() {
   const query = parseQuery();
+  /** t58：t9 交付的 UI 句柄（mountInterface 返回值；由本文件的唯一动画循环驱动） */
+  let uiHandle = null;
+  /** t50：真天空掩码的隔离渲染网格（平时 visible=false，仅掩码第二遍临时可见） */
+  let skyMaskMeshRef = null;
   const container = document.getElementById('app') ?? document.body;
   const events = createEventBus({ onError: (error, info) => console.error(`[main] 事件 ${info.type} 处理失败：`, error) });
   const store = createStateStore({ events });
@@ -182,6 +188,16 @@ export async function bootstrap() {
     },
     preset: store.state.timePreset,
   });
+  // t50：真天空掩码（诊断模式 `?mask=sky`）——把天空网格交给渲染器；隔离用网格由本文件（唯一允许 scene.add 处）挂载
+  {
+    const maskInfo = renderSystem.configureSkyMask?.({ sky: environment.skyMesh?.() ?? null }) ?? null;
+    if (maskInfo?.ok && maskInfo.mesh) {
+      maskInfo.mesh.visible = false;
+      scene.add(maskInfo.mesh);
+      if (maskInfo.quad) scene.add(maskInfo.quad);
+      skyMaskMeshRef = maskInfo.mesh;
+    }
+  }
   scene.add(environment.root);
 
   /* ------------------------------ 5. 状态控制器 + 同步 ------------------------------ */
@@ -436,6 +452,8 @@ export async function bootstrap() {
 
   /* ------------------------------ 10. 统计面板（?stats=1）------------------------------ */
   function ensureStatsPanel() {
+    // t50：掩码模式下不叠加可见 UI 面板（否则面板底色会污染二值掩码图）；hidden 的 <pre> 报告仍照常产出
+    if (query.mask === 'sky') return null;
     if (ui.stats || !query.stats) return ui.stats;
     const div = document.createElement('div');
     div.id = 'palace-stats';
@@ -475,6 +493,16 @@ export async function bootstrap() {
     const s = renderSystem.getStats();
     const env = environment.describe();
     const r = registry.stats();
+    // t56：掩码 data URL（仅就绪后编码；`skyMaskPng()` 自带位姿键缓存 ⇒ 同一位姿不重复编码）
+    let maskPngInfo = null;
+    if (ready) {
+      try {
+        const png = renderSystem.skyMaskPng?.() ?? null;
+        if (png) maskPngInfo = { base64: png.base64, size: `${png.width}x${png.height}`, sourceSize: png.sourceSize, shareByColor: png.shareByColor, note: `同一次加载内取图（离屏掩码 RT，1/${png.scale} 分辨率、最近邻、严格二值）；base64 ≈ ${(png.base64.length / 1024 / 1024).toFixed(2)}MB` };
+      } catch (error) {
+        console.warn('[palace] skyMaskPng 编码失败（已忽略，仅影响该字段）：', error?.message ?? error);
+      }
+    }
     return {
       mode: rig.mode,
       viewMode: store.state.viewMode,
@@ -529,6 +557,31 @@ export async function bootstrap() {
       backgroundDeltaConfigVsSkyHorizon: env.background.delta?.configVsSkyHorizon ?? null,
       backgroundOutputChain: renderSystem.describeOutputChain?.() ?? null,
       backgroundCandidates: env.background.candidates ?? null,
+      // t50：真天空掩码（诊断）——白=天空/黑=其余，二值；供工具交叉校验，不再用颜色相似度猜天空
+      skyMaskMode: query.mask ?? null,
+      skyMaskConfigured: s.skyMask?.configured ?? null,
+      skyShare: s.skyMask?.share ?? null,
+      skyMaskColors: s.skyMask?.colors ?? null,
+      skyMaskSampleSize: s.skyMask?.sampleSize ?? null,
+      skyMaskNote: s.skyMask?.note ?? null,
+      // t53：极性自证（禁止假定 white=sky：以 probe 取天空色，再与 skyShare 交叉校验）
+      skyMaskSkyColor: s.skyMask?.polarity?.skyColor ?? null,
+      skyMaskOtherColor: s.skyMask?.polarity?.otherColor ?? null,
+      skyMaskProbe: s.skyMask?.polarity?.probe ?? null,
+      skyMaskSkyFromProbe: s.skyMask?.polarity?.skyFromProbe ?? null,
+      skyMaskSkyAtProbe: s.skyMask?.polarity?.skyAtProbe ?? null,
+      skyMaskShareByColor: s.skyMask?.polarity?.shareByColor ?? null,
+      skyMaskPolarityRule: s.skyMask?.polarity?.rule ?? null,
+      skyMaskPolarityConsistent: s.skyMask?.polarity?.consistent ?? null,
+      // t56：**同一次页面加载内取图**的掩码 data URL（base64 PNG）——工具用已有的 --dump-dom 即可取回位姿同源掩码，
+      // 不再需要第二次页面加载（t55 坑②：跨加载去截 &mask=sky 会拿到空白/半帧）。
+      // 时序：仅在 ready 之后编码（不阻塞 data-palace-ready / ?shot=1 的就绪信号）；
+      // 体积：按 1/2 分辨率（360×225，最近邻、严格二值）⇒ base64 ≈ 0.3MB（全分辨率 720×450 约 1.3MB，故默认降采样）。
+      skyMaskPngBase64: maskPngInfo?.base64 ?? null,
+      skyMaskPngSize: maskPngInfo?.size ?? null,
+      skyMaskPngSourceSize: maskPngInfo?.sourceSize ?? null,
+      skyMaskPngShareByColor: maskPngInfo?.shareByColor ?? null,
+      skyMaskPngNote: maskPngInfo?.note ?? null,
       zones: r.zones,
       buildings: r.buildings,
       ready: ready,
@@ -538,14 +591,25 @@ export async function bootstrap() {
 
   let statsAccum = 0;
   function updateStatsPanel(dt) {
-    if (!query.stats || !ui.stats) return;
+    if (!query.stats) return;
+    // t50/t53：节流计算真天空掩码占比（诊断；不进入正常渲染路径）
+    // 掩码模式下 share/probe 由 renderSkyMaskFrame 在同一次调用内完成（避免与画布 pass 交错）
+    try {
+      if (query.mask !== 'sky') renderSystem.computeSkyShare?.(rig.camera);
+    } catch (error) {
+      console.warn('[palace] skyShare 计算失败（已忽略）：', error?.message ?? error);
+    }
     statsAccum += dt;
-    if (statsAccum < 0.25) return;
-    statsAccum = 0;
+    // 隐藏的 <pre id="palace-stats-json"> 是工具读取路径：掩码模式（不看可见面板）与 ui=0 时也必须产出
+    const due = statsAccum >= 0.25 || !ui.stats;
+    if (due) {
+      statsAccum = 0;
+      const report = reportElement();
+      if (report) report.textContent = JSON.stringify(compactReport());
+    }
+    if (!ui.stats) return;
     const s = renderSystem.getStats();
     const r = registry.stats();
-    const report = reportElement();
-    if (report) report.textContent = JSON.stringify(compactReport());
     ui.stats.textContent = [
       `视角 ${rig.mode}${rig.isFp ? '（第一人称）' : ''} · ${store.state.timePreset} · 质量 ${store.state.quality}`,
       `FPS ${s.avgFps} · p95 ${s.p95FrameMs}ms · 帧 ${s.frames}`,
@@ -618,8 +682,11 @@ export async function bootstrap() {
     rig.update(dt, elapsed, stateSnapshot);
     environment.update(dt, elapsed, { ...stateSnapshot, cameraPosition: rig.position });
     if (rig.camera !== renderSystem.renderPass.camera) renderSystem.attach(scene, rig.camera);
-    renderSystem.render(scene, rig.camera);
+    if (query.mask === 'sky') renderSystem.renderSkyMaskFrame(rig.camera, { withShare: query.stats === true }); // t50/t53 诊断：真天空掩码（画布 pass 是本帧最后一次渲染）
+    else renderSystem.render(scene, rig.camera);
     renderSystem.recordFrame(dt * 1000);
+    // t58：UI/交互由**同一个**动画循环驱动（唯一循环；interaction 内部的 recordFrame 包装层在此路径下自动停用 ⇒ 不重复推进）
+    uiHandle?.update(dt, elapsed);
     updateStatsPanel(dt);
 
     if (query.shot) {
@@ -645,7 +712,8 @@ export async function bootstrap() {
     for (let i = 0; i < 3; i += 1) {
       rig.update(1 / 60, elapsed + 1 / 60, store.state);
       environment.update(1 / 60, elapsed + 1 / 60, { ...store.state, cameraPosition: rig.position });
-      renderSystem.render(scene, rig.camera);
+      if (query.mask === 'sky') renderSystem.renderSkyMaskFrame(rig.camera, { withShare: query.stats === true });
+      else renderSystem.render(scene, rig.camera);
     }
     markReady('sync-frames');
     updateStatsPanel(1);
@@ -679,6 +747,12 @@ export async function bootstrap() {
     countRenderables: () => countRenderables(sceneRoot),
     /** 机器可读的实测报告（与 ?stats=1 的 DOM 元素同一份数据） */
     report: () => compactReport(),
+    /** t50：真天空掩码诊断（白=天空/黑=其余）——render() 把掩码渲染到画布；share() 立即重算占比 */
+    skyMask: {
+      info: () => renderSystem.skyMaskInfo?.() ?? null,
+      share: () => renderSystem.computeSkyShare?.(rig.camera, { force: true }) ?? null,
+      render: () => renderSystem.renderSkyMaskFrame?.(rig.camera) ?? false,
+    },
     get ready() {
       return ready;
     },
@@ -725,6 +799,18 @@ export async function bootstrap() {
 
   apiRef = api;
   window.__PALACE__ = api;
+
+  // t58：接入 t9 交付的 UI（`mountInterface`）——`#app` 容器内构建 `#palace-ui`，样式与 :root 令牌由 ui 模块注入。
+  // · 唯一循环：UI 由本文件的 frameStep 驱动（见上），mountInterface 内部的 recordFrame 包装层随即停用（不重复推进）；
+  // · §11.3：`?ui=0` 或 `?shot=1` 时 ui 模块自身 `setVisible(false)`（forcedHidden），故截图路径仍无 UI；
+  // · 失败不影响核心：仅记录错误，渲染/交互/报告照常。
+  try {
+    uiHandle = mountInterface(api, { container: document.getElementById('app') ?? undefined });
+    api.ui = uiHandle;
+  } catch (error) {
+    uiHandle = null;
+    console.error('[palace] mountInterface 失败（UI 未上线；渲染与键盘交互不受影响）：', error);
+  }
   if (ready) resolveReady?.(api);
   log(
     `装配完成：区域 [${[...zones.keys()].join(', ')}] · 注册建筑 ${registry.stats().buildings} 栋 · ` +

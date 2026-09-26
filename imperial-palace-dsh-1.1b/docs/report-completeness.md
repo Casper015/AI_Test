@@ -202,3 +202,55 @@
 ### 8.5 attempt 3 结论
 
 **G2 判定维持通过**：三条契约 verify 命令全绿（exit 0 × 3），全量 53 项 52 PASS / 0 FAIL / 0 CONDITION，唯一 UNVERIFIED 为人类目视判读项；上一 attempt 的 4 项上游/外部项均已修复并逐条复验。
+
+---
+
+## 12. t77 追加：扩容后期望同步 + 43 处内景连通性独立复验（LAYOUT 1.1.4）
+
+> 本席（verifier）用自己的引擎独立复验 t75 的 43 条门洞通道面与内景可达性，不引用 layout.test 的断言。
+> 前置已确认：**F5 已修**（`src/core/context.js:79 WALKABLE_KINDS` 现含 `'passage'`），区域可正常装配。
+
+### 12.1 期望值同步（本席两个套件，按 LAYOUT 1.1.4 实测）
+
+| 断言 | 旧口径（扩容前） | 新口径（实测） | 依据 |
+| --- | --- | --- | --- |
+| `verify-completeness` 6.1 机位 | total 20 / interior 2 | **total 61 / zone 7 / fp-spawn 5 / interior 43 / focus-extra 6** | LAYOUT 1.1.4 实际注册表（t70/t72/t74 为每栋有门建筑派生内景机位；t75 加 43 条门洞通道面） |
+| `verify-completeness` 7.1 visitable | 仅 2 栋（金銮殿/寝殿） | **43 栋 = `INTERIOR_BY_SLOT` 43 条逐值一致，且 ∈ 53 栋有门建筑** | 原意（"只有可进入建筑被标记 visitable"）守住：改为与内景登记一一对应，不硬编码名单 |
+| `verify-experience` A3 机位普查 | 20（B/C 各 1 interior） | **61（zone 7 / fp-spawn 5（每区 1） / interior 43（按区 B10 C9 D4 E4 F4…）/ focus-extra 6）** | 同上；语义保持：zone 覆盖每区、fp-spawn 每区恰 1、B/C 必有 interior、interior 数 = `INTERIOR_BY_SLOT` 条数 |
+| `verify-completeness` 5.3 走查点 | 9 路点 + 2 内景 | **50 路点 + 5 fp-spawn + 43 内景** | `FP_ROUTE` 50（t75 冻结不变）；判据未放宽（仍是"同属一个连通分量"） |
+
+### 12.2 逐栋门洞通道面几何复核（43 行，不抽样）
+
+- **通道面存在**：43/43（`WK-<slotId>-door-passage`，与 `INTERIOR_BY_SLOT` 43 条一一对应）。
+- **宽度 == `door.width`**：**43/43** ✓（26/26、24/24、22/22、20/20、12/12 等逐值一致）。
+- **`y == door.sillY`**：**38/43**；不符 5 栋 —— `C-hall-bed-main`（passage 2.4 vs sillY 1.5）、`F-gate-{south,north,west,east}`（passage 0.4 = 已登记通道地面 vs sillY/groundY 12.4 = **城楼门洞**标高）。属"一栋两套标高"的记录语义问题（最小修法见 §12.5-F10）。
+- **`y == 该栋登记内景可行走面 y`**：**18/43**；**25 栋存在固定 0.4m 偏移**（例：`C-annex-east` 0.5 vs 1.4、`D-court1-hall` 0.9 vs 1.3、`E-court1-house` 0.5 vs 0.9）。即 t75 回执中"y = 该栋内景地面"对 25 栋并不字面成立：通道面取的是 `door.sillY`（门外门槛面），室内地面高出 0.4m（台明/门槛）。**好处**：0.4 ≤ 台阶阈值 0.5，因此这 25 栋反而**可通行**；**代价**：与回执表述不一致，且把"门槛→室内"的 0.4m 台阶留在了建筑内部。
+- **与室内面 / 室外面相接**：**43/43 / 43/43** ✓（gap ≤ 0.05m；并记录室外最小标高差：**8 栋 > 0.5m 台阶阈值**：`B-hall-mid(Δ2) B-hall-rear(Δ1.8) B-side-{east,west}-rear(Δ1) B-side-{east,west}-south(Δ0.9) E-court{1,2}-hall(Δ0.6)`）。
+
+### 12.3 生产口径连通性（本席引擎：walk-solver + walk-graph，cellSize=1，含 registry 障碍）
+
+- 起点 `WK-F-bridge-south` → **43 处内景：33 可达 / 10 不可达**（逐栋结论）：
+  **可达 33**：`B-gate-front`、`B-hall-main`、C 区 9 栋（含 `C-hall-bed-main`）、D 区 8 栋、E 区 `E-court{3,4}-*` 等、F 区 `F-gate-*` 4 座与 `F-garden-hall-*` 3 栋、`B-side-*` 中台明 ≤0.5m 的若干。
+  **不可达 10**：`B-side-west-south`、`B-side-east-south`、`B-side-west-main`、`B-side-east-main`、`B-side-west-rear`、`B-side-east-rear`、`B-hall-mid`、`B-hall-rear`、`E-court1-hall`、`E-court2-hall`（对应 `FP_ROUTE` 的 10 个"…门内"路点）。
+- **原因（实测定位）**：门洞通道面是**平面**且位于门内标高，室外地面比它低 **0.6–2.0m**（8 栋，见 §12.2），或内景位于 B 主殿**台基一层**（1.5m，2 栋）而其上台只能经**台基侧面台阶**；而**生产走查层（`src/interaction/walk-solver.js` / `walk-graph.js`）完全不消费 `layout.CONNECTORS`**（`grep -c connector` = 0），可行走面模型又没有坡道/台阶过渡 ⇒ 0.5m 台阶阈值把它们判为不可跨。
+- **改动前对照（本席自建无 passage 布局重建求解器与图）**：**改动前 0/43 → 改动后 33/43**（净增 33）⇒ 通道面确实带来连通性，t75 的"改动前不连通"在本席口径下**复现**；但"43/43 全连通"在生产口径下**不成立**。
+
+### 12.4 本卡判定
+
+- 期望同步（准则 1）：**完成**（上表，含语义依据）。
+- 连通性独立复验（准则 2）：**不通过** —— 43 处内景在生产口径下 33 可达 / **10 不可达**（逐栋已列，非抽样）。
+- 不放宽判据（准则 3）：**满足** —— 5.3 仍为"同属一个连通分量"强判据；另新增 5.4/5.4b/5.5/5.6（逐栋几何 + 改动前对照），未改为"内景面存在"这类弱形式。
+- 通道面几何（准则 4）：**部分不通过** —— 宽度 43/43 ✓、与室内外相接 43/43 ✓；但 `y == door.sillY` 38/43（5 栋不符，见 §12.2），`y == 内景地面` 18/43（25 栋 0.4m 偏移）。
+- 三条 verify：`verify-completeness.test.mjs` → 48 PASS / 3 FAIL（5.3 / 5.4 / 5.4b）；`verify-experience.test.mjs` → 24 PASS / 4 FAIL（B1 / B10 / C1 / F1）；`scripts/verify-completeness.mjs` 同源（5.3/5.4/5.4b 红）。红项归因见 §12.5。
+
+### 12.5 未通过项与最小修法（按 owner）
+
+- **F8（blocker，owner：t1/layout + core-engineer）**：**10 处内景在生产走查口径下不可达**（8 处门内外落差 0.6–2.0m；2 处位于 B 主殿台基一层，仅台基侧阶可达）。最小修法（二选一或并用）：① layout 在这 10 处门外登记**可行走过渡**（`ROADS` 段带 `from.y→to.y` 线性插值，跑长 ≥ Δy/0.62；或在 WALKABLE 体系里增加坡道面）——这是既有 `CXN-*-danbi` 已验证有效的机制；② core/interaction 让走查层**消费 `layout.CONNECTORS`（`kind:'stairs'/'gate'`）并赋予坡道语义**（本卡实测：当前 `walk-solver.js`/`walk-graph.js` 对 connectors 零引用；若采纳②，还需 layout 为这 10 处补登记 connector）。修好后判据 5.3 应自然转绿。
+- **F10（medium，owner：t1/layout）**：`door.sillY` 与内景地面/通道面标高的**双轨记录**未统一：25 栋通道面比室内地面低 0.4m（`door.sillY` 语义 = 门外门槛面），`C-hall-bed-main` 的 `door.sillY=1.5`/`INTERIOR_BY_SLOT.groundY=1.5` 与其实际内景面 2.4 冲突，`F-gate-*` 的 `sillY=12.4`（城楼门）与通道地面 0.4 并存。最小修法：在 CONTRACTS §4 明确 `door.sillY` = **门外门槛面**、内景地面另由 `INTERIOR_BY_SLOT.walkableId.y` 表达，并把 `C-hall-bed-main` 的 `sillY/groundY` 修正为 2.4（或通道面改为跟随门槛并补 0.4m 台阶说明）；城门保留双标高但需在文档标注"城楼门 ≠ 通道门"。
+- **F11（blocker for G4，owner：各区域 + core；非本卡 inScope）**：本次内景扩容后**分区绘制调用超预算**：`C 58/50`、`D 51/40`、`E 52/40`（激活 LOD 档、质量 medium、Node 装配口径；audit --enforce 同源）。最小修法：区域内对新内景陈设与门洞构件扩大合批/实例化（`kit.mergeZone` 已调用，但新内景件可能逐件独立），或按 §8.2 走"主 Agent 复核+调整配额"流程。
+- **F7（medium，owner：ui-engineer，与 t13 同源）**：信息面板仍以 layout 估值展示"脊高约 X m"（`src/ui/index.js:380`，数据 `src/interaction/catalog.js:205`）。
+- **F1（t13 遗留，非本卡）**：24 格矩阵 3 格受此前 0 区域装载/掩码错配影响，需在 F8/F11 收口后由 t13 复跑。
+
+### 12.6 过程记录（在飞状态，已恢复）
+
+本轮期间观察到两次瞬时装配失败并已恢复：`src/zones/forecourt.js:693 config.deriveSeed is not a function`（B 区）与 `garden-boundary.js ZONE is not defined`（F 区）——两者均在随后复跑中恢复（本次最终复跑 5 区全部装配成功）。如实记录，供 owner 参考是否仍有残留。

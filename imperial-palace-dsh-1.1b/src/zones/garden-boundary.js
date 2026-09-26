@@ -184,6 +184,7 @@ export async function createZone(ctx) {
     props: [],
     buildings: [],
     supports: [],
+    interiors: [],
     trees: { count: 0, blossom: 0, instances: [], minSeparation: TREE_MIN_SEPARATION, points: [] },
     notes: [],
   };
@@ -410,32 +411,58 @@ export async function createZone(ctx) {
   }
   audit.notes.push(`宫墙 ${audit.walls.length} 段、门洞 ${audit.walls.reduce((n, w) => n + w.openings.length, 0)} 个（门洞由 layout.WALLS.openings 派生）`);
 
-  // 2.1 城门城台（门洞两侧墩体 + 门额）；2.2 角楼城台
+  // 2.1 城门城台（门洞两侧墩体 + 门额 + 一侧"值房壁龛"）；2.2 角楼城台
+  /**
+   * t64：城门内景取**城台侧壁龛**（值房门房）——
+   *   · 形制正确：门殿的值守案/长凳/更鼓/门闩本就在门内两侧的值房里，不该套殿堂陈设；
+   *   · 硬约束：26m 通行横断面**零占用**（壁龛开在 |v| ≥ 门洞半宽之外，洞内 26m 净宽不变）；
+   *   · 地面取 layout 登记的 `WK-<gate>-interior.y`（= 门洞通道面 0.4，t72），不是墙顶门房 12.4。
+   */
+  const GATE_NICHE = Object.freeze({ depth: 8, along: 10, height: 3.2, inset: 0.6 });
+  const gateNiches = new Map();
   for (const gate of gateSlots) {
-    const alongZ = gate.door?.axis === 'x'; // 东西侧门：门洞沿 X 贯通
+    const alongZ = gate.door?.axis === 'x'; // true：门洞沿 X 贯通（东西侧门）
     const perpExtent = alongZ ? gate.d : gate.w;
     const depthExtent = alongZ ? gate.w : gate.d;
     const passHalf = (gate.door?.width ?? 26) / 2;
-    const blocks = alongZ
-      ? [
-          rect(gate.x - depthExtent / 2, gate.x + depthExtent / 2, gate.z - perpExtent / 2, gate.z - passHalf),
-          rect(gate.x - depthExtent / 2, gate.x + depthExtent / 2, gate.z + passHalf, gate.z + perpExtent / 2),
-        ]
-      : [
-          rect(gate.x - perpExtent / 2, gate.x - passHalf, gate.z - depthExtent / 2, gate.z + depthExtent / 2),
-          rect(gate.x + passHalf, gate.x + perpExtent / 2, gate.z - depthExtent / 2, gate.z + depthExtent / 2),
-        ];
-    const blockRecords = blocks.map((b, i) => addLand(`${gate.id}-platform-${i + 1}`, b, WALL_TOP, T.cityGroundY, MAT.platform, 'platform'));
-    const lintel = alongZ
-      ? rect(gate.x - depthExtent / 2, gate.x + depthExtent / 2, gate.z - passHalf, gate.z + passHalf)
-      : rect(gate.x - passHalf, gate.x + passHalf, gate.z - depthExtent / 2, gate.z + depthExtent / 2);
+    /** (u, v)：u 沿门洞轴、v 垂直门洞轴（自洞壁向外为正），相对城门中心。 */
+    const uv = (u0, u1, v0, v1) => (alongZ
+      ? rect(gate.x + u0, gate.x + u1, gate.z + v0, gate.z + v1)
+      : rect(gate.x + v0, gate.x + v1, gate.z + u0, gate.z + u1));
+    const wkFloor = L.WALKABLE.find((w) => w.id === `WK-${gate.id}-interior`);
+    const floorY = wkFloor ? wkFloor.y : T.cityGroundY + 0.4;
+    const nicheDepth = Math.max(4, Math.min(GATE_NICHE.depth, perpExtent / 2 - passHalf - 2));
+    const nicheAlong = Math.max(6, Math.min(GATE_NICHE.along, depthExtent - 6));
+    const v0 = passHalf;
+    const v1 = passHalf + nicheDepth;
+    const u0 = -nicheAlong / 2;
+    const u1 = nicheAlong / 2;
+    const pieces = [];
+    if (u0 > -depthExtent / 2 + 0.01) pieces.push({ id: 'a', r: uv(-depthExtent / 2, u0, v0, v1), y0: T.cityGroundY, y1: WALL_TOP });
+    if (u1 < depthExtent / 2 - 0.01) pieces.push({ id: 'b', r: uv(u1, depthExtent / 2, v0, v1), y0: T.cityGroundY, y1: WALL_TOP });
+    if (v1 < perpExtent / 2 - 0.01) pieces.push({ id: 'c', r: uv(u0, u1, v1, perpExtent / 2), y0: T.cityGroundY, y1: WALL_TOP });
+    pieces.push({ id: 'd', r: uv(u0, u1, v0, v1), y0: floorY + GATE_NICHE.height, y1: WALL_TOP }); // 龛上补砌
+    pieces.push({ id: 'e', r: uv(-depthExtent / 2, depthExtent / 2, -perpExtent / 2, -passHalf), y0: T.cityGroundY, y1: WALL_TOP }); // 对侧实心墩
+    pieces.push({ id: 'floor', r: uv(u0, u1, v0, v1), y0: T.cityGroundY, y1: floorY, material: MAT.pavingStone }); // 龛地坪（0 → 通道面）
+    const blockRecords = pieces.map((pc) => addLand(`${gate.id}-platform-${pc.id}`, pc.r, pc.y1, pc.y0, pc.material ?? MAT.platform, 'platform'));
+    const lintel = uv(-depthExtent / 2, depthExtent / 2, -passHalf, passHalf);
     const lintelRecord = addLand(`${gate.id}-lintel`, lintel, WALL_TOP, T.cityGroundY + GATE_OPENING_HEIGHT, MAT.platform, 'platform');
+    gateNiches.set(gate.id, {
+      rect: uv(u0, u1, v0, v1),
+      floorY,
+      ceilingY: floorY + GATE_NICHE.height,
+      entrance: alongZ ? { x: gate.x, z: gate.z + v0 } : { x: gate.x + v0, z: gate.z },
+      passageClearWidth: passHalf * 2,
+      depth: nicheDepth,
+      along: nicheAlong,
+    });
     audit.platforms.push({
       id: `${gate.id}-platform`,
       purpose: 'gate',
       gateId: gate.id,
       top: WALL_TOP,
       passage: { axis: alongZ ? 'x' : 'z', center: { x: gate.x, z: gate.z }, width: passHalf * 2, height: GATE_OPENING_HEIGHT },
+      niche: { rect: roundRect(gateNiches.get(gate.id).rect), floorY: round3(floorY), ceilingY: round3(floorY + GATE_NICHE.height), depth: round3(nicheDepth), along: round3(nicheAlong), alongZ },
       blocks: [...blockRecords, lintelRecord].map((b) => ({ id: b.id, rect: b.rect, y0: b.y0, y1: b.y1 })),
     });
   }
@@ -505,6 +532,128 @@ export async function createZone(ctx) {
     });
   }
   audit.notes.push(`建筑 ${buildings.length} 栋（角楼 ${towerSlots.length} / 城门 ${gateSlots.length} / 花园 ${gardenSlots.length}）`);
+
+  /* ======================================================================== */
+  /*  3b. 室内陈设（t64：F 区 7 处内景 —— 4 城门值房壁龛 + 御花园北殿 + 东/西配殿）    */
+  /* ======================================================================== */
+  /* 集合以 layout 实测清单为准（`interiorsByZone('F')`；角楼/开敞亭不在其内）；
+     套件不含灯光 ⇒ 本区按套件灯体公式另发 `windowGlow` 灯位，由 t2 环境系统按距离激活实时点光。 */
+  const interiorRecords = typeof L.interiorsByZone === 'function' ? L.interiorsByZone(ZONE_ID) : [];
+  const interiors = [];
+  const interiorLightAnchors = [];
+  const INTERIOR_KIND_BY_SLOT_KIND = Object.freeze({ gateHall: 'gateHall', hall: 'hall', sideHall: 'sideHall' });
+  for (const rec of interiorRecords) {
+    const slot = citySlots.find((sl) => sl.id === rec.slotId);
+    const building = buildings.find((b) => b.id === rec.slotId);
+    const kind = INTERIOR_KIND_BY_SLOT_KIND[slot?.kind];
+    if (!slot || !building || !kind) {
+      note('interior-skip', `${rec.slotId} 不在本区可布陈设集合（kind=${slot?.kind ?? '?'}）`);
+      continue;
+    }
+    if (typeof kit.interiorSet !== 'function') {
+      note('no-interior-factory', 'kit 缺少 interiorSet（t61 未就位）');
+      break;
+    }
+    // 室内地面：以 layout 登记的**内景可行走面**为准（城门 = 门洞通道面 0.4；殿 = 台基顶）
+    const wk = L.WALKABLE.find((w) => w.id === rec.walkableId);
+    const groundY = wk ? wk.y : slot.baseY;
+    let bounds; let ceilingY; let entrance; let inset;
+    if (slot.kind === 'gateHall') {
+      const niche = gateNiches.get(slot.id);
+      if (!niche) {
+        note('interior-skip', `${slot.id} 缺城门值房壁龛（不套殿堂陈设）`);
+        continue;
+      }
+      bounds = niche.rect;
+      ceilingY = niche.ceilingY;
+      entrance = niche.entrance;
+      inset = GATE_NICHE.inset;
+    } else {
+      // 殿身内净尺寸取自 kit 实测 metrics（bodyW/bodyD），避免用 slot.bounds（含台明/出檐）导致陈设出墙
+      const bodyW = building.metrics?.bodyW ?? (slot.w - 2 * M.plinthWidth);
+      const bodyD = building.metrics?.bodyD ?? (slot.d - 2 * M.plinthWidth);
+      const rot = (((slot.rotationYDeg ?? 0) % 180) + 180) % 180;
+      const alongX = rot < 1e-6;
+      const halfX = (alongX ? bodyW : bodyD) / 2;
+      const halfZ = (alongX ? bodyD : bodyW) / 2;
+      bounds = rect(slot.x - halfX, slot.x + halfX, slot.z - halfZ, slot.z + halfZ);
+      const groupOriginY = groundY - slot.terraceH; // 本区落位口径：组原点 = 台基底（见文件头）
+      const localEave = building.metrics?.eaveHeight ?? (slot.terraceH + M.eaveHeight);
+      ceilingY = Math.max(
+        groundY + 2.2,
+        Math.min(groupOriginY + localEave - 0.6, (building.worldBounds?.maxY ?? groupOriginY + localEave) - 0.8),
+      );
+      entrance = { x: slot.x, z: bounds.minZ }; // F 区殿门一律朝南（facing='south'），入口在 -Z 侧
+      inset = 0.9;
+    }
+    const object = kit.interiorSet({
+      id: `${slot.id}-interior`,
+      kind,
+      grade: slot.grade,
+      bounds,
+      groundY,
+      ceilingY,
+      entrance,
+      inset,
+      seed: deriveSeed(ZONE_ID, `interior:${slot.id}`),
+      // 预算证据（见回执 §3）：'auto' 的 LOD 近/中两档会被 audit 全量口径各计一批（+24 调用），
+      // 'near' 单档只增 N 个部位桶（实测 F 61→72 ≤80），故取 'near'；t61 的空远景档语义不变。
+      lod: 'near',
+    });
+    root.add(object);
+    const meta = object.userData?.kit ?? {};
+    const triNear = meta.metrics?.triangles?.near ?? 0;
+    interiors.push({
+      slotId: slot.id,
+      kind,
+      grade: slot.grade,
+      groundY: round3(groundY),
+      ceilingY: round3(ceilingY),
+      bounds: roundRect(bounds),
+      items: meta.metrics?.items ?? [],
+      triangles: triNear,
+      worldBounds: meta.metrics?.worldBounds ?? null,
+      warnings: (meta.warnings ?? []).map((w) => w.code),
+      object,
+    });
+    audit.interiors.push({
+      slotId: slot.id,
+      kind,
+      grade: slot.grade,
+      groundY: round3(groundY),
+      ceilingY: round3(ceilingY),
+      rect: roundRect(bounds),
+      items: meta.metrics?.items ?? [],
+      triangles: triNear,
+      worldBounds: meta.metrics?.worldBounds ?? null,
+      warnings: (meta.warnings ?? []).map((w) => w.code),
+      avenue: slot.kind === 'gateHall' ? '城台值房壁龛（洞内 26m 净宽零占用）' : '殿内陈设',
+    });
+    // 室内灯位：按套件灯体公式（lampCount=2，lx=inner.minX+1.2 / inner.maxX-1.2，lz=cz+frontSign*min(spanZ*0.25,3)）
+    const innerX = { min: bounds.minX + inset, max: bounds.maxX - inset };
+    const innerZ = { min: bounds.minZ + inset, max: bounds.maxZ - inset };
+    const icx = (innerX.min + innerX.max) / 2;
+    const icz = (innerZ.min + innerZ.max) / 2;
+    const spanZ = innerZ.max - innerZ.min;
+    const frontSign = (entrance?.z ?? bounds.minZ) <= icz ? 1 : -1;
+    const lampZ = icz + frontSign * Math.min(spanZ * 0.25, 3);
+    const lampHeight = Math.max(2.0, Math.min(2.6, (ceilingY - groundY) * 0.45)); // 抬高一点：低灯在日/夕弱灯下floor易暗
+    // 两处：与套件可见灯体同址（灯体在侧墙内侧，避开内景机位正前方，实测无高光截断）
+    const lampXs = [innerX.min + 1.2, innerX.max - 1.2];
+    const lampZs = [lampZ, lampZ];
+    lampXs.forEach((lx, i) => {
+      interiorLightAnchors.push({
+        id: `LA-F-int-${slot.id}-${i + 1}`,
+        zone: ZONE_ID,
+        kind: 'windowGlow',
+        position: { x: round3(lx), y: round3(groundY), z: round3(lampZs[i]) },
+        height: round3(lampHeight),
+        role: 'windowGlow',
+        note: `${slot.name}室内补光（t61 套件不含灯光，t64 布 2 处，与套件灯体同址）`,
+      });
+    });
+  }
+  audit.notes.push(`室内陈设 ${interiors.length} 处（${interiors.map((i) => i.slotId).join('/')}）；新增室内灯位 ${interiorLightAnchors.length} 处`);
 
   /* ======================================================================== */
   /*  4. 御花园：廊道、假山、照壁、曲折步道、树群、宫灯                             */
@@ -775,7 +924,10 @@ export async function createZone(ctx) {
   };
 
   // 4.5 宫灯（layout.LIGHT_ANCHORS 的 F 条目；灯体实例化，灯光由环境系统生成）
-  const lightAnchors = zoneLayout.lightAnchors.map((a) => ({ ...a, position: { ...a.position } }));
+  const lightAnchors = [
+    ...zoneLayout.lightAnchors.map((a) => ({ ...a, position: { ...a.position } })),
+    ...interiorLightAnchors, // t64：室内补光灯位（windowGlow），与 layout 基线灯位并存
+  ];
   const lanternInstances = [];
   if (typeof kit.instance === 'function' && typeof kit.lantern === 'function' && lightAnchors.length > 0) {
     const proto = kit.lantern({ id: 'F-lantern-proto', height: 3.2, detail: 'mid', kind: 'post' });
@@ -1060,6 +1212,10 @@ export async function createZone(ctx) {
     lanterns: lightAnchors.length,
     lanternInstances: lanternInstances.length,
     windingPath: winding,
+    interiors: interiors.length,
+    interiorTriangles: interiors.reduce((n, i) => n + i.triangles, 0),
+    interiorItems: interiors.map((i) => `${i.slotId}:${i.items.length}`).join(' '),
+    interiorLightAnchors: interiorLightAnchors.length,
     connectors: connectors.length,
     obstacles: colliders.obstacles.length,
     walkable: colliders.walkable.length,

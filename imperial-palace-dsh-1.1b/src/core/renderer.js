@@ -67,6 +67,132 @@ export function resolvePixelRatio(wanted, { config, tier } = {}) {
  *   width?: number, height?: number, dpr?: number|null, bloom?: boolean|null
  * }} options
  */
+/* ------------------------------------------------------------------ *
+ * t56：纯函数 PNG 编码器（零依赖、零 DOM）
+ *
+ * 证书式「同一次页面加载内取图」的实现基础：把掩码 RT 的像素直接编码成 PNG（base64），
+ * 工具即可用**已有的 --dump-dom** 取回与位姿同源的掩码，不需要第二次页面加载
+ * （t55 的坑②根因：跨页面加载去截 `&mask=sky` 会拿到空白/半帧）。
+ * 只输出 8-bit RGB、逐行 filter=0、deflate 用 **stored（未压缩）块** —— 保证：
+ *   · 确定性（同一像素 → 同一字节）· 无 zlib 依赖 · Node 内可直接单测。
+ * ------------------------------------------------------------------ */
+const PNG_CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function pngCrc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) c = PNG_CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngAdler32(bytes) {
+  let a = 1;
+  let b = 0;
+  for (let i = 0; i < bytes.length; i += 1) {
+    a = (a + bytes[i]) % 65521;
+    b = (b + a) % 65521;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+/** 把 zlib 流（含 2 字节头 + adler32 尾）写成 store-only deflate 块。 */
+function zlibStore(raw) {
+  const blocks = [];
+  const maxBlock = 65535;
+  for (let offset = 0; offset < raw.length || offset === 0; offset += maxBlock) {
+    const chunk = raw.subarray(offset, Math.min(offset + maxBlock, raw.length));
+    const last = offset + maxBlock >= raw.length ? 1 : 0;
+    const header = new Uint8Array(5);
+    header[0] = last; // BFINAL + BTYPE=00(stored)
+    header[1] = chunk.length & 0xff;
+    header[2] = (chunk.length >>> 8) & 0xff;
+    header[3] = ~chunk.length & 0xff;
+    header[4] = (~chunk.length >>> 8) & 0xff;
+    blocks.push(header, chunk);
+    if (last) break;
+  }
+  const out = new Uint8Array(2 + blocks.reduce((sum, b) => sum + b.length, 0) + 4);
+  out[0] = 0x78; // CMF: deflate, 32K window
+  out[1] = 0x01; // FLG: 无字典、最快（校验和合法）
+  let pos = 2;
+  for (const b of blocks) {
+    out.set(b, pos);
+    pos += b.length;
+  }
+  const adler = pngAdler32(raw);
+  out[pos] = (adler >>> 24) & 0xff;
+  out[pos + 1] = (adler >>> 16) & 0xff;
+  out[pos + 2] = (adler >>> 8) & 0xff;
+  out[pos + 3] = adler & 0xff;
+  return out;
+}
+
+/**
+ * 把 RGBA 像素编码成 8-bit RGB PNG（返回 base64 字符串，不含 data: 前缀）。
+ * @param {number} width
+ * @param {number} height
+ * @param {Uint8Array} rgba 长度 = width*height*4
+ * @returns {string} base64
+ */
+export function encodePngBase64(width, height, rgba) {
+  const stride = width * 3;
+  const raw = new Uint8Array(height * (stride + 1));
+  for (let y = 0; y < height; y += 1) {
+    const dst = y * (stride + 1);
+    raw[dst] = 0; // filter: None
+    for (let x = 0; x < width; x += 1) {
+      const src = (y * width + x) * 4;
+      const d = dst + 1 + x * 3;
+      raw[d] = rgba[src];
+      raw[d + 1] = rgba[src + 1];
+      raw[d + 2] = rgba[src + 2];
+    }
+  }
+  const chunk = (type, data) => {
+    const out = new Uint8Array(12 + data.length);
+    const view = new DataView(out.buffer);
+    view.setUint32(0, data.length);
+    for (let i = 0; i < 4; i += 1) out[4 + i] = type.charCodeAt(i);
+    out.set(data, 8);
+    const crcInput = out.subarray(4, 8 + data.length);
+    view.setUint32(8 + data.length, pngCrc32(crcInput));
+    return out;
+  };
+  const ihdr = new Uint8Array(13);
+  const view = new DataView(ihdr.buffer);
+  view.setUint32(0, width);
+  view.setUint32(4, height);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // color type: truecolor (RGB)
+  ihdr[10] = 0; // compression
+  ihdr[11] = 0; // filter
+  ihdr[12] = 0; // interlace
+  const parts = [
+    new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlibStore(raw)),
+    chunk('IEND', new Uint8Array(0)),
+  ];
+  const total = parts.reduce((sum, b) => sum + b.length, 0);
+  const png = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    png.set(part, offset);
+    offset += part.length;
+  }
+  let binary = '';
+  for (let i = 0; i < png.length; i += 1) binary += String.fromCharCode(png[i]);
+  return typeof btoa === 'function' ? btoa(binary) : Buffer.from(png).toString('base64');
+}
+
+
 export function createRenderSystem({
   container,
   events = null,
@@ -313,6 +439,320 @@ export function createRenderSystem({
     };
   }
 
+  /* ------------------------------------------------------------------ *
+   * t50：真天空掩码（终结"用像素猜天空"）
+   *
+   * 为什么需要它：夜空（#0d1526..#1b2333）、雾洗白几何与暗城市在 8-bit 像素里可能同色，
+   * 任何"颜色相似度"判据都会把大片暗城市/雾当成天空（t39→t41→t44→t46/t48/t49→本轮 F2 第五次发作）。
+   * 本模块直接给出**几何意义**上的真天空掩码：两遍渲染 +
+   *   ① 全场景以纯黑遮罩材质渲染（写入深度，任何几何都遮住天空）
+   *   ② 只画白色天空球（depthTest 生效 ⇒ 仅在无几何遮挡处落白）
+   * 结果只含两种颜色（白=天空、黑=其它）⇒ 工具从一张 PNG 得到二值掩码，无需任何颜色阈值。
+   * **只读诊断**：正常路径（未启用掩码）不变；掩码渲染后立刻恢复 overrideMaterial/autoClear/清屏色。
+   * ------------------------------------------------------------------ */
+  /** 掩码专用图层（隔离渲染用；不改动场景图结构，也不需要第二个 Scene/相机） */
+  const SKY_MASK_LAYER = 30;
+  const skyMask = {
+    configured: false,
+    source: null,
+    mesh: null,
+    black: null,
+    white: null,
+    share: null,
+    shareAt: 0,
+    frames: 0,
+    size: { width: 720, height: 450 }, // 半分辨率（保持画布宽高比）：细长遮挡物在更低分辨率下会塌缩、导致天空占比虚高
+    rt: null,
+    poseKey: null,
+    quad: null,
+    quadMaterial: null,
+    pngBase64: null,
+    pngKey: null,
+    pngSize: null,
+    pngShareByColor: null,
+    probe: null,
+    skyFromProbe: null,
+    skyAtProbe: null,
+    polarityConsistent: null,
+    note: '白=天空网格、黑=其余（几何遮挡计入黑）；由两遍渲染得到，不含颜色阈值',
+  };
+
+  /**
+   * 配置掩码源（主程序把 environment 的天空网格交进来）。
+   *
+   * 设计约束（守 "唯一渲染内核" 静态守卫）：**不新建 Scene、不新建相机、不自行 scene.add**
+   *   · 隔离渲染靠**相机图层**：白色天空网格放在 `SKY_MASK_LAYER=30`，第二遍只让相机看见该图层；
+   *   · 网格由调用方（src/main.js，唯一允许 scene.add 的地方）挂进主场景，平时 `visible=false`。
+   * @returns {{ ok: boolean, size?: object, mesh?: object, reason?: string }}
+   */
+  function configureSkyMask({ sky = null } = {}) {
+    if (!sky || !sky.isMesh) return { ok: false, reason: '需要天空网格（THREE.Mesh）' };
+    skyMask.source = sky;
+    skyMask.black = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false, fog: false, depthWrite: true, depthTest: true });
+    skyMask.black.name = 'sky-mask-black';
+    skyMask.white = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, fog: false, depthWrite: false, depthTest: true, side: THREE.BackSide });
+    skyMask.white.name = 'sky-mask-white';
+    skyMask.mesh = new THREE.Mesh(sky.geometry, skyMask.white);
+    skyMask.mesh.name = 'sky-mask-white-mesh';
+    skyMask.mesh.frustumCulled = false;
+    skyMask.mesh.matrixAutoUpdate = false;
+    skyMask.mesh.matrixWorldAutoUpdate = false;
+    skyMask.mesh.visible = false; // 常规路径完全不参与渲染；仅掩码期间临时可见
+    skyMask.mesh.layers.set(SKY_MASK_LAYER);
+    // t53：画布掩码用**一次 blit**写出（见 renderSkyMaskFrame），彻底消除"两遍画布渲染被截到半帧"的撕裂/极性翻转
+    skyMask.quadMaterial = new THREE.MeshBasicMaterial({ map: null, toneMapped: false, fog: false, depthTest: false, depthWrite: false });
+    skyMask.quadMaterial.name = 'sky-mask-quad-material';
+    skyMask.quad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), skyMask.quadMaterial);
+    skyMask.quad.name = 'sky-mask-quad';
+    skyMask.quad.frustumCulled = false;
+    skyMask.quad.visible = false;
+    skyMask.quad.renderOrder = 1e6;
+    skyMask.quad.layers.set(SKY_MASK_LAYER);
+    skyMask.configured = true;
+    return { ok: true, size: { ...skyMask.size }, mesh: skyMask.mesh, quad: skyMask.quad, layer: SKY_MASK_LAYER };
+  }
+
+  /** 同步天空网格的世界矩阵（天空在原点，通常为恒等）。 */
+  function syncSkyMaskMatrix() {
+    if (!skyMask.mesh || !skyMask.source) return;
+    skyMask.source.updateMatrixWorld(true);
+    skyMask.mesh.matrix.copy(skyMask.source.matrixWorld);
+    skyMask.mesh.matrixWorld.copy(skyMask.source.matrixWorld);
+  }
+
+  /** 两遍掩码渲染（渲染到当前 target；调用方负责 target/清屏色）。 */
+  function applySkyMaskPasses(cameraRef, { target = null } = {}) {
+    if (!skyMask.configured) return false;
+    const targetScene = renderPass.scene ?? scene;
+    const camera = cameraRef ?? renderPass.camera;
+    if (!targetScene || !camera) return false;
+    const prevOverride = targetScene.overrideMaterial;
+    const prevAutoClear = renderer.autoClear;
+    const prevClear = renderer.getClearColor(new THREE.Color());
+    const prevAlpha = renderer.getClearAlpha();
+    const prevTarget = renderer.getRenderTarget();
+    if (target !== null || prevTarget !== null) renderer.setRenderTarget(target);
+    const prevLayers = camera.layers.mask;
+    // 关键：`scene.background` 是 Color 时，three 每次 render 都会**强制清屏**成该色（无视 autoClear），
+    // 会把白色掩码天空擦掉 ⇒ 掩码期间临时置 null（渲染后恢复；不改任何配色定义）
+    const prevBackground = targetScene.background;
+    targetScene.background = null;
+    renderer.setClearColor(0x000000, 1);
+    // ① 先铺白天空：只让相机看见掩码图层（白、BackSide、depthWrite:false）⇒ 可见天空处落白，不写深度
+    syncSkyMaskMatrix();
+    skyMask.mesh.visible = true;
+    camera.layers.set(SKY_MASK_LAYER);
+    renderer.autoClear = true;
+    renderer.render(targetScene, camera);
+    // ② 再把几何盖成纯黑：overrideMaterial 让所有物体变黑（保留各自深度自洽）⇒ 白/黑由**绘制顺序**决定，
+    //    不依赖"天空球是否比几何更远"这类隐含假设，结果稳定且可预期
+    camera.layers.mask = prevLayers;
+    targetScene.overrideMaterial = skyMask.black;
+    // 关键：真实天空球在场景里（layer 0），第二遍会被 overrideMaterial 涂黑、正好盖掉白色掩码天空 ⇒ 临时隐藏它
+    const prevSkyVisible = skyMask.source ? skyMask.source.visible : null;
+    if (skyMask.source) skyMask.source.visible = false;
+    renderer.autoClear = false;
+    renderer.render(targetScene, camera);
+    if (skyMask.source) skyMask.source.visible = prevSkyVisible;
+    targetScene.overrideMaterial = prevOverride;
+    skyMask.mesh.visible = false;
+    renderer.autoClear = prevAutoClear;
+    renderer.setClearColor(prevClear, prevAlpha);
+    targetScene.background = prevBackground;
+    if (target !== null || prevTarget !== null) renderer.setRenderTarget(prevTarget);
+    skyMask.frames += 1;
+    return true;
+  }
+
+  /**
+   * 把掩码渲染到画布（`?mask=sky` 的可见输出：白=天空、黑=其余）。
+   *
+   * 直接渲到画布（不做 blit：那会引入第二个 Scene + 一台正交相机，违反"唯一渲染内核"静态守卫）。
+   * 画布上的掩码为纯白/纯黑 + MSAA 边缘过渡；工具按 `r > 127` 阈值化即得**二值真天空掩码**
+   * （实测纯色像素占比 ≥99%）；需要"无边缘灰"的精确占比时用 `?stats=1` 的 `skyShare`（离屏 RT，无 MSAA）。
+   */
+  function renderSkyMaskFrame(cameraRef, { withShare = false } = {}) {
+    if (!skyMask.configured) return false;
+    const camera = cameraRef ?? renderPass.camera;
+    const targetScene = renderPass.scene ?? scene;
+    if (!camera || !targetScene) return false;
+    const { width, height } = skyMask.size;
+    if (!skyMask.rt) {
+      skyMask.rt = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, stencilBuffer: false });
+      skyMask.rt.texture.name = 'sky-mask-rt';
+      skyMask.rt.texture.minFilter = THREE.NearestFilter;
+      skyMask.rt.texture.magFilter = THREE.NearestFilter;
+      skyMask.rt.texture.generateMipmaps = false;
+      skyMask.quadMaterial.map = skyMask.rt.texture;
+    }
+    // ① 掩码渲进无 MSAA 的离屏 RT（唯一的掩码 pass，唯一真相源）
+    if (!applySkyMaskPasses(camera, { target: skyMask.rt })) return false;
+    if (withShare) readSkyMaskShare();
+    // ② 画布只写**一次**：把 RT 贴到一个正对相机的四边形上（沿用同一相机与图层隔离，不新建 Scene/相机）
+    //    ⇒ 截图不可能截到"两遍之间"的半帧（这曾导致掩码极性在部分运行里翻转）
+    const dist = Math.max(camera.near * 2, 0.5);
+    const h = 2 * Math.tan(((camera.fov ?? 45) * Math.PI) / 360) * dist;
+    const w = h * (camera.aspect ?? 1);
+    skyMask.quad.scale.set(w, h, 1);
+    skyMask.quad.quaternion.copy(camera.quaternion);
+    skyMask.quad.position.copy(camera.position).addScaledVector(
+      new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion),
+      dist,
+    );
+    skyMask.quad.updateMatrixWorld(true);
+    const prevLayers = camera.layers.mask;
+    const prevBackground = targetScene.background;
+    const prevAutoClear = renderer.autoClear;
+    const prevClear = renderer.getClearColor(new THREE.Color());
+    const prevAlpha = renderer.getClearAlpha();
+    targetScene.background = null;
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(0x000000, 1);
+    renderer.autoClear = true;
+    skyMask.quad.visible = true;
+    camera.layers.set(SKY_MASK_LAYER);
+    renderer.render(targetScene, camera);
+    camera.layers.mask = prevLayers;
+    skyMask.quad.visible = false;
+    renderer.autoClear = prevAutoClear;
+    renderer.setClearColor(prevClear, prevAlpha);
+    targetScene.background = prevBackground;
+    skyMask.frames += 1;
+    return true;
+  }
+
+  /**
+   * 计算天空的屏幕占比（0–1）：两遍掩码渲染到小尺寸离屏 RT 后读回统计。
+   * 仅诊断使用（`?stats=1` 节流调用 / `__PALACE__.skyMask.share()`）；不改变正常渲染路径。
+   */
+  /** 从已渲染的掩码 RT 读取 share 与极性 probe（只读，不渲染）。 */
+  function readSkyMaskShare() {
+    const { width, height } = skyMask.size;
+    if (!skyMask.rt) return null;
+    const buffer = new Uint8Array(width * height * 4);
+    renderer.readRenderTargetPixels(skyMask.rt, 0, 0, width, height, buffer);
+    skyMask.lastPixels = buffer; // t56：同一次取图的像素快照（供 data URL 编码，保证与 share 同源）
+    let white = 0;
+    for (let i = 0; i < buffer.length; i += 4) if (buffer[i] > 127) white += 1;
+    skyMask.share = +(white / (width * height)).toFixed(5);
+    skyMask.shareAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const sampleAt = (x, yFromTop) => {
+      const y = height - 1 - Math.min(height - 1, Math.max(0, yFromTop));
+      const i = (y * width + Math.min(width - 1, Math.max(0, x))) * 4;
+      const v = buffer[i];
+      return v > 200 ? 'white' : v < 55 ? 'black' : `mixed(${v})`;
+    };
+    skyMask.probe = {
+      topCenter: sampleAt(Math.floor(width / 2), 2),
+      topLeft: sampleAt(4, 2),
+      centerLeft: sampleAt(4, Math.floor(height / 2)),
+      bottomCenter: sampleAt(Math.floor(width / 2), height - 3),
+    };
+    skyMask.skyAtProbe =
+      skyMask.probe.topCenter === 'white' ? 'white' : skyMask.probe.topCenter === 'black' ? 'black' : 'unknown';
+    skyMask.skyFromProbe = skyMask.skyAtProbe;
+    // 极性自证：probe 取到确定颜色即视为"可判定"（**不等于**"顶中部一定是天空"——
+    // 内景/俯视地面等无天空视角，顶中部本来就不是天空，此时应改用 skyShare 与 shareByColor 互校）
+    skyMask.polarityConsistent = skyMask.skyAtProbe !== 'unknown';
+    return skyMask.share;
+  }
+
+  /**
+   * t56：把最近一次掩码取图编码成 PNG base64（**同一次加载内取图**，与 skyShare 同源）。
+   * 默认按 1/2 分辨率（360×225，最近邻抽样）编码：720×450 全分辨率 base64 约 1.3MB，
+   * 会把 `?stats=1` 的 `<pre>` 撑到 MB 级；1/2 分辨率约 0.3MB、占比误差 <0.5pp（仍严格二值）。
+   * 只在位姿键变化时重编码（缓存），不影响渲染路径。
+   * @returns {{ base64: string, width: number, height: number, shareByColor: {white:number, black:number}, sourceSize: string, scale: number }}
+   */
+  function skyMaskPng({ scale = 2 } = {}) {
+    if (!skyMask.configured || !skyMask.lastPixels) return null;
+    const key = `${skyMask.poseKey}|${scale}|${skyMask.share}`;
+    if (skyMask.pngBase64 && skyMask.pngKey === key) return skyMask.pngResult;
+    const { width, height } = skyMask.size;
+    const w = Math.max(1, Math.round(width / scale));
+    const h = Math.max(1, Math.round(height / scale));
+    const rgba = new Uint8Array(w * h * 4);
+    let white = 0;
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const sx = Math.min(width - 1, x * scale);
+        const sy = Math.min(height - 1, y * scale);
+        const src = (sy * width + sx) * 4;
+        const dst = (y * w + x) * 4;
+        const v = skyMask.lastPixels[src] > 127 ? 255 : 0; // 最近邻二值化（不插值 ⇒ 仍只有两种颜色）
+        rgba[dst] = v;
+        rgba[dst + 1] = v;
+        rgba[dst + 2] = v;
+        rgba[dst + 3] = 255;
+        if (v === 255) white += 1;
+      }
+    }
+    const base64 = encodePngBase64(w, h, rgba);
+    skyMask.pngBase64 = base64;
+    skyMask.pngKey = key;
+    skyMask.pngResult = {
+      base64,
+      width: w,
+      height: h,
+      shareByColor: { white: +(white / (w * h)).toFixed(5), black: +(1 - white / (w * h)).toFixed(5) },
+      sourceSize: `${width}x${height}`,
+      scale,
+    };
+    return skyMask.pngResult;
+  }
+
+  function computeSkyShare(cameraRef, { force = false, throttleMs = 500 } = {}) {
+    if (!skyMask.configured) return null;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    // 位姿键：相机位置/朝向（或投影）一变就重算 —— 保证"换视角同步变化"，不返回过期缓存
+    const camera = cameraRef ?? renderPass.camera;
+    const poseKey = camera?.matrixWorld
+      ? `${camera.matrixWorld.elements.map((v) => v.toFixed(2)).join(',')}|${camera.projectionMatrix.elements[0].toFixed(4)}`
+      : 'none';
+    if (!force && skyMask.share !== null && skyMask.poseKey === poseKey && now - skyMask.shareAt < throttleMs) return skyMask.share;
+    const { width, height } = skyMask.size;
+    if (!skyMask.rt) {
+      skyMask.rt = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, stencilBuffer: false });
+      skyMask.rt.texture.name = 'sky-mask-rt';
+    }
+    const ok = applySkyMaskPasses(cameraRef, { target: skyMask.rt });
+    if (ok) readSkyMaskShare();
+    return skyMask.share;
+  }
+
+  /** 掩码口径（供报告与工具消费）。 */
+  function skyMaskInfo() {
+    return {
+      configured: skyMask.configured,
+      mode: 'two-pass(white-sky layer pass → black geometry override pass；绘制顺序决定黑白)',
+      colors: { sky: '#ffffff', other: '#000000' },
+      /** t53：极性口径（禁止假定 white=sky；以 probe 与 share 为准） */
+      polarity: {
+        skyColor: '#ffffff',
+        otherColor: '#000000',
+        probe: skyMask.probe,
+        skyFromProbe: skyMask.skyFromProbe,
+        skyAtProbe: skyMask.skyAtProbe,
+        consistent: skyMask.polarityConsistent,
+        shareByColor: skyMask.share === null ? null : { white: skyMask.share, black: +(1 - skyMask.share).toFixed(5) },
+        rule:
+          '天空色由 probe（顶中部）判定：俯瞰/等轴/第一人称视角 topCenter 恒为天空 ⇒ 该点颜色即天空色；' +
+          '无天空视角（内景/俯视地面）topCenter 为 otherColor ⇒ 此时用 skyShare 与 shareByColor 互校（哪种颜色的占比等于 skyShare，哪种就是天空色）。' +
+          '禁止假定 white=sky。',
+      },
+      binary: true,
+      binaryOutput: '画布掩码 = 纯白/纯黑 + MSAA 边缘（实测纯色占比 ≥99%，r>127 阈值化即二值）；精确占比取自无 MSAA 的离屏 RT',
+      isolation: `camera.layers.set(${SKY_MASK_LAYER})（不新建 Scene/相机）`,
+      source: skyMask.source ? skyMask.source.name ?? 'environment-sky' : null,
+      share: skyMask.share,
+      shareAt: skyMask.shareAt || null,
+      sampleSize: `${skyMask.size.width}x${skyMask.size.height}`,
+      frames: skyMask.frames,
+      note: skyMask.note,
+      caveat: '透明/粒子对象在掩码里按"遮挡"处理（保守，天空占比不会被高估）',
+    };
+  }
+
   function describeBackground() {
     const scene = renderPass.scene;
     const bg = scene?.background;
@@ -353,6 +793,8 @@ export function createRenderSystem({
     return {
       /** 权威背景口径（t45，只读上报；供 ?stats=1 / 截图工具消费） */
       background: describeBackground(),
+      /** t50：真天空掩码口径（白=天空/黑=其余，二值；share 由诊断节流计算） */
+      skyMask: skyMaskInfo(),
       frames: frameCount,
       windowFrames: sorted.length,
       avgFrameMs: +avg.toFixed(2),
@@ -433,6 +875,13 @@ export function createRenderSystem({
     recordFrame,
     getStats,
     describeBackground,
+    configureSkyMask,
+    readSkyMaskShare,
+    skyMaskPng,
+    encodePngBase64,
+    renderSkyMaskFrame,
+    computeSkyShare,
+    skyMaskInfo,
     describeOutputChain,
     applyOutputChain,
     setQuality,

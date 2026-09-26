@@ -9,6 +9,7 @@
  * 零 three 依赖（THREE 由调用方注入），可在 Node 直接 import 并使用。
  */
 
+import * as SHARED_CONFIG from '../shared/config.js';
 import { CONFIG, EVENTS, MODULES, INTERACTION } from '../shared/config.js';
 import * as LAYOUT from '../shared/layout.js';
 import {
@@ -68,7 +69,15 @@ export const ZONE_RESULT_FIELDS = Object.freeze([
 ]);
 
 export const VIEWPOINT_MODES = Object.freeze(['zone', 'interior', 'fp-spawn', 'focus-extra']);
-export const WALKABLE_KINDS = Object.freeze(['ground', 'terrace', 'interior', 'bridgeDeck', 'gardenGround', 'outerTerrain']);
+/**
+ * 可行走面 kind 白名单（**跨模块共享枚举**）。
+ *
+ * t79：新增 `'passage'`（LAYOUT 1.1.4 / t75 的 43 条 `WK-<id>-door-passage` 门洞通道面）。
+ * 新增取值的纪律：本白名单是 layout `WALKABLE[].kind` 的**消费方**，布局侧每加一个 kind 都必须同步这里，
+ * 否则真实区域契约校验会让**整棵树 0 区域装载**（t79 的事故：浏览器 `装配完成：区域 [] · 注册建筑 0 栋`）。
+ * 该不变式已由 `tests/core-kinds.test.mjs` 常驻守卫（含突变证明）。
+ */
+export const WALKABLE_KINDS = Object.freeze(['ground', 'terrace', 'interior', 'bridgeDeck', 'gardenGround', 'outerTerrain', 'passage']);
 export const LIGHT_ANCHOR_KINDS = Object.freeze(['lantern', 'torch', 'windowGlow']);
 const ROOF_TYPE_KEYS = new Set(Object.keys(CFG.ROOF_TYPES));
 
@@ -112,6 +121,13 @@ export function createZoneContext({
   if (typeof zoneId !== 'string' || zoneId.length === 0) throw new Error('createZoneContext 需要 zoneId');
   if (!events) throw new Error('createZoneContext 需要事件总线');
   if (!config.QUALITY.tiers[quality]) throw new Error(`未知质量档 "${quality}"（合法：${config.QUALITY.order.join('/')}）`);
+  // t79：`ctx.config` 必须同时暴露 shared/config 的**函数成员**（如 `deriveSeed`）。
+  // 事故背景：zone 侧按文档调用 `config.deriveSeed(slotId,'interior')`，而 consumer 传入的是 `CONFIG` **对象**
+  // （只有常量，没有函数）⇒ `audit.mjs` 的 Node 路径直接 TypeError（浏览器路径恰好能拿到函数成员，故只在 Node 暴露）。
+  // 这里做**加法**合并：CONFIG 自身的字段优先，缺失的模块级导出（函数等）补上 ⇒ 消费方两种传法都能工作。
+  const ctxConfig = typeof config?.deriveSeed === 'function'
+    ? config
+    : Object.freeze(Object.assign(Object.create(null), SHARED_CONFIG, { ...config }));
 
   const zoneLayout = scope === 'city' ? cityLayout() : zoneLayoutFor(zoneId);
   const sharedState = shared ?? {
@@ -149,7 +165,7 @@ export function createZoneContext({
 
   return {
     THREE,
-    config,
+    config: ctxConfig,
     zoneLayout,
     /** 扩展（只读）：区域 id 与整城布局命名空间，方便区域查邻居/通道 */
     zoneId,

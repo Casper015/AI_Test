@@ -23,6 +23,15 @@
 import * as THREE from 'three';
 import { CONFIG, CAMERA, INTERACTION, ORIENTATION, EVENTS, QUALITY } from '../shared/config.js';
 import { ENVELOPE, TERRAIN_EXTENT, TOUR_POINTS, VIEWPOINTS, WALKABLE, OBSTACLES, floorYAt, walkableAt } from '../shared/layout.js';
+import {
+  interiorRecordForViewpointId,
+  interiorRecordForSurfaceId,
+  interiorRecordForSlot,
+  interiorSurfaceById,
+  interiorViewpointById,
+  interiorsForZone,
+  interiorViewpointsForZone,
+} from './layout-slice.js';
 
 const DEG = Math.PI / 180;
 const EPS = 1e-6;
@@ -118,11 +127,47 @@ function defaultSpecFor(mode, ctx) {
     }
     case 'interior': {
       const area = store?.view?.area ?? store?.view?.interiorArea ?? 'B';
-      const id = store?.view?.interiorViewpointId ?? (area === 'C' ? 'VP-C-interior' : 'VP-B-interior');
-      const v = vp(id);
-      if (v) return interiorSpecFor(v);
+      // t65：以 `store.view.interiorViewpointId` 为**唯一权威**寻址；缺失/无效时才回退（且明确告警 + 计数）
+      const explicit = store?.view?.interiorViewpointId ?? null;
+      let explicitVp = explicit ? nudgeInteriorViewpoint(explicit, ctx) : null;
+      // 次优：给了建筑 slotId（且机位 id 缺失/无效）⇒ 用 layout 的显式映射解析该建筑的内景机位
+      const slotId = store?.view?.interiorSlotId ?? null;
+      if (!explicitVp && slotId) {
+        const record = interiorRecordForSlot(slotId);
+        const bySlot = record?.viewpointId ? nudgeInteriorViewpoint(record.viewpointId, ctx) : null;
+        if (bySlot) {
+          explicitVp = bySlot;
+          INTERIOR_ADDRESS_STATS.bySlotId += 1;
+        }
+      }
+      if (explicitVp) {
+        const spec = interiorSpecFor(explicitVp);
+        return { ...spec, interiorViewpointId: explicitVp.id, interiorResolvedBy: explicit ? `store.view.interiorViewpointId(${explicit})` : `store.view.interiorSlotId(${slotId})` };
+      }
+      if (explicit) {
+        INTERIOR_ADDRESS_STATS.fallbackBadId += 1;
+        warnInteriorOnce(`bad:${explicit}`, `interior 模式收到无效的 interiorViewpointId="${explicit}"（不是已登记的内景机位）⇒ 回退到 area="${area}" 的登记内景机位`);
+      } else {
+        INTERIOR_ADDRESS_STATS.fallbackNoId += 1;
+        warnInteriorOnce(`none:${area}`, `interior 模式缺少 store.view.interiorViewpointId ⇒ 按 area="${area}" 回退（一区多内景时必须显式传机位 id，否则可能取错建筑）`);
+      }
+      // 回退顺序：① t65 之前的 legacy 别名机位（VP-<area>-interior，语义=该区主殿/中轴内景，保持连续性）
+      //          ② 该区首个内景机位（按 id 排序，确定性）
+      const legacyId = area === 'C' ? 'VP-C-interior' : `VP-${area}-interior`;
+      const legacyVp = nudgeInteriorViewpoint(legacyId, ctx);
+      if (legacyVp) {
+        const spec = interiorSpecFor(legacyVp);
+        return { ...spec, interiorViewpointId: legacyVp.id, interiorResolvedBy: `fallback(area=${area},legacy-alias)` };
+      }
+      const regionVp = interiorViewpointsForZone(area)[0] ?? null;
+      if (regionVp) {
+        const spec = interiorSpecFor(regionVp);
+        return { ...spec, interiorViewpointId: regionVp.id, interiorResolvedBy: `fallback(area=${area})` };
+      }
+      const v = vp(legacyId);
+      if (v) return { ...interiorSpecFor(v), interiorResolvedBy: `fallback(legacy=${legacyId})` };
       const v2 = vp(area === 'C' ? 'VP-C-interior' : 'VP-B-interior');
-      if (v2) return interiorSpecFor(v2);
+      if (v2) return { ...interiorSpecFor(v2), interiorResolvedBy: `fallback(legacy=${v2.id})` };
       return defaultSpecFor('zone', ctx);
     }
     case 'orbit': {
@@ -156,6 +201,16 @@ function defaultSpecFor(mode, ctx) {
       };
     }
   }
+}
+
+/** t65：把 id 解析为**内景**机位（仅 mode==='interior'）；解析不到返回 null（调用方负责告警/回退）。 */
+function nudgeInteriorViewpoint(id, ctx) {
+  const hit = resolveViewpoint(id, ctx?.registry);
+  if (hit && hit.mode === 'interior') return hit;
+  const byLayout = interiorViewpointById(id);
+  if (byLayout) return byLayout;
+  if (hit && !hit.mode) return hit; // 兼容未标注 mode 的登记机位
+  return null;
 }
 
 function resolveViewpoint(id, registry) {
@@ -213,14 +268,26 @@ export function buildingWorldBounds(building) {
 /** focus 模式：由环绕盒 + facing 计算正前方 3/4 取景（§6.4 第 5 行）。 */
 export function focusSpecFor(building) {
   const box = buildingWorldBounds(building);
-  const w = box ? box.maxX - box.minX : building.w ?? 20;
-  const d = box ? box.maxZ - box.minZ : building.d ?? 20;
-  const baseY = box ? box.minY : building.baseY ?? 0;
-  const height = box ? Math.max(4, box.maxY - box.minY) : building.totalHeight ?? 20;
+  const rawW = box ? box.maxX - box.minX : building.w ?? 20;
+  const rawD = box ? box.maxZ - box.minZ : building.d ?? 20;
+  const rawH = box ? box.maxY - box.minY : building.totalHeight ?? 20;
+  // t78：退化包围盒防护（t69 的空白缺陷根因类别）
+  //   —— 院门/城门这类"嵌在院墙/宫墙里的薄片建筑"，其 bounds 可能在某些状态下退化为零厚度
+  //   （或 worldBounds 缺失/NaN）。旧实现 `distance = max(w,d)*1.7 + h*1.55` 在 w/d→0 时会把相机
+  //   **放进建筑内部/贴脸**，画面被单色背面填满 ⇒ shot.mjs 判为空白（9.5–9.7KB），
+  //   而同一命令对 hall/sideHall（体量正常）全部正常。
+  const degenerate =
+    !Number.isFinite(rawW) || !Number.isFinite(rawD) || !Number.isFinite(rawH) || rawW <= 1e-6 || rawD <= 1e-6 || rawH <= 1e-6;
+  const w = degenerate ? 20 : rawW;
+  const d = degenerate ? 20 : rawD;
+  const height = Math.max(4, degenerate ? 20 : rawH);
+  const baseY = box && Number.isFinite(box.minY) ? box.minY : building.baseY ?? 0;
+  // 退化/NaN 包围盒**不得**参与中心点计算（否则 NaN 会一路传到机位 ⇒ 整帧空白）
+  const useBox = box && !degenerate && Number.isFinite(box.minX) && Number.isFinite(box.maxX) && Number.isFinite(box.minZ) && Number.isFinite(box.maxZ);
   const center = {
-    x: box ? (box.minX + box.maxX) / 2 : building.x,
+    x: useBox ? (box.minX + box.maxX) / 2 : Number.isFinite(building.x) ? building.x : 0,
     y: baseY + height * 0.45,
-    z: box ? (box.minZ + box.maxZ) / 2 : building.z,
+    z: useBox ? (box.minZ + box.maxZ) / 2 : Number.isFinite(building.z) ? building.z : 0,
   };
   const facing = ORIENTATION.facingVectors[building.facing] ?? ORIENTATION.facingVectors.south;
   // 正前方 ±35° → 3/4 视角
@@ -229,28 +296,192 @@ export function focusSpecFor(building) {
     x: facing.x * Math.cos(angle) - facing.z * Math.sin(angle),
     z: facing.x * Math.sin(angle) + facing.z * Math.cos(angle),
   };
-  const distance = Math.max(w, d) * 1.7 + height * 1.55;
+  // 取景距离 = max(经验公式, **按包围球与 FOV 反推的最小入镜距离**)：后者保证任意体量/退化体量都能完整入镜，
+  // 且相机一定在建筑之外（不再出现"相机落进建筑内部 ⇒ 单色空白帧"）。
+  const radius = Math.max(1, 0.5 * Math.hypot(Math.max(w, 8), Math.max(d, 8), Math.max(height, 8)));
+  const fovDeg = CONFIG.CAMERA.fov ?? 45;
+  const fitDistance = (radius / Math.tan((fovDeg * DEG) / 2)) * 1.35; // 1.35 ≈ 留边
+  const distance = Math.max(w * 1.7 + height * 1.55, d * 1.7 + height * 1.55, fitDistance, 24);
   const lift = height * 0.5 + distance * 0.22;
+  const position = { x: center.x + dir.x * distance, y: center.y + lift, z: center.z + dir.z * distance };
+  // 兜底：若仍在（略放宽的）包围盒内（例如 facing 朝向与进深极小的组合），沿 dir 继续外推直到出门
+  const padX = w / 2 + 2;
+  const padZ = d / 2 + 2;
+  let extra = 0;
+  while (
+    !degenerate &&
+    extra < 6 &&
+    Math.abs(position.x - center.x) < padX &&
+    Math.abs(position.z - center.z) < padZ &&
+    Math.abs(position.y - center.y) < height / 2 + 2
+  ) {
+    extra += 1;
+    position.x = center.x + dir.x * (distance + extra * radius);
+    position.z = center.z + dir.z * (distance + extra * radius);
+  }
   return {
     mode: 'focus',
     projection: 'perspective',
-    position: { x: center.x + dir.x * distance, y: center.y + lift, z: center.z + dir.z * distance },
+    position,
     target: center,
     buildingId: building.id,
+    /** t78 诊断字段：供回归守卫与排障判断取景是否退化 */
+    framing: {
+      distance: +distance.toFixed(3),
+      fitDistance: +fitDistance.toFixed(3),
+      radius: +radius.toFixed(3),
+      degenerate,
+      w: +w.toFixed(3),
+      d: +d.toFixed(3),
+      height: +height.toFixed(3),
+      rawW: Number.isFinite(rawW) ? +rawW.toFixed(3) : null,
+      rawD: Number.isFinite(rawD) ? +rawD.toFixed(3) : null,
+      rawH: Number.isFinite(rawH) ? +rawH.toFixed(3) : null,
+      boundsSource: box?.source ?? (box ? 'kit.worldBounds' : 'fallback'),
+    },
   };
 }
 
-/** interior 模式：位置与目标夹在室内可行走面包围盒内（§6.4 第 6 行、CONTRACTS §5.3）。 */
-export function interiorBoundsFor(area) {
-  const surfaces = WALKABLE.filter((s) => s.kind === 'interior' && (area ? s.zone === area : true));
-  if (surfaces.length === 0) return null;
-  const s = surfaces[0];
-  return { id: s.id, zone: s.zone, ...s.bounds, y: s.y, inset: 0.6 };
+/**
+ * 内景寻址统计（诊断/测试用）：谁被命中、是否走了 legacy 按区回退、是否歧义。
+ * 只在 `interiorBoundsFor` / `defaultSpecFor('interior')` 被调用时累加，零渲染开销。
+ */
+export const INTERIOR_ADDRESS_STATS = {
+  byViewpointId: 0,
+  bySurfaceId: 0,
+  bySlotId: 0,
+  zoneLegacy: 0,
+  zoneAmbiguous: 0,
+  misses: 0,
+  fallbackNoId: 0,
+  fallbackBadId: 0,
+};
+
+const warnedInterior = new Set();
+function warnInteriorOnce(key, message) {
+  if (warnedInterior.has(key)) return false;
+  warnedInterior.add(key);
+  console.warn(`[camera] ${message}`);
+  return true;
+}
+
+/** 已解析的内景目标（面 + 解析来源），供 interiorBoundsFor 与测试复用。 */
+export function describeInteriorTarget(target) {
+  if (target == null) {
+    const first = interiorsForZone(null)[0] ?? null;
+    if (first) INTERIOR_ADDRESS_STATS.zoneLegacy += 1;
+    else INTERIOR_ADDRESS_STATS.misses += 1;
+    return first ? { surface: first, resolvedBy: 'house-all(legacy)', slotId: null, viewpointId: null, ambiguous: interiorsForZone(null).length > 1 } : null;
+  }
+  if (typeof target === 'object') {
+    if (target.viewpointId) {
+      const record = interiorRecordForViewpointId(target.viewpointId);
+      const surface = (record?.walkableId && interiorSurfaceById(record.walkableId)) || null;
+      if (surface) {
+        INTERIOR_ADDRESS_STATS.byViewpointId += 1;
+        return { surface, resolvedBy: 'viewpointId', slotId: record.slotId, viewpointId: record.viewpointId, ambiguous: false };
+      }
+      INTERIOR_ADDRESS_STATS.misses += 1;
+      return null;
+    }
+    if (target.surfaceId) {
+      const surface = interiorSurfaceById(target.surfaceId);
+      const record = interiorRecordForSurfaceId(target.surfaceId);
+      if (surface) {
+        INTERIOR_ADDRESS_STATS.bySurfaceId += 1;
+        return { surface, resolvedBy: 'surfaceId', slotId: record?.slotId ?? null, viewpointId: record?.viewpointId ?? null, ambiguous: false };
+      }
+      INTERIOR_ADDRESS_STATS.misses += 1;
+      return null;
+    }
+    if (target.slotId) {
+      const record = interiorRecordForSlot(target.slotId);
+      const surface = (record?.walkableId && interiorSurfaceById(record.walkableId)) || null;
+      if (surface) {
+        INTERIOR_ADDRESS_STATS.bySlotId += 1;
+        return { surface, resolvedBy: 'slotId', slotId: record.slotId, viewpointId: record.viewpointId, ambiguous: false };
+      }
+      INTERIOR_ADDRESS_STATS.misses += 1;
+      return null;
+    }
+    INTERIOR_ADDRESS_STATS.misses += 1;
+    return null;
+  }
+
+  const id = String(target);
+  // 直接给 WK-/VP- id 也算显式寻址
+  if (id.startsWith('WK-')) {
+    const surface = interiorSurfaceById(id);
+    const record = interiorRecordForSurfaceId(id);
+    if (surface) {
+      INTERIOR_ADDRESS_STATS.bySurfaceId += 1;
+      return { surface, resolvedBy: 'surfaceId', slotId: record?.slotId ?? null, viewpointId: record?.viewpointId ?? null, ambiguous: false };
+    }
+    INTERIOR_ADDRESS_STATS.misses += 1;
+    return null;
+  }
+  if (id.startsWith('VP-')) {
+    const record = interiorRecordForViewpointId(id);
+    const surface = (record?.walkableId && interiorSurfaceById(record.walkableId)) || null;
+    if (surface) {
+      INTERIOR_ADDRESS_STATS.byViewpointId += 1;
+      return { surface, resolvedBy: 'viewpointId', slotId: record.slotId, viewpointId: record.viewpointId, ambiguous: false };
+    }
+    INTERIOR_ADDRESS_STATS.misses += 1;
+    return null;
+  }
+
+  // legacy：按区名 ⇒ 该区的 legacy 内景机位（VP-<区>-interior）优先，其次区内第一个（按 id 排序）
+  const zoneSurfaces = interiorsForZone(id);
+  const zoneViewpoints = interiorViewpointsForZone(id);
+  const aliasViewpoint = interiorViewpointById(`VP-${id}-interior`);
+  const preferred = aliasViewpoint ?? zoneViewpoints[0] ?? null;
+  const record = preferred ? interiorRecordForViewpointId(preferred.id) : null;
+  const surface = (record?.walkableId && interiorSurfaceById(record.walkableId)) || zoneSurfaces[0] || null;
+  if (!surface) {
+    INTERIOR_ADDRESS_STATS.misses += 1;
+    return null;
+  }
+  const ambiguous = zoneSurfaces.length > 1;
+  INTERIOR_ADDRESS_STATS.zoneLegacy += 1;
+  if (ambiguous) {
+    INTERIOR_ADDRESS_STATS.zoneAmbiguous += 1;
+    warnInteriorOnce(`zone:${id}`, `interiorBoundsFor("${id}") 是按区 legacy 口径，该区有 ${zoneSurfaces.length} 个内景（已解析为 ${surface.id}）；一区多内景请传 { viewpointId } / { surfaceId } / { slotId }`);
+  }
+  return { surface, resolvedBy: aliasViewpoint ? 'zone-legacy-alias' : 'zone-first', slotId: record?.slotId ?? null, viewpointId: record?.viewpointId ?? null, ambiguous };
+}
+
+/**
+ * interior 模式：位置与目标夹在**该内景自己的**室内可行走面包围盒内（§6.4 第 6 行、CONTRACTS §5.3）。
+ *
+ * t65 起支持三种显式寻址（推荐）：
+ *   `interiorBoundsFor({ viewpointId: 'VP-B-hall-mid-interior' })`
+ *   `interiorBoundsFor({ surfaceId: 'WK-B-hall-mid-interior' })`
+ *   `interiorBoundsFor({ slotId: 'B-hall-mid' })`
+ * 也接受直接的 `'WK-…'` / `'VP-…'` id 字符串；**legacy** 入参（区名/空）仍可用，但一区多内景时
+ * 只能给出该区 legacy 机位对应的那一个内景，并会 `console.warn` 提示改用显式寻址（不再静默取第一个）。
+ */
+export function interiorBoundsFor(target) {
+  const hit = describeInteriorTarget(target);
+  if (!hit?.surface) return null;
+  const s = hit.surface;
+  return {
+    id: s.id,
+    zone: s.zone,
+    ...s.bounds,
+    y: s.y,
+    inset: 0.6,
+    resolvedBy: hit.resolvedBy,
+    slotId: hit.slotId,
+    viewpointId: hit.viewpointId,
+    ambiguous: hit.ambiguous,
+  };
 }
 
 function interiorSpecFor(viewpoint) {
   const area = viewpoint.area ?? viewpoint.zone;
-  const box = interiorBoundsFor(area);
+  // t65：先按**机位**解析该内景自己的盒；只有解析不到时才退回 legacy 按区（会告警）
+  const box = interiorBoundsFor({ viewpointId: viewpoint.id }) ?? interiorBoundsFor(area);
   const position = { ...viewpoint.position };
   const target = { ...viewpoint.target };
   if (box) {
@@ -268,6 +499,9 @@ function interiorSpecFor(viewpoint) {
     target,
     fov: viewpoint.fov ?? CONFIG.CAMERA.fov,
     viewpointId: viewpoint.id,
+    interiorViewpointId: viewpoint.id,
+    interiorSlotId: box?.slotId ?? null,
+    interiorResolvedBy: box?.resolvedBy ?? null,
     area,
     interiorBox: box,
     locked: { target: true },
@@ -426,6 +660,8 @@ export function createCameraRig({
   let locked = {};
   let axisIndex = 1;
   let interiorBox = null;
+  /** t65：当前 interior 机位寻址（id / slotId / 解析来源），与 interiorBox 同点位维护，供 describe()/测试读取 */
+  let interiorAddressing = { viewpointId: null, slotId: null, resolvedBy: null };
   let yaw = 0;
   let pitch = 0;
   let moving = false;
@@ -505,6 +741,11 @@ export function createCameraRig({
     locked = spec.locked ?? {};
     axisIndex = spec.axisIndex ?? axisIndex;
     interiorBox = spec.interiorBox ?? null;
+    interiorAddressing = {
+      viewpointId: spec.interiorViewpointId ?? (spec.mode === 'interior' ? (spec.viewpointId ?? null) : null),
+      slotId: spec.interiorSlotId ?? null,
+      resolvedBy: spec.interiorResolvedBy ?? null,
+    };
     currentMode = spec.mode ?? currentMode;
     if (currentMode === 'fp') {
       const o = currentOffset();
@@ -590,6 +831,11 @@ export function createCameraRig({
     // 过渡期间先切投影（iso 需要正交投影从第一帧就正确），位置/目标继续插值
     currentMode = spec.mode ?? currentMode;
     interiorBox = spec.interiorBox ?? null;
+    interiorAddressing = {
+      viewpointId: spec.interiorViewpointId ?? (spec.mode === 'interior' ? (spec.viewpointId ?? null) : null),
+      slotId: spec.interiorSlotId ?? null,
+      resolvedBy: spec.interiorResolvedBy ?? null,
+    };
     locked = spec.locked ?? {};
     axisIndex = spec.axisIndex ?? axisIndex;
   }
@@ -643,6 +889,7 @@ export function createCameraRig({
       locked: { ...locked },
       axisIndex,
       interiorBox,
+      interiorAddressing: { ...interiorAddressing },
       projection,
     };
     fpActive = true;
@@ -684,6 +931,7 @@ export function createCameraRig({
       locked = { ...saved.locked };
       axisIndex = saved.axisIndex;
       interiorBox = saved.interiorBox;
+      interiorAddressing = { ...(saved.interiorAddressing ?? { viewpointId: null, slotId: null, resolvedBy: null }) };
       projection = saved.projection;
       applyProjection();
     }
@@ -1024,6 +1272,10 @@ export function createCameraRig({
       axisIndex,
       fpActive,
       interiorBox,
+      /** t65：interior 模式实际使用的机位与解析来源（一区多内景时用于断言"用的是哪一个"） */
+      interiorViewpointId: interiorAddressing.viewpointId,
+      interiorSlotId: interiorAddressing.slotId,
+      interiorResolvedBy: interiorAddressing.resolvedBy,
       /** 同步可读的视线方向（t31）：rotate 之后无需等待下一帧 */
       viewDirection: (() => {
         const v = viewDirection();

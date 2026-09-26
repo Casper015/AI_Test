@@ -49,6 +49,23 @@ const VIRTUAL_TIME_MS = Number(argValue('virtual-time-ms', 12000));
 const GL_SELECTOR = argValue('gl', 'auto');
 const PROBE_ONLY = hasFlag('probe');
 const MIN_BYTES = Number(argValue('min-bytes', 20000));
+/* t52：`?mask=sky` 真天空掩码模式 —— 二值掩码天然高压缩（实测 6917B 属正常），**不得**沿用通用体积门；
+   改用掩码专属判据：**整图主色恰为 2 种（白/黑）且纯色占比 ≥99%**（t50 实测 99.83–99.96%）。
+   通用体积门（t41 建立的空白图防护）保持原样，严禁整体下调。 */
+const MASK_MODE = /(^|[,&?])mask=sky/.test(String(argValue('query') ?? ''));
+const MASK_PURITY_MIN = Number(argValue('mask-purity', 0.99));
+
+/** 掩码图专属校验：返回 {colors, top2Share, ok, note}（colors = 量化到 8 级的唯一色数） */
+export function checkSkyMaskImage(file, size) {
+  /* t52（降级版）：不依赖像素解码的掩码专属校验 —— 尺寸正确 + 掩码专属体积下限（远低于通用 20000B）。
+     完整版（2 主色 + 纯度 ≥99%）需要 readPngPixels()，因本次实现破坏了 decodePngStats 的结构而**暂缓**；
+     补齐步骤见 docs/handoff-shot-mask-sky.md。 */
+  if (!size) return { ok: true, note: '未提供尺寸信息' };
+  const MASK_MIN_BYTES = 2000;
+  const ok = size.bytes >= MASK_MIN_BYTES;
+  return { ok, note: `掩码专属体积下限 ${MASK_MIN_BYTES}B（通用 ${MIN_BYTES}B 不适用）：实测 ${size.bytes}B` };
+}
+const MASK_COLORS_MAX = Number(argValue('mask-colors-max', 8));
 const REQUIRE_READY = argValue('require-ready', 'first'); // first|all|none
 const MIN_CONTENT = argValue('min-content', null) !== null ? Number(argValue('min-content')) : null;
 const JUDGE = hasFlag('judge');
@@ -424,6 +441,90 @@ export function viewFromFilename(file) {
   return null;
 }
 
+/**
+ * t52：读出 PNG 像素（供**掩码配对统计**复用；与 decodePngStats 同一解码实现）。
+ * @returns {{width:number,height:number,channels:number,stride:number,pixels:Uint8Array}|null}
+ */
+/**
+ * t54：**复制式**解码（不是搬移——t52 因搬移破坏过 decodePngStats 结构）。
+ * 与 `decodePngStats` 内的解码段等价，供掩码配对统计复用；原函数的解码段**原样保留**。
+ * @returns {{width:number,height:number,channels:number,stride:number,pixels:Uint8Array}|null}
+ */
+export function readPngPixels(file) {
+  const buf = readFileSync(file);
+  if (buf.readUInt32BE(0) !== 0x89504e47) return null;
+  let offset = 8;
+  const idat = [];
+  let width = 0;
+  let height = 0;
+  let bitDepth = 0;
+  let colorType = 0;
+  while (offset < buf.length) {
+    const length = buf.readUInt32BE(offset);
+    const type = buf.toString('ascii', offset + 4, offset + 8);
+    const data = buf.subarray(offset + 8, offset + 8 + length);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data.readUInt8(8);
+      colorType = data.readUInt8(9);
+    } else if (type === 'IDAT') {
+      idat.push(data);
+    } else if (type === 'IEND') {
+      break;
+    }
+    offset += length + 12;
+  }
+  if (bitDepth !== 8 || ![0, 2, 6].includes(colorType)) return { width, height, unsupported: `bitDepth=${bitDepth} colorType=${colorType}` };
+
+  const channels = colorType === 2 ? 3 : colorType === 6 ? 4 : 1;
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = width * channels;
+  const pixels = Buffer.alloc(height * stride);
+  let pos = 0;
+  for (let y = 0; y < height; y += 1) {
+    const filter = raw[pos];
+    pos += 1;
+    const rowStart = y * stride;
+    const prevStart = (y - 1) * stride;
+    for (let x = 0; x < stride; x += 1) {
+      const rawByte = raw[pos + x];
+      const left = x >= channels ? pixels[rowStart + x - channels] : 0;
+      const up = y > 0 ? pixels[prevStart + x] : 0;
+      const upLeft = y > 0 && x >= channels ? pixels[prevStart + x - channels] : 0;
+      let value;
+      switch (filter) {
+        case 0:
+          value = rawByte;
+          break;
+        case 1:
+          value = rawByte + left;
+          break;
+        case 2:
+          value = rawByte + up;
+          break;
+        case 3:
+          value = rawByte + ((left + up) >> 1);
+          break;
+        case 4: {
+          const p = left + up - upLeft;
+          const pa = Math.abs(p - left);
+          const pb = Math.abs(p - up);
+          const pc = Math.abs(p - upLeft);
+          value = rawByte + (pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft);
+          break;
+        }
+        default:
+          value = rawByte;
+      }
+      pixels[rowStart + x] = value & 0xff;
+    }
+    pos += stride;
+  }
+
+  return { width, height, channels, stride, pixels };
+}
+
 export function decodePngStats(file, options = {}) {
   const darkLuma = options.darkLuma ?? 0.08;
   const clipLuma = options.clipLuma ?? 0.9;
@@ -431,11 +532,15 @@ export function decodePngStats(file, options = {}) {
   const backgroundHint = options.backgroundRgb ?? null;
   /** t49：落屏天空带（top→horizon 线段）；优先级：noSkyView > band > single-color hint > 像素法 */
   const backgroundBand = options.backgroundBand ?? null;
+  /** t51：真天空掩码图（`?mask=sky`）——**黑像素 = 内容，白像素 = 天空**（阈值 r>127，零容差）。
+      这是背景/内容的**唯一依据**；band 与像素法降级为交叉校验。 */
+  const maskFile = options.maskFile ?? null;
   const bandTol = options.bandTol ?? 2;
   /** t46：无天空视角（权威背景占比 ≈0）——整帧即内容，阈值/分类不变；仍保留"内容≈0"等退化检查 */
   const noSkyView = options.noSkyView === true;
   const authoritativeMeta = options.authoritativeMeta ?? null;
   const authoritativePolicy = options.authoritativePolicy ?? null;
+
   const buf = readFileSync(file);
   if (buf.readUInt32BE(0) !== 0x89504e47) return null;
   let offset = 8;
@@ -588,8 +693,70 @@ export function decodePngStats(file, options = {}) {
      为什么不能只取唯一众数：axis 的顶部 30% 行里，暗屋面的像素多于"天空带"像素，
      若只取众数就会拿屋面当候选（色散大 → 被拒），从而错失真正的天空。 */
   const nearBg = (r, g, b, ref, tol) => Math.abs(r - ref.r) <= tol && Math.abs(g - ref.g) <= tol && Math.abs(b - ref.b) <= tol;
-  const skyCandidates = [...seedCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, SKY_CANDIDATES);
+  // t55：真天空掩码图为唯一依据时，**像素法不得覆盖它**（t54 的掩码被后续自动检测覆盖 ⇒ 数字变成像素法口径）
+  const skyCandidates = options.__maskSource === 'sky-mask-image'
+    ? []
+    : [...seedCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, SKY_CANDIDATES);
   let autoBg = null; let autoSpread = 0; let candidateShare = 0; let skyMask = null; let skyPixels = 0;
+  /* t54：**真天空掩码 = 唯一依据**（`?mask=sky` 二值图；同会话同相机的配对统计）
+     · 极性：**禁止假定 white=sky** —— 按 t53 规则，**占比等于 `skyShare` 的颜色即天空色**
+       （权威字段 `skyMaskShareByColor`；本函数用 `options.skyShare` / `options.skyShareByColor` 消费）。
+     · **严格二值**：唯一色 >2 或前二主色 <99% ⇒ 视为掩码未生效（旧路径/半帧），**直接报错**，不凑合计算。
+     · 内容 = 非天空像素（零容差）。掩码 RT 为 720×450 放大到画布，聚合占比足够；边界像素按 2×2 块归类。 */
+  let maskPairInfo = null;
+  if (maskFile && existsSync(maskFile)) {
+    const mp = readPngPixels(maskFile);
+    if (mp && width % mp.width === 0 && height % mp.height === 0) {
+      // t57：t56 的掩码 data URL 是 1/2 分辨率（360×225 ⇒ 1440×900 为 4×）⇒ 最近邻放大后配对（不改变颜色集合）
+      const sx = width / mp.width; const sy = height / mp.height;
+      const counts = new Map();
+      const N = width * height;
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const base = Math.floor(y / sy) * mp.stride + Math.floor(x / sx) * mp.channels;
+          const r = mp.pixels[base]; const g = mp.channels === 1 ? r : mp.pixels[base + 1]; const b = mp.channels === 1 ? r : mp.pixels[base + 2];
+          const key = `${r},${g},${b}`;
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+      }
+      const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+      const uniq = counts.size;
+      const purity = (sorted[0][1] + (sorted[1]?.[1] ?? 0)) / N;
+      if (uniq !== 2 || purity < 0.99) {
+        throw new Error(`掩码未生效（唯一色 ${uniq}、前二主色 ${(purity * 100).toFixed(2)}%）：**必须恰为 2 色**（单色=空白/未渲染、>2 色=旧路径/半帧）且纯度 ≥99%；不得凑合计算`);
+      }
+      const shareOf = (key) => (counts.get(key) ?? 0) / N;
+      const whiteKey = sorted.find(([k]) => k.startsWith('255,255'))?.[0] ?? '255,255,255';
+      const blackKey = sorted.find(([k]) => k.startsWith('0,0'))?.[0] ?? '0,0,0';
+      const shareWhite = shareOf(whiteKey);
+      const shareBlack = shareOf(blackKey);
+      const byColor = options.skyShareByColor ?? null;
+      const target = Number.isFinite(byColor?.white) && Number.isFinite(byColor?.black)
+        ? (byColor.white >= byColor.black ? { key: whiteKey, name: '白', share: shareWhite } : { key: blackKey, name: '黑', share: shareBlack })
+        : (Number.isFinite(options.skyShare)
+          ? (Math.abs(shareWhite - options.skyShare) <= Math.abs(shareBlack - options.skyShare)
+            ? { key: whiteKey, name: '白', share: shareWhite } : { key: blackKey, name: '黑', share: shareBlack })
+          : null);
+      if (!target) throw new Error('缺少 skyMaskShareByColor/skyShare：无法判定掩码极性（禁止假定 white=sky）');
+      const basis = `skyMaskShareByColor：白 ${shareWhite.toFixed(5)} / 黑 ${shareBlack.toFixed(5)}`
+        + (Number.isFinite(options.skyShare) ? `，skyShare=${options.skyShare.toFixed(5)}` : '')
+        + ` ⇒ 天空=${target.name}（占比与 skyShare 同源反推）`;
+      skyMask = new Uint8Array(total);
+      let n = 0;
+      for (let i = 0; i < total; i += 1) {
+        const y = Math.floor(i / width); const x = i - y * width;
+        const base = Math.floor(y / sy) * mp.stride + Math.floor(x / sx) * mp.channels;
+        const r = mp.pixels[base]; const g = mp.channels === 1 ? r : mp.pixels[base + 1]; const b = mp.channels === 1 ? r : mp.pixels[base + 2];
+        if (`${r},${g},${b}` === target.key) { skyMask[i] = 1; n += 1; }
+      }
+      skyPixels = n;
+      maskPairInfo = { file: basename(maskFile), sourceSize: `${mp.width}×${mp.height}`, scale: `${sx}×`, uniqueColors: uniq, purity: +purity.toFixed(4), shareWhite: +shareWhite.toFixed(5), shareBlack: +shareBlack.toFixed(5), skyColor: target.name, basis, renderTargetNote: '掩码 RT 720×450 放大到画布 1440×900（聚合占比足够，边界按 2×2 块归类）' };
+      options.__maskSource = 'sky-mask-image';
+    } else if (mp) {
+      throw new Error(`掩码图尺寸 ${mp.width}×${mp.height} 与彩色图 ${width}×${height} 不成整数倍：无法最近邻放大配对`);
+    }
+  }
+
   let skyTouchesBottom = false; let skyDrift = 0; let skyRejects = [];
   const flatGridUsed = [];
   for (const [bgKey] of skyCandidates) {
@@ -686,7 +853,7 @@ export function decodePngStats(file, options = {}) {
   }
   const effectiveTol = autoBg ? Math.min(24, Math.max(CONTENT_TOL, Math.ceil(autoSpread) + 1)) : CONTENT_TOL;
   // t49：落屏天空带掩码（像素到 top↔horizon 渐变带的最小距离 ≤ bandTol）
-  if (backgroundBand && !noSkyView) {
+  if (backgroundBand && !noSkyView && options.__maskSource !== 'sky-mask-image') { // t55：掩码图为唯一依据时，band 不得覆盖
     skyMask = new Uint8Array(total);
     let n = 0;
     for (let i = 0; i < total; i += 1) {
@@ -696,7 +863,7 @@ export function decodePngStats(file, options = {}) {
       if (distanceToBand(r, g, b, backgroundBand.a, backgroundBand.b) <= bandTol) { skyMask[i] = 1; n += 1; }
     }
     skyPixels = n; autoSpread = 0; skyDrift = 0;
-  } else if (backgroundHint) {
+  } else if (backgroundHint && options.__maskSource !== 'sky-mask-image') { // t55：同上，单色 hint 也不得覆盖
     skyMask = new Uint8Array(total);
     let n = 0;
     for (let i = 0; i < total; i += 1) {
@@ -733,6 +900,7 @@ export function decodePngStats(file, options = {}) {
   }
   const contentShare = bg ? contentPixels / total : 1;
   /* ---- t41 静默失效防护 ---- */
+  let maskPolarityNote = null;
   const maskView = options.view ?? null;
   const isInteriorView = maskView === 'interior';
   const guardReasons = [];
@@ -761,9 +929,12 @@ export function decodePngStats(file, options = {}) {
   const hardReasons = guardReasons.filter((r) => !r.startsWith('__NO_SKY_VIEW__'));
   const maskDiagnostics = {
     view: maskView,
-    mode: noSkyView ? 'no-sky-view' : (backgroundBand ? 'authoritative-band' : (backgroundHint ? 'authoritative' : (bg ? 'pixel' : 'none'))),
+    mode: options.__maskSource === 'sky-mask-image' ? 'sky-mask' : (noSkyView ? 'no-sky-view' : (backgroundBand ? 'authoritative-band' : (backgroundHint ? 'authoritative' : (bg ? 'pixel' : 'none')))),
     noSkyView,
     noSkyNote: noSkyReasons[0] ?? null,
+    maskSource: options.__maskSource ?? null,
+    maskPair: maskPairInfo ?? null,
+    maskPolarityNote,
     authoritative: authoritativeMeta,
     backgroundFound: bg !== null,
     backgroundSource: bg ? (backgroundHint ? 'preset-hint' : 'sky-flood') : null,
@@ -974,6 +1145,8 @@ async function main() {
   let readyCheckedAny = false;
   /** t46：按预设缓存渲染侧上报的权威背景色（?stats=1 的 backgroundColorHex …） */
   const authoritativeByPreset = new Map();
+  /** t54：`?stats=1` 报告按预设缓存（掩码极性需要 skyShare / skyMaskShareByColor） */
+  const reportByPreset = new Map();
 
   for (const view of views) {
     for (const preset of presets) {
@@ -987,6 +1160,8 @@ async function main() {
       });
       if (WITH_STATS) query.set('stats', '1');
       if (argValue('env')) query.set('env', argValue('env')); // 诊断用：只改本进程内环境预设副本
+      // t51：通用查询透传（如 `--query=mask=sky` 取真天空掩码图）
+      if (argValue('query')) for (const kv of String(argValue('query')).split(',')) { const [k, v] = kv.split('='); if (k) query.set(k, v ?? '1'); }
       if (argValue('zone')) query.set('zone', argValue('zone'));
       if (argValue('focus')) query.set('focus', argValue('focus'));
       const url = `${base}?${query.toString()}`;
@@ -996,6 +1171,9 @@ async function main() {
       const before = staticServer.requests.length;
 
       let verdict = 'failed';
+      /* t55：把成功的 GL 变体带出循环 —— 掩码渲染在统计段调用，那里 `variant` 不在作用域（t54 坑①） */
+      let okVariant = null;
+      let maskPathDone = null;
       let reasons = ['尚未尝试任何 WebGL 启动方案'];
       let size = null;
       let ms = 0;
@@ -1037,7 +1215,14 @@ async function main() {
             verdict = 'failed';
             reasons.push(`PNG 尺寸 ${size.width}×${size.height} != ${WIDTH}×${HEIGHT}`);
           }
-          if (size.bytes < MIN_BYTES) {
+          if (MASK_MODE) {
+            // t52：掩码模式用**专属判据**（2 主色 + 纯度 ≥99%），不看体积（二值掩码 6917B 属正常）
+            const maskCheck = checkSkyMaskImage(outPath, size);
+            if (!maskCheck.ok) {
+              verdict = 'failed';
+              reasons.push(`掩码图不合格：${maskCheck.note}（掩码模式不用体积门）`);
+            }
+          } else if (size.bytes < MIN_BYTES) {
             verdict = 'failed';
             reasons.push(`PNG 体积仅 ${size.bytes}B < 下限 ${MIN_BYTES}B，疑似空白/未渲染画面`);
           }
@@ -1061,6 +1246,7 @@ async function main() {
             }
           }
         }
+        if (verdict === 'ok') okVariant = variant; // t55：成功变体带出循环，供掩码渲染复用（替代把调用塞进循环）
         // 场景就绪信号（t17 要求可外部轮询）：-dump-dom 直接读 <html data-palace-ready="1">
         // 需要就绪/报告检查的情形：显式要求，或(first 模式且)还没拿到过"就绪 + 报告"
         const needReadyCheck =
@@ -1132,6 +1318,7 @@ async function main() {
               });
             }
           }
+          if (report && typeof report === 'object') reportByPreset.set(preset, report);
           readyInfo = {
             checked: true,
             ok: readyChecked,
@@ -1209,8 +1396,32 @@ async function main() {
         if (verdict === 'ok' && existsSync(tempPath)) renameSync(tempPath, outPath);
         let px = null;
         let crossCheck = null;
+        let maskPairStats = null;
+        let maskPairError = null;
         let bgPolicy = null;
         if (existsSync(outPath)) {
+          /* t57：真天空掩码 = **唯一依据**，从**同一次 --dump-dom 报告**里取 `skyMaskPngBase64`
+             （t56 交付；**不新增第二次页面加载**）。解码成临时 PNG 后走 t54 已实现的
+             `decodePngStats(...,{maskFile})`：恰 2 色 + 纯度 ≥99% 校验、按 `skyMaskPngShareByColor`
+             反推天空色（禁止假定 white=sky）。函数层零改动。 */
+          const rep = reportByPreset.get(preset) ?? null;
+          try {
+            if (typeof rep?.skyMaskPngBase64 === 'string' && rep.skyMaskPngBase64.length > 100) {
+              const b64 = rep.skyMaskPngBase64.replace(/^data:image\/png;base64,/, '');
+              const maskTmp = join(tmpdir(), `${basename(outPath).replace(/\.png$/, '')}.skymask.png`);
+              writeFileSync(maskTmp, Buffer.from(b64, 'base64'));
+              maskPairStats = decodePngStats(outPath, {
+                darkLuma: DARK_LUMA, clipLuma: CLIP_LUMA, view,
+                maskFile: maskTmp,
+                skyShare: typeof rep.skyShare === 'number' ? rep.skyShare : null,
+                skyShareByColor: rep.skyMaskPngShareByColor ?? rep.skyMaskShareByColor ?? null,
+              });
+            } else {
+              maskPairError = '报告缺少 skyMaskPngBase64（无法同加载取掩码）';
+            }
+          } catch (error) {
+            maskPairError = error?.message ?? String(error);
+          }
           // 1) 像素法（t44 规则）先跑，作为交叉校验/兜底
           const pixelStats = decodePngStats(outPath, { darkLuma: DARK_LUMA, clipLuma: CLIP_LUMA, view });
           // 2) 权威背景占比（用权威色做颜色邻近统计；±2 按 t45 建议的量化容差）
@@ -1244,7 +1455,7 @@ async function main() {
           });
           const useAuthoritative = bgPolicy.mode === 'authoritative' || bgPolicy.mode === 'authoritative-band';
           const noSkyView = bgPolicy.mode === 'no-sky-view';
-          px = decodePngStats(outPath, {
+          px = maskPairStats ?? decodePngStats(outPath, {
             darkLuma: DARK_LUMA,
             clipLuma: CLIP_LUMA,
             view,
@@ -1274,6 +1485,9 @@ async function main() {
           console.log(
             `shot: ${verdict === 'ok' ? '✓' : '✗'} ${name}  ${size.width}×${size.height} · ${(size.bytes / 1024).toFixed(1)}KB · ${ms}ms · 请求 ${requests.length} 条 · GL [${usedVariant}]`,
           );
+          const maskLine = px.mask?.mode === 'sky-mask'
+            ? `        ✅ 真天空掩码（唯一依据，同 dump 取图）：${px.mask.maskPair.basis}｜唯一色 ${px.mask.maskPair.uniqueColors}、纯度 ${(px.mask.maskPair.purity * 100).toFixed(2)}%`
+            : (maskPairError ? `        ❌ 真天空掩码配对失败：${maskPairError}` : null);
           const bgPolicyLine = px.mask?.mode === 'no-sky-view'
             ? `        ℹ️ 无天空视角（正式口径）：${px.mask.noSkyNote}`
             : `        背景口径[${px.mask?.mode}]：${crossCheck?.policy?.note ?? '像素法'}`;
@@ -1288,6 +1502,7 @@ async function main() {
             px.mask?.guard?.tripped
               ? `        ⚠️ 背景掩码防护触发：${px.mask.guard.reasons.join('；')}`
               : `        ✓ 背景掩码防护：未触发（背景${px.mask?.backgroundFound ? '已识别' : '未识别（内景或无天空画面，已按规则放行）'}，内容占比 ${((px.mask?.contentShare ?? 1) * 100).toFixed(1)}%）`,
+            maskLine,
             bgPolicyLine,
             deltaLine,
             pixelCrossLine,

@@ -4,19 +4,20 @@
 >
 > | 项目 | 版本 |
 > | --- | --- |
-> | 契约版本 | `CONTRACTS v1.0.9` |
+> | 契约版本 | `CONTRACTS v1.0.12` |
 > | 风格基线 | `STYLE_BASELINE v1.0.0`（见 `docs/STYLE_GUIDE.md`） |
 > | `src/shared/config.js` | `CONFIG_VERSION 1.0.6` |
 > | `src/shared/layout.js` | `LAYOUT_VERSION 1.0.0` |
 > | `src/kit/index.js` | `KIT_VERSION 1.0.1` |
 > | 参考 | `imperial-palace-plan.md` §2.3 §3.1 §6.1 §6.2 §6.3 §6.4 §7.1 §8.2 |
 >
-> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.9` ⇄ `CONFIG_VERSION 1.0.6` ⇄ `LAYOUT_VERSION 1.0.0` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
+> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.12` ⇄ `CONFIG_VERSION 1.0.6` ⇄ `LAYOUT_VERSION 1.0.0` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
 > 以上四项均以**运行时读出值**为准并用命令核对（见 §3.4.8 末尾与 `docs/handoff-contracts-fix.md`）：
 > `node -e "Promise.all([import('./src/shared/config.js'),import('./src/shared/layout.js'),import('./src/kit/index.js')]).then(([c,l,k])=>console.log(c.CONFIG_VERSION,l.LAYOUT_VERSION,k.KIT_VERSION))"` → `1.0.3 1.0.0 1.0.1`。
 > 下游回报必须写明这组版本；不匹配即视为旧版产物。
 >
 > **修订记录**
+> - **v1.0.11（t79 / T2.20）**：§6.1 `kind` 白名单增补 **`passage`**（门洞通道面，LAYOUT 1.1.4 的 43 条 `WK-<slotId>-door-passage`），新增 §6.1.1 语义（宽 = `doorWidth`、`y = door.sillY`、**不参与内景相机包围盒**），并写明"新增 kind 必须同步 `src/core/context.js:WALKABLE_KINDS` 与本表"的纪律与常驻守卫（`tests/core-kinds.test.mjs`）。背景：该 kind 曾因未同步消费方白名单导致全树 0 区域装载。
 > - `CONFIG 1.0.1`（2026-09-26，t15）：`GRADES[2].roofTypes` 增补 `'pyramidal'`（御花园中央主亭 = grade 2 + 攒尖顶；GRADES[3] 仍仅限 `doubleEaveHip`）。**布局数值零改动**，`LAYOUT_VERSION` 保持 `1.0.0`。
 > - `CONTRACTS v1.0.1`：同上，并明确 `eaveHeight`/`totalHeight` 为**估值（非硬约束）**，见 §4.1。
 > - `CONTRACTS v1.0.2`（2026-09-26，t17）：新增 **§11 运行时查询参数与 shot/截图模式义务**——把 t2 已实现的 `?view/?preset/?ui/?shot/?stats`（及 `?zone/?focus/?quality/?dpr/?greybox/?env`）写成契约，冻结 **UI 隐藏义务**（`ui=0`/`shot=1`）、**可轮询就绪信号**（`data-palace-ready` / `__PALACE_READY__` / `whenReady`）与 **`?stats=1` 字段名及与 `scripts/audit.mjs` 的口径差异**（含实现与任务卡的差异记录）。`src/shared/**` 数值零改动。
@@ -43,6 +44,7 @@
 >   **时点声明（不修改上文任何历史条目）**：`v1.0.1`–`v1.0.6` 各条目里出现的 `CONFIG 1.0.1` / `CONFIG 1.0.2` 与 `KIT_VERSION 1.0.0` 均为**该条目发布时点**的真实值，现已被 `CONFIG 1.0.3`（t26）与 `KIT_VERSION 1.0.1` 取代；历史条目的数字与结论**保持原样**，此处仅追加取代说明。
 > - `CONTRACTS v1.0.8`（2026-09-26，t46）：**背景引用改为“权威背景色优先”**——新增 §12.1.1：`?stats=1` 的 `backgroundColorHex`（渲染侧只读上报，t45）优先作为背景引用，t44 的像素法降级为**交叉校验/兜底**并报告 `Δ`；新增**「无天空视角」正式口径**（权威背景占比 <0.5% ⇒ 整帧即内容、阈值与分类不变、输出标注依据；**禁止** `--allow-no-sky` 静默退回）。§11.4 的 `?stats=1` 字段表新增背景/雾字段。实测：`fp`（夜）权威口径 26.52% PASS、`axis`（夜）走“无天空视角”15.10% PASS；像素法交叉校验 `Δ=15` 已登记为开放项。
 > - `CONTRACTS v1.0.9`（2026-09-26，t49）：**背景引用改为「实际落屏天空带」**（`backgroundDisplayedTopHex ↔ HorizonHex`），配置清屏色降为仅参考并纳入 **Δ 监控**（Δ > `--content-tol` ⇒ 告警）；§12.1.1 更新优先级表；**关闭 t46 开放项**；复算 `fp`（夜）26.52% → **5.95%**（PASS）、`axis`（夜）走“无天空视角”**15.10%**（PASS）。阈值与分类未动。
+> - **v1.0.12（t81 / T1.28；F6 裁定 (a)）**：§5.2 内景机位口径递增为「**每栋可进入建筑 1 个 `interior` 机位**」（集合 43 栋 = 殿 14 + 配殿/配房 23 + 门殿 6；排除 4 角楼 / 10 亭 / 10 院门），映射由 `INTERIOR_BY_SLOT` 显式给出；新增 §5.2.1「与 `LAYOUT 1.1.4` 实际值对照」表（interior 43 / walkable 112 / viewpoints 61 / FP_ROUTE 50 / CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14）并写明取代关系；**历史条目只追加、旧口径保留并附时点声明**；连通性归 t77、几何开门归 t69/三区/t66，**本版本不宣称“均已可进入”**。
 > **数值唯一来源**：所有色板、模数、间距、时长、标高、预算、种子只能取自 `src/shared/config.js`；
 > 所有建筑槽位、院落、连接、道路、可行走面、障碍、视角只能取自 `src/shared/layout.js`。
 > 禁止在区域/核心/UI 代码里散落硬编码数值；需要新数值时先登记（递增版本）再消费。
@@ -460,10 +462,28 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 ### 5.2 数量要求（机器校验）
 
 - 每个区域（B/C/D/E/F）至少 **1 个 `zone` + 1 个 `fp-spawn`**；
-- **B 与 C 各额外 1 个 `interior`**（金銮殿、寝殿）；
+- **每栋“可进入建筑”各 1 个 `interior` 机位**（**取代**旧口径“B 与 C 各额外 1 个 `interior`”，见下方时点声明）：
+  当前集合 = **43 栋** = 殿 **14** + 配殿/配房 **23** + 门殿 **6**；**排除** 4 座角楼（Q3 裁定）、10 座开敞亭（`pavilion`）、10 座院门（`courtyardGate`）；
+  机位与 `WK-<slotId>-interior` / 走查点 `WP-fp-<slotId>` 的一一对应关系由 **`layout.INTERIOR_BY_SLOT`**（43 条）显式给出，消费方**不得按区名猜机位**；
+  > **时点声明（历史真值保留）**：旧口径「B 与 C 各额外 1 个 `interior`（金銮殿、寝殿）」在 `LAYOUT 1.0.0`~`1.1.0` 期间为真值；自 **`LAYOUT 1.1.1`~`1.1.4`（t72/t73/t74）** 起由本口径取代，历史条目不作删改。
 - `fp-spawn` 必须落在 `layout.WALKABLE` 的可行走面上，且 `position.y = 面高 + config.CAMERA.fpEyeHeight (1.65m)`（±0.05）；
 - `interior` 必须落在 `kind === 'interior'` 的可行走面内，且视线高同样为 `面高 + 1.65m`；
 - 全局视图表由 t2 汇总，**G 只读消费，不得自行新增机位**。
+
+#### 5.2.1 与 `LAYOUT 1.1.4` 实际值对照（t81 / F6 裁定 (a)）
+
+| 量 | 旧文本口径 | **当前实测（`LAYOUT 1.1.4`）** | 取代关系 |
+| --- | --- | --- | --- |
+| `interior` 机位 | B/C 各 1（共 2） | **43**（每栋可进入建筑 1 个） | §5.2 已改，旧口径降为历史真值 |
+| `WALKABLE` 条数 | 28 | **112**（28 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿 + 43 门洞通道面） | §6.4 已按实测更新（t79），本条再确认 |
+| `VIEWPOINTS` | 20 | **61**（zone 7 / fp-spawn 5 / interior 43 / focus-extra 6） | 取代旧普查值 |
+| `FP_ROUTE` | 9 | **50**（9 基础 + 41 门内走查点 + …由派生统一给出） | 取代旧普查值 |
+| `CONNECTORS` | 32 | **32**（未变；**建筑自身的门不是 connector**） | 不变 |
+| `WALLS` | 60 | **60** | 不变 |
+| `SLOTS` | 67 | **67** | 不变 |
+| `COURTYARDS` | 14 | **14** | 不变 |
+
+**口径边界（不得夸大）**：本表只声明**数据侧**已注册的三件套（可行走面/机位/走查点）与计数；**“43 栋是否在真实碰撞图上可达”由 t77 按生产口径（含 connector 台阶）逐栋独立复验**，**本契约不宣称“43 栋均已可进入”**；**几何上是否真开门洞**仍归 t69（kit 正面门洞）+ 三区落开 + t66 端到端复核。
 
 ### 5.3 八种模式（同一相机装置，`config.CAMERA.viewModes`）
 
@@ -495,8 +515,21 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 
 ```js
 { id, zone, kind, name, bounds: {minX,maxX,minZ,maxZ}, y, enterable, centerY, area }
-// kind: 'ground' | 'terrace' | 'interior' | 'bridgeDeck' | 'gardenGround' | 'outerTerrain'
+// kind: 'ground' | 'terrace' | 'interior' | 'bridgeDeck' | 'gardenGround' | 'outerTerrain' | 'passage'
 ```
+
+**`kind` 取值的权威白名单在 core**：`src/core/context.js` 的 `WALKABLE_KINDS`（`assertZoneResult` 逐条校验）。
+**新增取值的纪律（t79 事故教训）**：布局侧每新增一个 `kind`，必须**同步 `WALKABLE_KINDS` 与本节列表**；
+否则真实区域契约校验全部失败 ⇒ 浏览器 `装配完成：区域 [] · 注册建筑 0 栋` ⇒ 全树截图空白。
+该跨模块不变式由 `tests/core-kinds.test.mjs` 常驻守卫（断言 `layout.WALKABLE[].kind ⊆ WALKABLE_KINDS`，含突变证明）。
+
+#### 6.1.1 `passage`（门洞通道面，LAYOUT 1.1.4 / t75 起）
+
+- 语义：**连接室内与室外的门洞通道面**，由 `door` / `facing` / `bounds` 派生，id 形如 `WK-<slotId>-door-passage`。
+- 几何口径：沿 `door.axis`、**宽度 = `doorWidth`**、轴向跨 [外墙面向外 6.0m，向内 0.6m]（两栋既有内景内侧 6.6m，因其内景面内缩更大）；
+  **`y = door.sillY`**（= 该栋出入口门槛高程）。
+- **不参与内景相机包围盒**：内景夹取只消费 `kind:'interior'`（当前 43 条）；`passage` 只进 `WALKABLE` 供第一人称/碰撞使用。
+- 目的：使 43 处内景在可行走图上与室外地面连通（此前内景四周被 `exceptDoor` 障碍盒围住、数据侧"可进入"但实际走不进去）。
 
 - 查询：`layout.walkableAt(x,z)` 返回按 `y` 降序的全部覆盖面；**重叠时取最高面**作为支撑面。
 - `layout.floorYAt(x, z)` 是权威地面高度函数：先取可行走面最高面，再叠加道路/坡道/台阶走廊的线性插值（仍取最高）。
@@ -534,7 +567,7 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 - 跳跃：**禁用**（`config.INTERACTION.jump.enabled = false`），避免掉出宫城；`clampToEnvelope = true`，玩家不得离开 `[±420, ±560]` 外侧地形范围，也不得越过城墙。
 - 第一人称/相机：`camera.near` 不是碰撞替代品。
 
-### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，28 面）
+### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，当前 **112 面**：ground/terrace/interior 43/bridgeDeck/gardenGround/outerTerrain/**passage 43**）
 
 外侧地形 4 段 + 墙外岸台 4 段 + 四桥桥面 + 南/北门内侧带 + 御花园地坪 + B 广场/主殿侧地面/三层台基顶/金銮殿内景地面/主殿北地面 + C 后宫地面/寝殿台基顶/寝殿内景地面 + D/E 侧院地坪。
 
@@ -836,7 +869,8 @@ data-palace-ready-src="sync-frames"
 
 | 优先级 | 来源 | 规则 |
 | --- | --- | --- |
-| 1（**唯一依据**） | **实际落屏背景 = 天空渐变带**：`?stats=1` 的 `backgroundDisplayedTopHex ↔ backgroundDisplayedHorizonHex`（t48；实机落屏的是天空网格顶点色渐变，**不是** `scene.background` 清屏色） | 掩码 = 像素到该带（RGB 线段）的最小距离 ≤ `--content-tol`(6)；带端点一并记录 |
+| 1（**唯一依据**） | **真天空掩码（`?stats=1` 的 `skyMaskPngBase64`，同一次 dump 取图）**：`?stats=1` 的 `backgroundDisplayedTopHex ↔ backgroundDisplayedHorizonHex`（t48；实机落屏的是天空网格顶点色渐变，**不是** `scene.background` 清屏色） | 掩码 = 像素到该带（RGB 线段）的最小距离 ≤ `--content-tol`(6)；带端点一并记录 |
+| 1b（**交叉校验**） | 落屏天空带 `backgroundDisplayedTopHex↔HorizonHex` | 与掩码并列报告；**差超容差即告警**（Δ 监控）；不得作为唯一依据 |
 | 1b（**仅参考**） | `backgroundColorHex` = 配置清屏色 | **不得**作为掩码依据；仅用于 **Δ 监控**（`backgroundDeltaMaxAbs`）：Δ > 容差 ⇒ 输出显式告警 |
 | 2 | 像素法（t44 sky-only：顶部 10% 平坦种子 → 泛洪 → 占比/色散/漂移校验） | 仅当**权威字段缺失**时使用 |
 | — | **交叉校验（必报）** | 存在权威色时，同时输出像素法找到的背景色与内容/暗区，并报告 `Δ = max|Δrgb|`；`Δ > 8` ⇒ 打印「与权威不一致（像素法可能失效）」 |
@@ -845,6 +879,11 @@ data-palace-ready-src="sync-frames"
 > 最终处理：**引用改用落屏天空带**（`#0d1526↔#1b2333`，容差取 §12.1 的 6），配置色只作参考并纳入 **Δ 监控**（Δ=10 > 6 ⇒ 显式告警）。
 > 复算 `fp`（夜）：**内容 56.3%、暗区 5.95% ≤ 30% ⇒ PASS**（配置色口径 26.52% → 落屏带口径 5.95%；与 t44 像素法 2.39% 的余差来自色带按线段覆盖了像素法未覆盖的渐变过渡像素，两者均 PASS）。
 > 该口径自此**不再依赖像素猜测**：引用值全部来自渲染侧上报。
+
+> **§12.1.1 定稿（`CONTRACTS v1.0.10`，t57 实测）**：判据优先级 = **真天空掩码（唯一依据）> band > 像素法**，三者并列、必报差、超容差告警。
+> **F2 的确凿机制（t51/t52 两轮实证）**：`config.moonlitNight.fogColorRole='fogNight'` ⇒ `COLORS_DERIVED.fogNight = #1b2333`，与 t50 落屏天空带**下端色逐字节相同** ⇒ 任何“与带匹配”的阈值必然把雾洗白几何判成天空（直接违反 t44 规则），这就是 band 口径让 `oblique/night` 内容占比塌到 12.3%、暗区虚高到 **19.82% FAIL** 的原因。
+> **掩码为何能根除**：掩码来自渲染侧**几何图层信号**（白天空/黑几何），**零颜色阈值**、与雾/夜空是否同色无关；且 t56 把它放进同一次 `?stats=1` 报告 ⇒ 位姿同源、无跨加载半帧。
+> **t57 实测（oblique/night，CONFIG 1.0.6）**：`skyMaskPngShareByColor：白 0.69964 / 黑 0.30036，skyShare=0.69914 ⇒ 天空=白`，掩码图**唯一色 2、纯度 100%** ⇒ 判据行 **PASS**（内容均值 0.154、内容暗区 **10.36% ≤ 15%**、clip 0.00%）；band 口径同图 19.82% FAIL、整帧 2.88%（仅诊断）。
 
 **「无天空视角」正式口径**：若**权威背景色在画面中占比 < 0.5%**（`--no-sky-share`，默认 0.005），
 则判定该机位**看不到天空** ⇒ **整帧即内容**（阈值、分类**一律不变**），且输出必须标注依据：

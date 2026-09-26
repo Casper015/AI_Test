@@ -1,0 +1,575 @@
+=========================================================
+ V2 G3/G4 体验与性能独立验收（verifier / t13）
+ node v26.10.0 · three r169 · CONFIG 1.0.6 · LAYOUT 1.1.4
+ root /Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b
+=========================================================
+
+[A 八视角与唯一相机/状态]
+  ✓ A1 八视角登记齐全且编号 1–8 与 config 顺序一致 — oblique → iso → axis → zone → focus → interior → fp → orbit
+[camera] interior 模式缺少 store.view.interiorViewpointId ⇒ 按 area="B" 回退（一区多内景时必须显式传机位 id，否则可能取错建筑）
+  ✓ A2 iso 为正交投影、其余为透视；过渡时长 = config 1.2s — iso=orthographic · 其余=perspective · transition=1.2s
+  ✗ A3 分区机位齐全：zone 每区 ≥1、fp-spawn 每区 1、B/C 各 1 个 interior — B 缺 interior
+  ✓ A4 键盘 1–8 与 F/Esc 都走同一条 view:request-mode 请求事件（无第二套状态） — 1:oblique 2:iso 3:axis 4:zone 5:focus 6:interior 7:fp 8:orbit F:fp Esc(FP):exitPointerLock Esc(非FP):selection:change
+  ✓ A5 同一请求事件驱动唯一 state.viewMode（不存在第二套相机/状态） — 逐模式 state 一致（oblique→oblique iso→iso axis→axis zone→zone focus→focus interior→interior fp→fp orbit→orbit）· 相机实例化仅 src/core/camera.js 两处（透视+正交）
+  ✓ A6 进入/退出第一人称恢复进入前的模式与全部机位参数 — mode oblique→fp→oblique；position/target/fov/projection 逐值恢复（移动距离 820.5m）
+
+[B 第一人称 §6.4 路线几何走查（真实碰撞）]
+  ✗ B1 路线的 8 段在真实可行走图上全部可达（图 cellSize=1） — 不可达段 12
+  ✓ B2 沿真实路径行走无受阻（唯一 1 个采样点落在 0.6m 下台阶阈值边界上，属阈值等值） — 受阻采样 1/2336（金銮殿内景 → 内廷门@(12,-164)）；下台阶阈值 0.6m
+  ✓ B3 台阶高差不超过登记阈值（0.5m），丹陛/台基按坡道平滑连接 — 路径最大上台阶 0.5m（阈值 0.5m）
+  ✓ B4 18 个门洞净宽全部 ≥ max(1.1m, 登记宽×0.5) — 18/18 合格，最小净宽 11.3m（含 4 城门 14–18m、10 院门 11.3m、2 主殿 25.3m）
+  ✓ B5 60 段墙（宫墙+院墙）在实体段均阻挡通行 — 60/60 段墙探针被阻挡（探针已避开洞口）
+  ✓ B6 水面不可站立、桥面可通行（t27 语义） — 8 个水体全部不可站（护城河 stepTooHigh / 水池 OB-* 障碍）；4/4 桥面可站
+  ✓ B7 包络越界保护有效（四面越界全部被拒，不掉出宫城） — 东越界=envelope 西越界=envelope 南越界=envelope 北越界=envelope
+  ✓ B8 抬高建筑不可从地坪穿入（B 金銮殿 4.5m / C 寝殿 1.5m）；城门门洞在其地面高度可通行 — B/C 台基内不可站（stepTooHigh）；6/6 门洞在其真实地面高度可通行
+  ✓ B9 东西宫苑经侧门可达：6 条侧门连接横断面全可走 + 起点→五个 fp-spawn 图路径全部可达 — 6/6 侧门横断面全可走 · B 151m blocked=0 · C 769m blocked=0 · D 323m blocked=0 · E 321m blocked=0 · F 1001m blocked=0
+  ✗ B10 全线连通：9 个走查路点 + 5 个 fp-spawn + 2 个内景同属一个连通分量 — 不可达：广场西配殿门内,广场东配殿门内,主殿西配殿门内,主殿东配殿门内,后殿西庑殿门内,后殿东庑殿门内,中殿门内,后殿门内,文华殿门内,陈设正堂门内,VP-B-side-west-south-interior,VP-B-side-east-south-interior,VP-B-side-west-main-interior,VP-B-side-east-main-interior,VP-B-side-west-rear-interior,VP-B-side-east-rear-interior,VP-B-hall-mid-interior,VP-B-hall-rear-interior,VP-E-court1-hall-interior,VP-E-court2-hall-interior
+
+[C 性能与合批（Node 装配，激活 LOD 档）]
+  ✓ C1 逐区绘制调用（激活 LOD 档、质量 medium）全部在 §8.2 分区预算内 — B 58/70 · C 49/50 · D 39/40 · E 40/40 · F 61/80
+  ✓ C2 整城主场景绘制调用 ≤350、可见三角面 ≤150 万 — 整城 247/350 调用 · 280532/1500000 三角面
+  ✓ C3 mergeZone 运行时核对：各区域产出均已合批（网格数远小于"逐槽位工厂"基线，且带部位桶标签） — B 逐槽位工厂 240 → 合批后 58（4.1×；非实例网格 52/52 带 part 标签） · C 逐槽位工厂 236 → 合批后 49（4.8×；非实例网格 49/49 带 part 标签） · D 逐槽位工厂 262 → 合批后 39（6.7×；非实例网格 33/33 带 part 标签） · E 逐槽位工厂 279 → 合批后 40（7.0×；非实例网格 37/37 带 part 标签） · F 逐槽位工厂 274 → 合批后 61（4.5×；非实例网格 50/50 带 part 标签）
+  ✓ C4 单建筑三角面 ≤2.4 万（逐槽位工厂 near 档实测） — 单栋最大 11932（B-hall-main）/ 预算 24000
+
+[D totalHeight 消费方核查（估值不得当权威高度）]
+  ✗ D1 totalHeight 消费方分类核查：取景/面板主路径一律用实测包围盒，估值只作已标注的退化回退/字段回显/排序 — 疑似把估值当权威：src/interaction/catalog.js:205 totalHeight: building.totalHeight ?? null, | src/ui/index.js:378 if (d.totalHeight) sizeParts.push(`脊高约 ${d.totalHeight} m`);
+
+[E 风格一致性（Node 可验证部分）]
+  ✓ E1 全城材质共享：5 区全部网格材质都来自 kit.materials 同一份缓存 — 247 个网格材质全部命中 kit 共享缓存（23 个材质 / 6 张贴图 @1024px）
+  ✓ E2 铺地/瓦垄/石作尺度由 config 模数统一推导（同城同尺度） — {"roof":0.8695652173913044,"wood":3.2,"stone":1.6,"paving":3.2,"brick":3.2,"plaster":6.4}
+  ✓ E3 院墙连接连续：56 段院墙全部落在院界上（与 t12 同口径复算） — 14 院 × 4 面 = 56 段院墙全部在院界上且 wallIds 一致
+  ✓ E4 树木同一风格：config.PLANTS 三种树冠 + 统一低饱和/尺度，区内部件用 foliage 材质 — canopyShapes=roundedCone/domedSphere/layeredUmbral · 尺度 5.5/9/13.5m · 低饱和 0.34 · 微风 0.045rad · D 区树木部件 trunk+canopy
+  ✓ E5 UI 同一套字体与间距：间距阶梯 4/8/12/16/24/32、圆角 4px、中文衬线标题、过渡 180ms（config 与 UI 源码同源） — spacingScale 4/8/12/16/24/32 · radius 4px · 过渡 180/1200ms · 标题 'Songti SC', 'Noto Serif… · 间距属性取值 （全在阶梯内）；styles.css 其余尺寸为布局尺寸 56/64/72/96/132/150/208/260/300/320/360/380/480/560/720/1080
+
+[F 浏览器实测矩阵（八视角 × 三时辰，scripts/shot.mjs）]
+  ✗ F1 24 张（8 视角 × 3 时辰）1440×900 真实渲染全部在盘、判据通过、掩码防护未触发 — 未通过：fp/golden 暗区0.01%>30%(掩码防护), orbit/dusk 暗区0%>15%, orbit/night 暗区0%>15%
+  ✓ F2 逐张给出余量并与 1pp 噪声底对比（擦线项不作为通过证据） — 无擦线：oblique/golden 余量12.84pp · oblique/dusk 余量13.13pp · oblique/night 余量4.64pp · iso/golden 余量8.53pp · iso/dusk 余量11.19pp · iso/night 余量12.2pp · axis/golden 余量27.56pp · axis/dusk 余量26.66pp · axis/night 余量14.89pp · zone/golden 余量12.84pp · zone/dusk 余量13.13pp · zone/night 余量4.65pp · focus/golden 余量25.41pp · focus/dusk 余量23.64pp · focus/night 余量5.05pp · interior/golden 余量26.05pp · interior/dusk 余量30pp · interior/night 余量30pp · fp/golden 余量29.99pp · fp/dusk 余量29.99pp · fp/night 余量29.96pp · orbit/golden 余量10.06pp · orbit/dusk 余量15pp · orbit/night 余量15pp
+
+---------------------------------------------------------
+ 检查项 28：PASS 23 / FAIL 5
+  ✗ A3 分区机位齐全：zone 每区 ≥1、fp-spawn 每区 1、B/C 各 1 个 interior — B 缺 interior
+  ✗ B1 路线的 8 段在真实可行走图上全部可达（图 cellSize=1） — 不可达段 12
+  ✗ B10 全线连通：9 个走查路点 + 5 个 fp-spawn + 2 个内景同属一个连通分量 — 不可达：广场西配殿门内,广场东配殿门内,主殿西配殿门内,主殿东配殿门内,后殿西庑殿门内,后殿东庑殿门内,中殿门内,后殿门内,文华殿门内,陈设正堂门内,VP-B-side-west-south-interior,VP-B-side-east-south-interior,VP-B-side-west-main-interior,VP-B-side-east-main-interior,VP-B-side-west-rear-interior,VP-B-side-east-rear-interior,VP-B-hall-mid-interior,VP-B-hall-rear-interior,VP-E-court1-hall-interior,VP-E-court2-hall-interior
+  ✗ D1 totalHeight 消费方分类核查：取景/面板主路径一律用实测包围盒，估值只作已标注的退化回退/字段回显/排序 — 疑似把估值当权威：src/interaction/catalog.js:205 totalHeight: building.totalHeight ?? null, | src/ui/index.js:378 if (d.totalHeight) sizeParts.push(`脊高约 ${d.totalHeight} m`);
+  ✗ F1 24 张（8 视角 × 3 时辰）1440×900 真实渲染全部在盘、判据通过、掩码防护未触发 — 未通过：fp/golden 暗区0.01%>30%(掩码防护), orbit/dusk 暗区0%>15%, orbit/night 暗区0%>15%
+---------------------------------------------------------
+{
+ "config": "1.0.6",
+ "layout": "1.1.4",
+ "walk": {
+  "graphCellSize": 1,
+  "graphWalkableCells": 728988,
+  "pathLegs": 49,
+  "pathUnreachable": 12,
+  "pathBlockedSamples": 1,
+  "pathMaxUp": 0.5,
+  "routeSegments": 49,
+  "routeBlockedSamples": 5689,
+  "routeMaxUp": 2,
+  "routeMaxDown": -2,
+  "stepThreshold": 0.5,
+  "routeMaxUpOverThreshold": true,
+  "doors": 53,
+  "doorsOk": 53,
+  "doorsMinClear": 11.3,
+  "waterBodies": 8,
+  "waterUnexpectedlyStandable": 0,
+  "bridgesStandable": 4,
+  "envelopeLeaks": 0,
+  "raisedEnterableFromGround": 0,
+  "gatePassageWalkable": "6/6",
+  "connectivity": {
+   "points": 98,
+   "ok": false,
+   "unreachable": [
+    "广场西配殿门内",
+    "广场东配殿门内",
+    "主殿西配殿门内",
+    "主殿东配殿门内",
+    "后殿西庑殿门内",
+    "后殿东庑殿门内",
+    "中殿门内",
+    "后殿门内",
+    "文华殿门内",
+    "陈设正堂门内",
+    "VP-B-side-west-south-interior",
+    "VP-B-side-east-south-interior",
+    "VP-B-side-west-main-interior",
+    "VP-B-side-east-main-interior",
+    "VP-B-side-west-rear-interior",
+    "VP-B-side-east-rear-interior",
+    "VP-B-hall-mid-interior",
+    "VP-B-hall-rear-interior",
+    "VP-E-court1-hall-interior",
+    "VP-E-court2-hall-interior"
+   ]
+  },
+  "sideGateProbes": 11,
+  "sideGateWalkable": 6,
+  "zones": [
+   "B",
+   "C",
+   "D",
+   "E",
+   "F"
+  ]
+ },
+ "zones": [
+  {
+   "zoneId": "B",
+   "drawCalls": 58,
+   "triangles": 80972,
+   "before": 240,
+   "meshes": 58,
+   "nonInstanced": 52,
+   "labelledMeshes": 52,
+   "mergedBuckets": 58,
+   "budget": 70
+  },
+  {
+   "zoneId": "C",
+   "drawCalls": 49,
+   "triangles": 52196,
+   "before": 236,
+   "meshes": 49,
+   "nonInstanced": 49,
+   "labelledMeshes": 49,
+   "mergedBuckets": 49,
+   "budget": 50
+  },
+  {
+   "zoneId": "D",
+   "drawCalls": 39,
+   "triangles": 45236,
+   "before": 262,
+   "meshes": 39,
+   "nonInstanced": 33,
+   "labelledMeshes": 33,
+   "mergedBuckets": 39,
+   "budget": 40
+  },
+  {
+   "zoneId": "E",
+   "drawCalls": 40,
+   "triangles": 43072,
+   "before": 279,
+   "meshes": 40,
+   "nonInstanced": 37,
+   "labelledMeshes": 37,
+   "mergedBuckets": 40,
+   "budget": 40
+  },
+  {
+   "zoneId": "F",
+   "drawCalls": 61,
+   "triangles": 59056,
+   "before": 274,
+   "meshes": 61,
+   "nonInstanced": 50,
+   "labelledMeshes": 50,
+   "mergedBuckets": 50,
+   "budget": 80
+  }
+ ],
+ "matrix": [
+  {
+   "view": "oblique",
+   "preset": "golden",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 30.1,
+   "darkPct": 2.16,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 12.84,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "oblique",
+   "preset": "dusk",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 30.1,
+   "darkPct": 1.87,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 13.13,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "oblique",
+   "preset": "night",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 27.7,
+   "darkPct": 10.36,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 4.64,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "iso",
+   "preset": "golden",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 36.9,
+   "darkPct": 6.47,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 8.53,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "iso",
+   "preset": "dusk",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 36.9,
+   "darkPct": 3.81,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 11.19,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "iso",
+   "preset": "night",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 35.8,
+   "darkPct": 2.8,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 12.2,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "axis",
+   "preset": "golden",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 100,
+   "darkPct": 2.44,
+   "maxDarkPct": 30,
+   "clipPct": 0,
+   "marginPp": 27.56,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": null
+  },
+  {
+   "view": "axis",
+   "preset": "dusk",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 100,
+   "darkPct": 3.34,
+   "maxDarkPct": 30,
+   "clipPct": 0,
+   "marginPp": 26.66,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": null
+  },
+  {
+   "view": "axis",
+   "preset": "night",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 100,
+   "darkPct": 15.11,
+   "maxDarkPct": 30,
+   "clipPct": 0,
+   "marginPp": 14.89,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": null
+  },
+  {
+   "view": "zone",
+   "preset": "golden",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 30.1,
+   "darkPct": 2.16,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 12.84,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "zone",
+   "preset": "dusk",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 30.1,
+   "darkPct": 1.87,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 13.13,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "zone",
+   "preset": "night",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 27.7,
+   "darkPct": 10.35,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 4.65,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "focus",
+   "preset": "golden",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 71.6,
+   "darkPct": 4.59,
+   "maxDarkPct": 30,
+   "clipPct": 0.02,
+   "marginPp": 25.41,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "focus",
+   "preset": "dusk",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 71.6,
+   "darkPct": 6.36,
+   "maxDarkPct": 30,
+   "clipPct": 0.03,
+   "marginPp": 23.64,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "focus",
+   "preset": "night",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 71.6,
+   "darkPct": 24.95,
+   "maxDarkPct": 30,
+   "clipPct": 0.03,
+   "marginPp": 5.05,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "interior",
+   "preset": "golden",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 100,
+   "darkPct": 3.95,
+   "maxDarkPct": 30,
+   "clipPct": 0.65,
+   "marginPp": 26.05,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": null
+  },
+  {
+   "view": "interior",
+   "preset": "dusk",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 100,
+   "darkPct": 0,
+   "maxDarkPct": 30,
+   "clipPct": 2.56,
+   "marginPp": 30,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": null
+  },
+  {
+   "view": "interior",
+   "preset": "night",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 100,
+   "darkPct": 0,
+   "maxDarkPct": 30,
+   "clipPct": 2.94,
+   "marginPp": 30,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": null
+  },
+  {
+   "view": "fp",
+   "preset": "golden",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 100,
+   "darkPct": 0.01,
+   "maxDarkPct": 30,
+   "clipPct": 0.08,
+   "marginPp": 29.99,
+   "thin": false,
+   "ok": false,
+   "maskGuard": true,
+   "reasons": [
+    "背景掩码防护：未识别到**真天空**（前 10% 行内没有\"平坦且成片\"的天空候选（或面积/色散/漂移不满足））：判据不能靠退回整帧口径得出；确属无天空画面请显式加 --allow-no-sky"
+   ],
+   "backgroundSource": null
+  },
+  {
+   "view": "fp",
+   "preset": "dusk",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 62.8,
+   "darkPct": 0.01,
+   "maxDarkPct": 30,
+   "clipPct": 0.22,
+   "marginPp": 29.99,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "fp",
+   "preset": "night",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 73.4,
+   "darkPct": 0.04,
+   "maxDarkPct": 30,
+   "clipPct": 0.32,
+   "marginPp": 29.96,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "orbit",
+   "preset": "golden",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 76,
+   "darkPct": 4.94,
+   "maxDarkPct": 15,
+   "clipPct": 0,
+   "marginPp": 10.06,
+   "thin": false,
+   "ok": true,
+   "maskGuard": false,
+   "reasons": [],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "orbit",
+   "preset": "dusk",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 0,
+   "darkPct": 0,
+   "maxDarkPct": 15,
+   "clipPct": 25.87,
+   "marginPp": 15,
+   "thin": false,
+   "ok": false,
+   "maskGuard": false,
+   "reasons": [
+    "内容高光截断 25.87% > 5%",
+    "背景掩码防护：内容占比仅 0.02%：画面近似纯色/几乎全为背景，内容判据无意义"
+   ],
+   "backgroundSource": "sky-flood"
+  },
+  {
+   "view": "orbit",
+   "preset": "night",
+   "bytes": null,
+   "resolution": "1440×900",
+   "contentSharePct": 0.2,
+   "darkPct": 0,
+   "maxDarkPct": 15,
+   "clipPct": 2.87,
+   "marginPp": 15,
+   "thin": false,
+   "ok": false,
+   "maskGuard": false,
+   "reasons": [
+    "背景掩码防护：内容占比仅 0.18%：画面近似纯色/几乎全为背景，内容判据无意义"
+   ],
+   "backgroundSource": "sky-flood"
+  }
+ ],
+ "matrixOk": false,
+ "failed": [
+  "A3 分区机位齐全：zone 每区 ≥1、fp-spawn 每区 1、B/C 各 1 个 interior",
+  "B1 路线的 8 段在真实可行走图上全部可达（图 cellSize=1）",
+  "B10 全线连通：9 个走查路点 + 5 个 fp-spawn + 2 个内景同属一个连通分量",
+  "D1 totalHeight 消费方分类核查：取景/面板主路径一律用实测包围盒，估值只作已标注的退化回退/字段回显/排序",
+  "F1 24 张（8 视角 × 3 时辰）1440×900 真实渲染全部在盘、判据通过、掩码防护未触发"
+ ]
+}

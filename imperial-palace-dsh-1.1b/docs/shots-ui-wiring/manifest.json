@@ -1,0 +1,260 @@
+{
+  "at": "2026-09-26T21:37:53.498Z",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "url": "http://127.0.0.1:64482/index.html",
+  "browser": "/Users/casper/Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell",
+  "checks": [
+    {
+      "name": "页面就绪：window.__PALACE__ 与 #palace-ui 均存在",
+      "ok": true
+    },
+    {
+      "name": "#palace-ui 存在",
+      "ok": true,
+      "detail": "display=block size=1440x900"
+    },
+    {
+      "name": "#palace-ui 可见（display≠none 且 visibility≠hidden 且非零尺寸且不透明）",
+      "ok": true,
+      "detail": "display=block visibility=visible opacity=1 rect=1440x900"
+    },
+    {
+      "name": "样式与 :root 令牌已注入",
+      "ok": true,
+      "detail": "styles=true tokens=true"
+    },
+    {
+      "name": "body 有可见文本（首屏不再是空白 DOM）",
+      "ok": true,
+      "detail": "innerText 长度=358"
+    },
+    {
+      "name": "面板齐备：HUD",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"hud\"] → 命中 1"
+    },
+    {
+      "name": "面板齐备：八视角切换器",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"views\"] → 命中 1"
+    },
+    {
+      "name": "面板齐备：分区跳转",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"zones\"] → 命中 1"
+    },
+    {
+      "name": "面板齐备：建筑信息面板",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"info\"] → 命中 1"
+    },
+    {
+      "name": "面板齐备：导览控件",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"tour\"] → 命中 1"
+    },
+    {
+      "name": "面板齐备：小地图",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"minimap\"] → 命中 1"
+    },
+    {
+      "name": "面板齐备：标签层",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"labels\"] → 命中 1"
+    },
+    {
+      "name": "面板齐备：时辰切换",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"env\"] [data-time-preset] → 命中 3"
+    },
+    {
+      "name": "面板齐备：质量档",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"env\"] [data-quality-tier] → 命中 3"
+    },
+    {
+      "name": "面板齐备：回全城",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"zones\"] [data-action=\"reset\"] → 命中 1"
+    },
+    {
+      "name": "面板齐备：帮助",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"help\"] → 命中 1"
+    },
+    {
+      "name": "面板齐备：提示条",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"toast\"] → 命中 1"
+    },
+    {
+      "name": "UI 由 main.js 的唯一 rAF 循环驱动（mountInterface 的 recordFrame 包装层停用）",
+      "ok": true,
+      "detail": "ui.interaction.driveMode()=manual（attached=true）"
+    },
+    {
+      "name": "每帧恰好推进一次（tick 增量 ≤ rAF 帧数 + 2，无第二套驱动）",
+      "ok": true,
+      "detail": "rAF 60 帧 → interaction tick +60（区间 3→63）"
+    },
+    {
+      "name": "找到「视角 2」按钮（data-view-index=2）",
+      "ok": true,
+      "detail": "mode=iso label=\"2等距沙盘\" @(1350,79)"
+    },
+    {
+      "name": "真实点击「视角 2」→ state.viewMode 生效",
+      "ok": true,
+      "detail": "点击后 viewMode=iso（按钮 data-view-mode=iso）"
+    },
+    {
+      "name": "真实按 Digit2 → state.viewMode 生效",
+      "ok": true,
+      "detail": "按键后 viewMode=iso"
+    },
+    {
+      "name": "按钮与键盘同源（同一 viewMode，同一条 view:request-mode）",
+      "ok": true,
+      "detail": "click=iso(1 event) / key=iso(1 event)；事件负载样例={\"mode\":\"iso\",\"index\":2,\"source\":\"ui\"}"
+    },
+    {
+      "name": "截图 ui-01-overview.png（1440×900）",
+      "ok": true,
+      "detail": "1440x900 · 323513 字节 · sha ac2a3282e213"
+    },
+    {
+      "name": "截图 ui-02-tour.png（1440×900）",
+      "ok": true,
+      "detail": "1440x900 · 498907 字节 · sha cc727a4677b8"
+    },
+    {
+      "name": "截图 ui-03-first-person.png（1440×900）",
+      "ok": true,
+      "detail": "1440x900 · 224667 字节 · sha 8419d48e01b5"
+    },
+    {
+      "name": "夜景截图前时辰已切到 moonlitNight",
+      "ok": true,
+      "detail": "state 相关字段={\"preset\":null,\"timePreset\":\"moonlitNight\",\"envPreset\":null,\"candidates\":[[\"timePreset\",\"moonlitNight\"]]}"
+    },
+    {
+      "name": "截图 ui-04-night.png（1440×900）",
+      "ok": true,
+      "detail": "1440x900 · 220878 字节 · sha 7268d4ac29ac"
+    },
+    {
+      "name": "§11.3 隐藏义务：?ui=0&shot=1 下 UI 存在但不可见",
+      "ok": true,
+      "detail": "display=none size=0x0 visible=false forcedHidden=true"
+    },
+    {
+      "name": "页面无未捕获异常 / console.error",
+      "ok": true,
+      "detail": "无"
+    }
+  ],
+  "panels": [
+    {
+      "key": "HUD",
+      "selector": "[data-ui-panel=\"hud\"]",
+      "hits": 1
+    },
+    {
+      "key": "八视角切换器",
+      "selector": "[data-ui-panel=\"views\"]",
+      "hits": 1
+    },
+    {
+      "key": "分区跳转",
+      "selector": "[data-ui-panel=\"zones\"]",
+      "hits": 1
+    },
+    {
+      "key": "建筑信息面板",
+      "selector": "[data-ui-panel=\"info\"]",
+      "hits": 1
+    },
+    {
+      "key": "导览控件",
+      "selector": "[data-ui-panel=\"tour\"]",
+      "hits": 1
+    },
+    {
+      "key": "小地图",
+      "selector": "[data-ui-panel=\"minimap\"]",
+      "hits": 1
+    },
+    {
+      "key": "标签层",
+      "selector": "[data-ui-panel=\"labels\"]",
+      "hits": 1
+    },
+    {
+      "key": "时辰切换",
+      "selector": "[data-ui-panel=\"env\"] [data-time-preset]",
+      "hits": 3
+    },
+    {
+      "key": "质量档",
+      "selector": "[data-ui-panel=\"env\"] [data-quality-tier]",
+      "hits": 3
+    },
+    {
+      "key": "回全城",
+      "selector": "[data-ui-panel=\"zones\"] [data-action=\"reset\"]",
+      "hits": 1
+    },
+    {
+      "key": "帮助",
+      "selector": "[data-ui-panel=\"help\"]",
+      "hits": 1
+    },
+    {
+      "key": "提示条",
+      "selector": "[data-ui-panel=\"toast\"]",
+      "hits": 1
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "ui-01-overview.png",
+      "path": "docs/shots-ui-wiring/ui-01-overview.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 323513,
+      "sha256_12": "ac2a3282e213",
+      "note": "首屏全城（默认视角 + UI 全可见）"
+    },
+    {
+      "name": "ui-02-tour.png",
+      "path": "docs/shots-ui-wiring/ui-02-tour.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 498907,
+      "sha256_12": "cc727a4677b8",
+      "note": "导览进行中（点击「开始」后）"
+    },
+    {
+      "name": "ui-03-first-person.png",
+      "path": "docs/shots-ui-wiring/ui-03-first-person.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 224667,
+      "sha256_12": "8419d48e01b5",
+      "note": "第一人称（点击视角 fp）"
+    },
+    {
+      "name": "ui-04-night.png",
+      "path": "docs/shots-ui-wiring/ui-04-night.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 220878,
+      "sha256_12": "7268d4ac29ac",
+      "note": "夜景（点击「夜晚」按钮，preset=[object Object]）"
+    }
+  ]
+}

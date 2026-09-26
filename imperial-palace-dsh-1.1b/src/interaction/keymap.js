@@ -49,7 +49,7 @@ export const KEY_KINDS = Object.freeze([
  * 解析一个按键。
  * @param {string} code `KeyboardEvent.code`
  * @param {{ viewMode?: string, fpActive?: boolean, tourActive?: boolean, tourPaused?: boolean,
- *           hasSelection?: boolean, pointerLocked?: boolean, tourIndex?: number }} [ctx]
+ *           hasSelection?: boolean, selectedVisitable?: boolean, pointerLocked?: boolean, tourIndex?: number }} [ctx]
  * @returns {{ code, kind, label, owned, request: {type, payload}|null, local: string|null }|null}
  */
 export function resolveKey(code, ctx = {}) {
@@ -59,6 +59,7 @@ export function resolveKey(code, ctx = {}) {
     tourActive = false,
     tourPaused = false,
     hasSelection = false,
+    selectedVisitable = false,
     pointerLocked = false,
   } = ctx;
 
@@ -71,7 +72,20 @@ export function resolveKey(code, ctx = {}) {
   }
 
   if (code === 'KeyF') {
-    // F 为切换：已在第一人称时再请求 fp → core 恢复进入前的模式与机位
+    // F 的三条语义（t59，按优先级）：
+    //   ① 已在某建筑内景 → 返回进入前的模式与机位；
+    //   ② 有选中建筑 → visitable 则进入该建筑内景（机位由 catalog 从区/布局数据推导），
+    //      否则只给"不可进入"提示、不改视角；
+    //   ③ 无选中 → 第一人称切换（原语义：已在 FP 时再请求 fp，由 core 恢复进入前的模式与机位）。
+    if (viewMode === 'interior') {
+      return { code, kind: 'interior', label: '返回进入内景前的视角', owned: true, request: null, local: 'exitInterior' };
+    }
+    if (hasSelection) {
+      if (selectedVisitable) {
+        return { code, kind: 'interior', label: '进入选中建筑的内景', owned: true, request: null, local: 'enterInterior' };
+      }
+      return { code, kind: 'interior', label: '选中建筑不可进入内景', owned: true, request: null, local: 'notifyInteriorUnavailable' };
+    }
     return {
       code,
       kind: 'view',
@@ -157,7 +171,8 @@ export function helpKeyList() {
     const resolved = resolveKey(`Digit${index}`, {});
     if (resolved) rows.push({ code: String(index), label: `视角 ${index}` });
   }
-  rows.push({ code: 'F', label: '进入 / 退出第一人称' });
+  rows.push({ code: 'F', label: '选中建筑：进入其内景 / 再按返回；未选中：进入或退出第一人称' });
+  rows.push({ code: '点击建筑', label: '左上角显示该建筑详情（空白处或「关闭」取消选中）' });
   rows.push({ code: 'Esc', label: '释放指针锁（留在第一人称）/ 暂停导览' });
   rows.push({ code: 'W A S D', label: '第一人称移动（↑↓←→ 同义）' });
   rows.push({ code: 'Shift', label: '第一人称加速' });

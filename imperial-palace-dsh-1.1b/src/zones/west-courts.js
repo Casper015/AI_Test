@@ -39,8 +39,8 @@
  */
 
 import * as THREE from 'three';
-import { CONFIG, MODULES, TERRAIN, INTERACTION, PLANTS } from '../shared/config.js';
-import { WATER_BODIES, WALLS } from '../shared/layout.js';
+import { CONFIG, MODULES, TERRAIN, INTERACTION, PLANTS, deriveSeed } from '../shared/config.js';
+import { INTERIOR_BY_SLOT, WALKABLE, WATER_BODIES, WALLS } from '../shared/layout.js';
 import { rampsFromRoads } from '../core/layout-slice.js';
 
 export const ZONE_ID = 'D';
@@ -111,6 +111,118 @@ function wallSolidSpans(wall) {
 }
 
 /* =============================================================================
+ * 一之二、室内陈设（kit.interiorSet，t61 标准套件 · t62 接入）
+ * ========================================================================== */
+
+/**
+ * 为区内**已登记内景**的建筑布室内陈设（`layout.INTERIOR_BY_SLOT[slotId]`，由 t60/t70/t73/t74 注册）。
+ *
+ * 纪律（任务 t62）：
+ *   1. 室内范围与地坪**一律取 layout 注册值**：`WK-<slotId>-interior` 的 `bounds` 与 `y`，
+ *      不自行推断尺寸；天花标高取 **kit 实测檐口 − 0.2m**（`buildBuildings` 记的 `eaveHeightAbsolute`），
+ *      保证套件不穿顶；
+ *   2. D 区 8 栋 = 殿 4（hall）+ 配房 4（sideHall）；4 座院门与 2 座亭无内景登记（不布）；
+ *   3. 套件返回**未挂载**的 Group/LOD，本函数只负责 `group.add`；合批与 LOD 档位由后段统一处理；
+ *   4. `seed` 由 `deriveSeed(slotId,'interior')` 派生 → 同机位画面可复现。
+ *
+ * 返回 { facts, available }：逐栋记录 layout 依据（地面/包围盒/机位/走查点）与套件实测（items/三角面/
+ * 世界包围盒/kit 诊断），供测试与回执逐栋复核。
+ */
+function buildInteriorSets(ctx, group, buildingFacts) {
+  // D 区地坪 `TERRAIN.sideCourtY = 0.4`：建筑与室内地面都抬到地坪上（本区一贯口径）
+  const zoneGroundY = num(ctx.zoneLayout?.groundY) ? ctx.zoneLayout.groundY : TERRAIN.sideCourtY;
+  const { kit } = ctx;
+  const interiorSet = typeof kit.interiorSet === 'function' ? kit.interiorSet : null;
+  const facts = [];
+  if (!interiorSet) return { facts, available: false };
+
+  for (const slot of ctx.zoneLayout.slots) {
+    const record = INTERIOR_BY_SLOT[slot.id] ?? null;
+    if (!record?.walkableId) continue;
+    const surface = WALKABLE.find((w) => w.id === record.walkableId);
+    if (!surface) fail(`layout 登记了 ${slot.id} 的内景 ${record.walkableId}，但 WALKABLE 中找不到该面`);
+
+    const measured = buildingFacts.find((f) => f.id === slot.id);
+    // 室内地面 = 该栋建筑 kit 的台基顶 = 区域地坪 + layout.baseY（与建筑摆位同一真值来源）。
+    // ⚠️ layout 为 D/E/C 派生的 `WK-<slot>-interior.y` 用的是**相对** baseY（未加区域地坪）：
+    //    D/E Δ=+0.4m、C Δ=+0.9m（见回执 §2.4 缺陷登记）。若照该值布陈设，家具会埋进 0.4m 厚的台明里、
+    //    内景不可见，因此这里取几何真值并在回执给出最小修法（由 layout 侧把三区派生内景 y 抬高）。
+    const groundY = round(zoneGroundY + slot.baseY);
+    const eaveAbsolute = measured?.eaveHeightAbsolute ?? (groundY + slot.eaveHeight);
+    const ceilingY = Math.max(groundY + 0.6, Math.min(eaveAbsolute, groundY + slot.eaveHeight) - 0.2);
+
+    const object = interiorSet({
+      id: `interior:${slot.id}`,
+      kind: slot.kind,
+      grade: slot.grade,
+      bounds: { ...surface.bounds },
+      groundY,
+      layoutGroundY: surface.y,
+      groundDelta: round(groundY - surface.y),
+      ceilingY,
+      entrance: { x: slot.entrance.x, z: slot.entrance.z },
+      seed: deriveSeed(slot.id, 'interior'),
+      lod: 'auto',
+    });
+    object.userData.zone = ZONE_ID;
+    object.userData.buildingId = slot.id;
+    object.userData.interiorSurfaceId = surface.id;
+    object.userData.interiorViewpointId = record.viewpointId ?? null;
+    group.add(object);
+
+    const metrics = object.userData.kit?.metrics ?? {};
+    facts.push({
+      id: slot.id,
+      kind: slot.kind,
+      grade: slot.grade,
+      surfaceId: surface.id,
+      viewpointId: record.viewpointId ?? null,
+      fpId: record.fpId ?? null,
+      bounds: { ...surface.bounds },
+      groundY,
+      layoutGroundY: surface.y,
+      groundDelta: round(groundY - surface.y),
+      ceilingY,
+      items: Array.isArray(metrics.items) ? metrics.items.length : 0,
+      triangles: metrics.triangles ?? null,
+      worldBounds: metrics.worldBounds ?? null,
+      diagnostics: (object.userData.kit?.warnings ?? []).map((w) => (typeof w === 'string' ? w : w.code)),
+    });
+  }
+  return { facts, available: true };
+}
+
+/**
+ * 内景补光灯位（§8.3；灯由 t2 环境系统统一激活，区域不建第二套灯光）。
+ * 与 B 区同一手法：每栋内景沿长轴 1/3、2/3 各一盏，落在室内地面（`groundY`），高度 2.6m。
+ * 目的：§12 内景判据（暗区 ≤30%）在 goldenHour 下对净高 3~4m 的配房偏紧（深色屋面占比大），
+ * 按 CONFIG 1.0.3 `lampIntensityScale(golden 0.45)` 让宫灯参与室内照明 —— 最小修法，不放宽判据。
+ */
+function buildInteriorLampAnchors(ctx, interiorFacts) {
+  const out = [];
+  for (const fact of interiorFacts) {
+    const b = fact.bounds;
+    const spanX = b.maxX - b.minX;
+    const spanZ = b.maxZ - b.minZ;
+    const alongZ = spanZ >= spanX;
+    for (const t of [1 / 3, 2 / 3]) {
+      const x = round(alongZ ? (b.minX + b.maxX) / 2 : b.minX + spanX * t);
+      const z = round(alongZ ? b.minZ + spanZ * t : (b.minZ + b.maxZ) / 2);
+      out.push({
+        id: `LA-D-interior-${fact.id.replace(/^D-/, '')}-${alongZ ? 'z' : 'x'}${t === 1 / 3 ? 'a' : 'b'}`,
+        zone: ZONE_ID,
+        kind: 'lantern',
+        position: { x, y: fact.groundY, z },
+        height: 2.6,
+        role: 'gardenOrCourtLantern',
+        note: `室内宫灯（${fact.id} 内景补光；t62 最小修法）`,
+      });
+    }
+  }
+  return out;
+}
+
+/* =============================================================================
  * 二、区域入口
  * ========================================================================== */
 
@@ -140,6 +252,7 @@ export async function createZone(ctx) {
 
   const groups = {
     buildings: new THREE.Group(),
+    interiors: new THREE.Group(),
     courts: new THREE.Group(),
     water: new THREE.Group(),
     ground: new THREE.Group(),
@@ -595,6 +708,13 @@ export async function createZone(ctx) {
   }
 
   /* ========================================================================
+   * 5b. 室内陈设（kit.interiorSet 标准套件，t61 交付 · t62 接入）
+   * ====================================================================== */
+
+  const interiorSets = buildInteriorSets(ctx, groups.interiors, buildingFacts);
+  const interiorLampAnchors = buildInteriorLampAnchors(ctx, interiorSets.facts);
+
+  /* ========================================================================
    * 6. 摆件（灯位 + 铜器）与植被（实例化）
    * ====================================================================== */
 
@@ -634,8 +754,12 @@ export async function createZone(ctx) {
     addExtra(extraIndex, rearPavilion.x + 9, rearPavilion.z - 9);
   }
 
-  const lightAnchors = [...baseAnchors, ...extraAnchors].map((anchor) => {
-    const surface = typeof helpers.floorYAt === 'function' ? helpers.floorYAt(anchor.position.x, anchor.position.z) : null;
+  const lightAnchorsRaw = [...baseAnchors, ...extraAnchors, ...interiorLampAnchors];
+  const lightAnchors = lightAnchorsRaw.map((anchor) => {
+    // 内景灯的 y 取室内地面（`groundY`），其余按 floorYAt 实现
+    const surface = anchor.id.includes('-interior-')
+      ? anchor.position.y
+      : (typeof helpers.floorYAt === 'function' ? helpers.floorYAt(anchor.position.x, anchor.position.z) : null);
     return { ...anchor, position: { x: anchor.position.x, y: num(surface) ? surface : anchor.position.y, z: anchor.position.z } };
   });
 
@@ -895,6 +1019,9 @@ export async function createZone(ctx) {
     courtyardWalls: courtyardWalls.length,
     corridors: corridorFacts.length,
     pavingSlabs: pavingFacts.length,
+    interiorSets: interiorSets.facts.length,
+    interiorFacts: interiorSets.facts,
+    interiorKitAvailable: interiorSets.available,
     roadSegments: roadFacts.length,
     trees: treeFacts.length,
     blossom: treeFacts.filter((t) => t.blossom).length,

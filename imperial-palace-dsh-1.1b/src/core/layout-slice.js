@@ -10,7 +10,7 @@
 import { CONFIG, TERRAIN, INTERACTION } from '../shared/config.js';
 import * as LAYOUT from '../shared/layout.js';
 
-const { ZONES, SLOTS, COURTYARDS, CONNECTORS, ROADS, TERRACES, WALKABLE, OBSTACLES, WALLS, VIEWPOINTS, LIGHT_ANCHORS, VEGETATION, OUTER_BOUNDS, ENVELOPE, WATER_BODIES, SCENIC_OBJECTS, BRIDGES } = LAYOUT;
+const { ZONES, SLOTS, COURTYARDS, CONNECTORS, ROADS, TERRACES, WALKABLE, OBSTACLES, WALLS, VIEWPOINTS, LIGHT_ANCHORS, VEGETATION, OUTER_BOUNDS, ENVELOPE, WATER_BODIES, SCENIC_OBJECTS, BRIDGES, INTERIOR_BY_SLOT } = LAYOUT;
 
 /** 区域 id 列表（B/C/D/E/F）。 */
 export const ZONE_IDS = Object.freeze(ZONES.map((z) => z.id));
@@ -246,6 +246,65 @@ function computeNeighbours(zone) {
 }
 
 /** 区域自身的全部布局切片。 */
+/* -------------------------------------------------------------------------- */
+/*  t65：内景**显式寻址**（按机位/室内地面，而不是按区名猜）                      */
+/*                                                                             */
+/*  背景：t72/t73/t74 之后一区可有多个内景（全区 43 个）。旧的"按 zone 过滤取第一个"  */
+/*  会把相机夹到**别的建筑**的室内盒里（同区多内景 ⇒ 并集/首元素，必然错）。       */
+/*  这里只做**解析**（id → 记录/面/机位），包围盒格式化仍归 src/core/camera.js。    */
+/* -------------------------------------------------------------------------- */
+
+const INTERIOR_SURFACES = Object.freeze(WALKABLE.filter((w) => w.kind === 'interior'));
+const INTERIOR_VIEWPOINT_LIST = Object.freeze(VIEWPOINTS.filter((v) => v.mode === 'interior'));
+
+/** 按内景机位 id（`VP-<slotId>-interior`）取映射记录。 */
+export function interiorRecordForViewpointId(viewpointId) {
+  if (!viewpointId) return null;
+  const direct = Object.values(INTERIOR_BY_SLOT).find((r) => r.viewpointId === viewpointId) ?? null;
+  if (direct) return direct;
+  // 兼容既有别名机位（VP-B-interior / VP-C-interior）：由 layout 的映射表反查
+  return Object.values(INTERIOR_BY_SLOT).find((r) => r.viewpointId === viewpointId || r.slotId === viewpointId) ?? null;
+}
+
+/** 按室内可行走面 id（`WK-<slotId>-interior`）取映射记录。 */
+export function interiorRecordForSurfaceId(surfaceId) {
+  if (!surfaceId) return null;
+  return Object.values(INTERIOR_BY_SLOT).find((r) => r.walkableId === surfaceId) ?? null;
+}
+
+/** 按建筑 slotId 取映射记录。 */
+export function interiorRecordForSlot(slotId) {
+  if (!slotId) return null;
+  return INTERIOR_BY_SLOT[slotId] ?? null;
+}
+
+/** 室内可行走面（按 id 精确取）。 */
+export function interiorSurfaceById(surfaceId) {
+  if (!surfaceId) return null;
+  return INTERIOR_SURFACES.find((w) => w.id === surfaceId) ?? null;
+}
+
+/** 内景机位（按 id 精确取）。 */
+export function interiorViewpointById(viewpointId) {
+  if (!viewpointId) return null;
+  return INTERIOR_VIEWPOINT_LIST.find((v) => v.id === viewpointId) ?? null;
+}
+
+/** 某区全部室内面（按 id 排序，保证确定性）。 */
+export function interiorsForZone(zoneId) {
+  if (!zoneId) return [...INTERIOR_SURFACES];
+  return INTERIOR_SURFACES.filter((w) => w.zone === zoneId).sort((a, b) => (a.id < b.id ? -1 : 1));
+}
+
+/** 某区全部内景机位（按 id 排序，保证确定性）。 */
+export function interiorViewpointsForZone(zoneId) {
+  if (!zoneId) return [...INTERIOR_VIEWPOINT_LIST];
+  return INTERIOR_VIEWPOINT_LIST.filter((v) => v.area === zoneId || v.zone === zoneId).sort((a, b) => (a.id < b.id ? -1 : 1));
+}
+
+/** 内景总数（一区多内景的判定依据）。 */
+export const INTERIOR_SURFACE_COUNT = INTERIOR_SURFACES.length;
+
 export function zoneLayoutFor(zoneId) {
   const zone = ZONE_BY_ID.get(zoneId);
   if (!zone) throw new Error(`zoneLayoutFor: 未知区域 "${zoneId}"（合法：${ZONE_IDS.join('/')}）`);

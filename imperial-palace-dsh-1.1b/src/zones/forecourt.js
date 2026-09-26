@@ -27,8 +27,8 @@
  */
 
 import * as THREE from 'three';
-import { CONFIG, MODULES, TERRAIN } from '../shared/config.js';
-import { SCENIC_OBJECTS, WALLS } from '../shared/layout.js';
+import { CONFIG, MODULES, TERRAIN, deriveSeed } from '../shared/config.js';
+import { INTERIOR_BY_SLOT, SCENIC_OBJECTS, WALKABLE, WALLS } from '../shared/layout.js';
 import { rampsFromRoads } from '../core/layout-slice.js';
 
 export const ZONE_ID = 'B';
@@ -187,6 +187,11 @@ export function alignStairFlights(THREEImpl, root) {
  * layout 槽位 → kit 工厂参数。槽位字段（id/name/w/d/bays/terraceH/roofType/grade/facing/
  * baseY/door）由 kit 直接识别；这里只做两处必要调整（见文件头裁定 A、门扇开启度）。
  */
+/** 建筑的 kit 摆位基准（= 台基顶 / 室内地面）：B 区地坪为 0，故等于 layout.baseY（主殿由三层台基承担）。 */
+function buildingBaseY(slot) {
+  return PLINTH_FROM_TERRACES.has(slot.id) ? +MODULES.terraceTotalHeight.toFixed(2) : slot.baseY;
+}
+
 function buildingParams(slot, quality) {
   const params = {
     id: slot.id,
@@ -210,7 +215,7 @@ function buildingParams(slot, quality) {
   };
   if (PLINTH_FROM_TERRACES.has(slot.id)) {
     params.terraceH = 0;
-    params.baseY = +MODULES.terraceTotalHeight.toFixed(2);
+    params.baseY = buildingBaseY(slot);
   }
   if (params.door && slot.visitable) {
     // 大朝正殿门扇敞开（保留 26m 净宽门洞与通行），便于第一人称与内景机位进入
@@ -648,189 +653,110 @@ function buildGround(ctx, group) {
 }
 
 /* =============================================================================
- * 六、金銮殿内景（宝座 / 屏风 / 盘龙金柱柱网 / 平棋式藻井）
+ * 六、室内陈设（kit.interiorSet，t61 标准套件 · t62 接入）
  * ========================================================================== */
 
 /**
- * 内景陈设。全部用 kit 构件组合（`terrace` 须弥座 / `screenWall` 屏风 / `paving` 板式件 + `bronze` 铜器），
- * kit 目前没有「宝座 / 藻井穹顶 / 盘龙柱」专用工厂——已按纪律登记需求（见回执 §5），不在此自建私有素材。
- * 所有构件都落在 `WK-B-hall-main-interior` 的室内包围盒内、且低于檐口（不穿墙不出顶）。
+ * 为区内**已登记内景**的建筑布室内陈设（`layout.INTERIOR_BY_SLOT[slotId]`，由 t60/t70/t73/t74 注册）。
+ *
+ * 纪律（任务 t62）：
+ *   1. 室内范围与地坪**一律取 layout 注册值**：`WK-<slotId>-interior` 的 `bounds` 与 `y`，
+ *      不自行推断尺寸；天花标高取 **kit 实测檐口 − 0.2m**（`buildBuildings` 的 `eaveHeightAbsolute`），
+ *      保证套件不穿顶；
+ *   2. B 区 10 栋 = 殿 3（hall）+ 门殿 1（gateHall）+ 配殿 6（sideHall）；2 座亭无内景登记（不布）；
+ *   3. 套件返回**未挂载**的 Group/LOD，本函数负责 `group.add`；合批与 LOD 档位由 §七 统一处理；
+ *   4. `seed` 由 `config.deriveSeed(slotId,'interior')` 派生 → 同机位画面可复现。
+ *
+ * 返回 { facts, available }：`facts` 逐栋记录 layout 依据（地面/包围盒/机位/走查点）与套件实测
+ * （`items` 件数、三角面、世界包围盒、kit 诊断），供测试与回执逐栋复核。
  */
-function buildInterior(ctx, group, interiors, detail) {
-  const { kit, zoneLayout } = ctx;
-  const terrace = kitFactory(kit, 'terrace');
-  const paving = kitFactory(kit, 'paving', { required: false });
-  const screenWall = kitFactory(kit, 'screenWall', { required: false });
-  const bronze = kitFactory(kit, 'bronze');
-  const hall = zoneLayout.slots.find((s) => s.id === 'B-hall-main');
-  if (!hall) fail('layout 缺少 B-hall-main 槽位');
+function buildInteriorSets(ctx, group, buildingFacts) {
+  const { kit, config } = ctx;
+  const interiorSet = typeof kit.interiorSet === 'function' ? kit.interiorSet : null;
+  const facts = [];
+  if (!interiorSet) return { facts, available: false };
 
-  const floorY = MODULES.terraceTotalHeight;
-  const ceilingPitch = MODULES.eaveHeight * CONFIG.GRADES[hall.grade].eaveHeightFactor;
-  const ceilingY = hall.baseY + ceilingPitch; // 檐口高（与 layout.eaveHeight 同源）
-  // 室内定位：以登记的内景可行走面（WK-B-hall-main-interior）为基准，不另造坐标系。
-  const face = zoneLayout.walkable.find((w) => w.kind === 'interior' && w.zone === ZONE_ID);
-  if (!face) fail('layout 缺少 B 区 interior 可行走面');
-  const north = face.bounds.maxZ; // 北端（屏风/宝座一侧，朝南）
-  const south = face.bounds.minZ; // 南端（金銮殿门洞一侧）
-  const screenZ = +(north - 2.5).toFixed(2);
-  const throneZ = +(north - 6).toFixed(2);
-  const daisZ = +(north - 6.5).toFixed(2);
+  for (const slot of ctx.zoneLayout.slots) {
+    const record = INTERIOR_BY_SLOT[slot.id] ?? null;
+    if (!record?.walkableId) continue;
+    const surface = WALKABLE.find((w) => w.id === record.walkableId);
+    if (!surface) fail(`layout 登记了 ${slot.id} 的内景 ${record.walkableId}，但 WALKABLE 中找不到该面`);
 
-  // 1) 须弥座（宝座台）：kit.terrace 两层，落在金砖地面上
-  const dais = terrace({
-    id: 'B-interior-dais',
-    name: '金銮宝座须弥座',
-    tiers: [
-      { bounds: { minX: -6, maxX: 6, minZ: north - 14, maxZ: north - 1 }, y0: floorY, y1: floorY + 0.6, tier: 1 },
-      { bounds: { minX: -4.6, maxX: 4.6, minZ: north - 13, maxZ: north - 2 }, y0: floorY + 0.6, y1: floorY + 1.1, tier: 2 },
-    ],
-    x: 0,
-    z: daisZ,
-    w: 12,
-    d: 12,
-    terraceH: 1.1,
-    railing: false,
-    detail,
-  });
-  dais.userData.zone = ZONE_ID;
-  group.add(dais);
-  interiors.push({ id: 'dais', kind: 'terrace', bounds: { minX: -6, maxX: 6, minZ: north - 14, maxZ: north - 1 } });
+    const measured = buildingFacts.find((f) => f.id === slot.id);
+    // 室内地面 = 该栋建筑 kit 的台基顶（`buildingBaseY`）——B 区地坪为 0，故与 `WK.y` 逐值相同（Δ=0，测试断言）；
+    // 天花 = kit 实测檐口 − 0.2m（不穿顶）。
+    const groundY = buildingBaseY(slot);
+    const eaveAbsolute = measured?.eaveHeightAbsolute ?? (groundY + slot.eaveHeight);
+    const ceilingY = Math.max(groundY + 0.6, Math.min(eaveAbsolute, groundY + slot.eaveHeight) - 0.2);
 
-  // 2) 宝座本体：鎏金坐面 + 两侧扶手（`paving` = kit 的通用板式件工厂，y 语义为板顶）+ 宝座屏（`screenWall`）
-  const throneY = floorY + 1.1;
-  if (paving) {
-    const seat = paving({ id: 'B-interior-throne-seat', name: '金銮宝座坐面', w: 4.2, d: 2.4, x: 0, z: throneZ, y: throneY + 0.75, thickness: 0.75, material: 'metalGilt', detail });
-    group.add(seat);
-    for (const sx of [-1, 1]) {
-      const arm = paving({
-        id: `B-interior-throne-arm-${sx > 0 ? 'east' : 'west'}`,
-        name: '宝座扶手',
-        w: 0.45,
-        d: 2.4,
-        x: sx * 1.9,
-        z: throneZ,
-        y: throneY + 1.05,
-        thickness: 1.05,
-        material: 'metalGilt',
-        detail,
+    const object = interiorSet({
+      id: `interior:${slot.id}`,
+      kind: slot.kind,
+      grade: slot.grade,
+      bounds: { ...surface.bounds },
+      groundY,
+      ceilingY,
+      entrance: { x: slot.entrance.x, z: slot.entrance.z },
+      seed: deriveSeed(slot.id, 'interior'),
+      lod: 'auto',
+    });
+    object.userData.zone = ZONE_ID;
+    object.userData.buildingId = slot.id;
+    object.userData.interiorSurfaceId = surface.id;
+    object.userData.interiorViewpointId = record.viewpointId ?? null;
+    group.add(object);
+
+    const metrics = object.userData.kit?.metrics ?? {};
+    facts.push({
+      id: slot.id,
+      kind: slot.kind,
+      grade: slot.grade,
+      surfaceId: surface.id,
+      viewpointId: record.viewpointId ?? null,
+      fpId: record.fpId ?? null,
+      bounds: { ...surface.bounds },
+      groundY,
+      ceilingY,
+      items: Array.isArray(metrics.items) ? metrics.items.length : 0,
+      triangles: metrics.triangles ?? null,
+      worldBounds: metrics.worldBounds ?? null,
+      diagnostics: (object.userData.kit?.warnings ?? []).map((w) => (typeof w === 'string' ? w : w.code)),
+    });
+  }
+  return { facts, available: true };
+}
+
+/**
+ * 内景补光灯位（§8.3 灯位登记；灯由 t2 的统一环境系统激活，区域不建第二套灯光）。
+ *
+ * 为什么需要：§12 内景判据（内容暗区 ≤30%）在 goldenHour 下对**配殿/庑房**偏紧——室内净高仅 3~4m，
+ * 画面里深色屋面（瓦背）与朱红墙占比大，实测 `B-side-east-south` 30.71% FAIL。按 CONFIG 1.0.3
+ * `lampIntensityScale(golden 0.45)` 让宫灯在白天有限参与室内照明是本卡允许的"最小修法（调室内灯）"，
+ * **不放宽任何判据**；每栋内景沿长轴 1/3 与 2/3 处各一盏，落在室内地面上（`WK.y`），
+ * 高度 2.6m（灯体低于室内净高，不穿顶）。
+ */
+function buildInteriorLampAnchors(ctx, interiorFacts) {
+  const out = [];
+  for (const fact of interiorFacts) {
+    const b = fact.bounds;
+    const spanX = b.maxX - b.minX;
+    const spanZ = b.maxZ - b.minZ;
+    const alongZ = spanZ >= spanX;
+    for (const t of [1 / 3, 2 / 3]) {
+      const x = +(alongZ ? (b.minX + b.maxX) / 2 : b.minX + spanX * t).toFixed(2);
+      const z = +(alongZ ? b.minZ + spanZ * t : (b.minZ + b.maxZ) / 2).toFixed(2);
+      out.push({
+        id: `LA-B-interior-${fact.id.replace(/^B-/, '')}-${alongZ ? 'z' : 'x'}${t === 1 / 3 ? 'a' : 'b'}`,
+        zone: ZONE_ID,
+        kind: 'lantern',
+        position: { x, y: fact.groundY, z },
+        height: 2.6,
+        role: 'gardenOrCourtLantern',
+        note: `室内宫灯（${fact.id} 内景补光；t62 最小修法）`,
       });
-      group.add(arm);
-    }
-    interiors.push({ id: 'throne', kind: 'paving', bounds: { minX: -2.1, maxX: 2.1, minZ: throneZ - 1.2, maxZ: throneZ + 1.2 } });
-  }
-  if (screenWall) {
-    const backScreen = screenWall({ id: 'B-interior-throne-back', name: '宝座屏风（靠背）', w: 6.4, height: 3.8, thickness: 0.45, x: 0, z: throneZ - 1.6, y: throneY, detail });
-    backScreen.userData.zone = ZONE_ID;
-    group.add(backScreen);
-    interiors.push({ id: 'throneScreen', kind: 'screenWall', bounds: { minX: -3.2, maxX: 3.2, minZ: throneZ - 1.85, maxZ: throneZ - 1.35 } });
-  }
-
-  // 3) 屏风（kit.screenWall = 照壁/影壁工厂；这里按「屏风」使用，立在宝座之后）
-  if (screenWall) {
-    const screen = screenWall({ id: 'B-interior-screen', name: '金銮殿屏风', w: 20, height: 5.6, thickness: 0.5, x: 0, z: screenZ, y: floorY, detail });
-    screen.userData.zone = ZONE_ID;
-    group.add(screen);
-    interiors.push({ id: 'screen', kind: 'screenWall', bounds: { minX: -10, maxX: 10, minZ: screenZ - 0.25, maxZ: screenZ + 0.25 } });
-  }
-
-  // 4) 盘龙金柱：殿内金柱柱网由 kit.hall 生成（4 排 × 10 列）；这里在两排金柱柱脚加鎏金抱柱箍
-  const bodyD = hall.d - 2 * Math.min(CONFIG.MODULES.plinthWidth, Math.min(hall.w, hall.d) * 0.12);
-  const columnRows = [1, 2].map((j) => +(hall.z - bodyD / 2 + (bodyD * j) / 3).toFixed(2));
-  for (const z of columnRows) {
-    for (const sx of [-1, 1]) {
-      const collar = bronze({ id: `B-interior-column-ring-${sx > 0 ? 'e' : 'w'}-${z.toFixed(1)}`, kind: 'drum', size: 1.5, x: sx * 4.37, z, y: floorY, detail });
-      group.add(collar);
     }
   }
-
-  // 5) 平棋式藻井：檐下底板（kit.hall 的 soffit，底约在檐口下 0.23m）之下挂两层同心方井 + 中心井板 + 鎏金宝顶
-  //    （kit 没有可向上凹陷的藻井穹顶构件，故按"平棋"做法：同心方井逐层内收、中心吊鎏金宝顶，不穿出屋面）
-  if (paving) {
-    const cz = throneZ;
-    const frames = [
-      { outer: [26, 17], inner: [17, 9], y: ceilingY - 0.3 },
-      { outer: [17, 9], inner: [9, 4], y: ceilingY - 0.46 },
-    ];
-    frames.forEach((frame, index) => {
-      const [ow, od] = frame.outer;
-      const [iw, id] = frame.inner;
-      const bandX = (ow - iw) / 2; // 东西两侧井带：宽 = 外内差之半，深 = 外深
-      const bandZ = (od - id) / 2; // 南北两侧井带：深 = 外内差之半，宽 = 内宽
-      for (const sx of [-1, 1]) {
-        const slab = paving({
-          id: `B-interior-caisson-${index}-ew-${sx > 0 ? 'e' : 'w'}`,
-          name: '藻井方井（东西井带）',
-          w: bandX,
-          d: od,
-          x: sx * (iw / 2 + bandX / 2),
-          z: cz,
-          y: frame.y,
-          thickness: 0.18,
-          material: 'beamPainting',
-          detail,
-        });
-        group.add(slab);
-      }
-      for (const sz of [-1, 1]) {
-        const slab = paving({
-          id: `B-interior-caisson-${index}-ns-${sz > 0 ? 'n' : 's'}`,
-          name: '藻井方井（南北井带）',
-          w: iw,
-          d: bandZ,
-          x: 0,
-          z: cz + sz * (id / 2 + bandZ / 2),
-          y: frame.y,
-          thickness: 0.18,
-          material: 'beamPainting',
-          detail,
-        });
-        group.add(slab);
-      }
-    });
-    const plate = paving({
-      id: 'B-interior-caisson-2-center',
-      name: '藻井中心井板',
-      w: 9,
-      d: 4,
-      x: 0,
-      z: cz,
-      y: ceilingY - 0.62,
-      thickness: 0.18,
-      material: 'beamPainting',
-      detail,
-    });
-    group.add(plate);
-    const boss = bronze({
-      id: 'B-interior-caisson-boss',
-      kind: 'vessel',
-      size: 2.4,
-      x: 0,
-      z: cz,
-      y: ceilingY - 3.0 + bronzeGroundOffset('vessel', 2.4),
-      detail,
-    });
-    group.add(boss);
-    interiors.push({ id: 'caisson', kind: 'caisson', bounds: { minX: -13, maxX: 13, minZ: cz - 8.5, maxZ: cz + 8.5 } });
-  }
-
-  // 6) 殿内铜香炉（平台陈设，置于宝座之前）
-  for (const sx of [-1, 1]) {
-    const censer = bronze({
-      id: `B-interior-censer-${sx > 0 ? 'east' : 'west'}`,
-      kind: 'censer',
-      size: 1.6,
-      x: sx * 12,
-      z: south + 10,
-      y: floorY + bronzeGroundOffset('censer', 1.6),
-      detail,
-    });
-    group.add(censer);
-  }
-
-  interiors.push({ id: 'doorway', kind: 'passage', bounds: { minX: -13, maxX: 13, minZ: south - 6, maxZ: south } });
-
-  return { floorY, ceilingY, fixtures: interiors.length, daisId: dais.userData?.kit?.id ?? 'B-interior-dais' };
+  return out;
 }
 
 /* =============================================================================
@@ -963,11 +889,11 @@ function buildVegetation(ctx, group, detail) {
  * 登记的 x/z 逐值不变；y 取 `floorYAt(x,z)`（layout 基线为 0，本区按实际地面实现——
  * 例如中轴 z=-110 的两个灯位落在金銮殿内景地面 4.5m 上，z=-150 的两个落在台基二层顶 3.0m 上）。
  */
-function buildLightFixtures(ctx, group, detail) {
+function buildLightFixtures(ctx, group, detail, extraAnchors = []) {
   const { kit, zoneLayout } = ctx;
   const lantern = kitFactory(kit, 'lantern');
   const instanceFromPoints = kitFactory(kit, 'instanceFromPoints', { required: false });
-  const spots = zoneLayout.lightAnchors.map((anchor) => {
+  const spots = [...zoneLayout.lightAnchors, ...extraAnchors].map((anchor) => {
     const surface = zoneLayout.helpers.floorYAt(anchor.position.x, anchor.position.z);
     return {
       anchorId: anchor.id,
@@ -1078,16 +1004,21 @@ export async function createZone(ctx) {
   root.add(groundGroup);
   const ground = buildGround(ctx, groundGroup);
 
-  /* ---- 5. 内景 / 陈设 / 绿化 / 灯体 ---- */
+  /* ---- 5. 内景（kit.interiorSet）/ 陈设 / 绿化 / 灯体 ---- */
+  const interiorsGroup = new THREE.Group();
+  interiorsGroup.name = 'B:interiors';
+  root.add(interiorsGroup);
+  const interiorSets = buildInteriorSets(ctx, interiorsGroup, built.metrics);
+  // 内景补光灯位（须在灯体与 lightAnchors 之前算好）
+  const interiorLampAnchors = buildInteriorLampAnchors(ctx, interiorSets.facts);
+
   const propsGroup = new THREE.Group();
   propsGroup.name = 'B:props';
   root.add(propsGroup);
-  const interiors = [];
-  const interior = buildInterior(ctx, propsGroup, interiors, propDetail);
   const scenic = buildScenic(ctx, propsGroup, propDetail);
   const furnishings = buildTerraceFurnishings(ctx, propsGroup, propDetail);
   const trees = buildVegetation(ctx, propsGroup, propDetail);
-  const lamps = buildLightFixtures(ctx, propsGroup, propDetail);
+  const lamps = buildLightFixtures(ctx, propsGroup, propDetail, interiorLampAnchors);
 
   /* ---- 6. 台阶朝向规范化（见文件头裁定 B） ---- */
   const stairFix = alignStairFlights(THREE, root);
@@ -1152,7 +1083,7 @@ export async function createZone(ctx) {
     target: { ...v.target },
   }));
 
-  const lightAnchors = zoneLayout.lightAnchors.map((a) => {
+  const lightAnchors = [...zoneLayout.lightAnchors, ...interiorLampAnchors].map((a) => {
     const surface = zoneLayout.helpers.floorYAt(a.position.x, a.position.z);
     return {
       ...a,
@@ -1180,7 +1111,9 @@ export async function createZone(ctx) {
     courtWallRuns: wallRuns.length,
     corridors: corridors.length,
     pavingSlabs: ground.slabs.length,
-    interiorFixtures: interiors.length,
+    interiorSets: interiorSets.facts.length,
+    interiorFacts: interiorSets.facts,
+    interiorKitAvailable: interiorSets.available,
     scenic: scenic.length,
     furnishings: furnishings.length,
     trees: trees.length,
@@ -1200,7 +1133,6 @@ export async function createZone(ctx) {
       minZ: +bounds.min.z.toFixed(3),
       maxZ: +bounds.max.z.toFixed(3),
     },
-    interior,
     details: {
       buildings: built.pieces.map((p) => p.id),
       flights: flights.map((f) => ({ ...f, top: { ...f.top }, bottom: { ...f.bottom } })),

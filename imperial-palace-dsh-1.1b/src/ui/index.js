@@ -77,10 +77,10 @@ export function createUI({
   /* ------------------------------------------------------------------ 根层 */
   const root = h('div', { id: 'palace-ui', attrs: { 'data-palace-ui': 'root', role: 'application', 'aria-label': '紫禁天朝操作面板' } });
 
-  const colTL = h('div', { class: 'palace-col palace-col--tl' });
+  const colTL = h('div', { class: 'palace-col palace-col--tl', attrs: { 'data-ui-region': 'left-column' } });
   const colTR = h('div', { class: 'palace-col palace-col--tr', attrs: { 'data-ui-region': 'sidebar' } });
   const colBL = h('div', { class: 'palace-col palace-col--bl' });
-  const colBC = h('div', { class: 'palace-col palace-col--bc' });
+  const colBC = h('div', { class: 'palace-col palace-col--bc', attrs: { 'data-ui-region': 'bottom-center' } });
   const labelLayer = h('div', { class: 'palace-labels', attrs: { 'data-ui-panel': 'labels' } });
   append(root, [colTL, colTR, colBL, colBC, labelLayer]);
   host.appendChild(root);
@@ -99,15 +99,16 @@ export function createUI({
     load: h('span', { class: 'palace-hud__value', text: '—' }),
   };
   const hudRow = (label, value) => h('div', { class: 'palace-hud__row' }, [h('span', { class: 'palace-hud__key', text: label }), value]);
+  // t59：HUD 压缩为 4 行（分区并入位置、加载仅在加载中出现），把左列高度预算让给建筑详情面板
+  const hudLoadRow = hudRow('加载', hudRows.load);
+  hudLoadRow.hidden = true;
   const hud = h('div', { class: 'palace-panel palace-hud', attrs: { 'data-ui-panel': 'hud' } }, [
     hudRow('视角', hudRows.view),
-    hudRow('分区', hudRows.zone),
     hudRow('时辰', hudRows.time),
     hudRow('质量', hudRows.quality),
     hudRow('位置', hudRows.position),
-    hudRow('加载', hudRows.load),
+    hudLoadRow,
   ]);
-  append(colTL, [brand, hud]);
 
   /* ------------------------------------------------------------------ 八视角切换器 */
   const viewButtons = new Map();
@@ -236,7 +237,8 @@ export function createUI({
     else interaction.requester.zone(area);
   });
 
-  append(colBL, [minimapPanel, tourPanel]);
+
+  append(colBL, [minimapPanel]);
 
   /* ------------------------------------------------------------------ 操作提示 */
   const helpList = h('ul', { class: 'palace-help__list' });
@@ -276,27 +278,32 @@ export function createUI({
     h('div', { class: 'palace-row' }, [retryButton]),
   ]);
 
-  /* ------------------------------------------------------------------ 建筑信息面板 */
-  const infoName = h('h2', { class: 'palace-info__name', text: '' });
-  const infoVisit = h('span', { class: 'palace-info__tag', text: '' });
-  const infoUsage = h('p', { class: 'palace-info__text', text: '' });
-  const infoMeta = h('p', { class: 'palace-info__text', text: '' });
-  const infoNear = button('近景', { on: { click: () => store.state.selectedBuildingId && interaction.requester.focusBuilding(store.state.selectedBuildingId) } });
-  const infoInterior = button('进入内景', {
+  /* ------------------------------------------------------------------ 建筑详情面板（t59：左上角，品牌/HUD 之下同列） */
+  const infoName = h('h2', { class: 'palace-info__name', attrs: { 'data-ui-part': 'info-name' }, text: '' });
+  const infoVisit = h('span', { class: 'palace-info__tag', attrs: { 'data-ui-part': 'info-visit' }, text: '' });
+  const infoUsage = h('p', { class: 'palace-info__text', attrs: { 'data-ui-part': 'info-usage' }, text: '' });
+  const infoMeta = h('p', { class: 'palace-info__text', attrs: { 'data-ui-part': 'info-meta' }, text: '' });
+  const infoSpec = h('p', { class: 'palace-info__text', attrs: { 'data-ui-part': 'info-spec' }, text: '' });
+  const infoSize = h('p', { class: 'palace-info__text', attrs: { 'data-ui-part': 'info-size' }, text: '' });
+  const infoNote = h('p', { class: 'palace-info__text', attrs: { 'data-ui-part': 'info-note' }, text: '' });
+  const infoFHint = h('div', { class: 'palace-hint', attrs: { 'data-ui-part': 'info-f' }, text: '' });
+  const infoNear = button('近景', {
+    attrs: { 'data-ui-part': 'info-near' },
+    on: { click: () => store.state.selectedBuildingId && interaction.requester.focusBuilding(store.state.selectedBuildingId) },
+  });
+  const infoInterior = button('进入内景（F）', {
     variant: 'primary',
+    attrs: { 'data-ui-part': 'info-interior' },
     on: {
       click: () => {
-        const id = store.state.selectedBuildingId;
-        const info = id ? interaction.catalog.info(id) : null;
-        if (!info?.visitable) return;
-        // 室内机位按区域选择：B 金銮殿 / C 寝殿（与 main.js 的 ?view=interior&zone= 同一机制）
-        store.patch({}, { source: 'ui', view: { area: info.zone } });
-        interaction.requester.viewMode('interior');
+        // 与 F 键同一条实现：机位由 catalog 从区/布局数据推导（不再只写 area）
+        interaction.enterInterior(store.state.selectedBuildingId, 'panel:interior');
       },
     },
   });
   const infoFp = button('走过去（第一人称）', {
     variant: 'ghost',
+    attrs: { 'data-ui-part': 'info-fp' },
     on: {
       click: () => {
         tourTakeover('fp-button');
@@ -304,11 +311,15 @@ export function createUI({
       },
     },
   });
-  const infoClose = button('关闭', { variant: 'ghost', on: { click: () => interaction.select(null, 'panel') } });
+  const infoClose = button('关闭', { variant: 'ghost', attrs: { 'data-ui-part': 'info-close' }, on: { click: () => interaction.select(null, 'panel') } });
   const infoPanel = h('div', { class: 'palace-panel palace-info', attrs: { 'data-ui-panel': 'info' } }, [
     h('div', { class: 'palace-row' }, [infoName, infoVisit]),
     infoUsage,
     infoMeta,
+    infoSpec,
+    infoSize,
+    infoNote,
+    infoFHint,
     h('div', { class: 'palace-row' }, [infoFp, infoNear, infoInterior, infoClose]),
   ]);
   infoPanel.hidden = true;
@@ -322,8 +333,11 @@ export function createUI({
   const toastDetail = toast.lastChild;
 
   /* ------------------------------------------------------------------ 右侧列装配（单列可滚动：任何视口都不重叠） */
+  /* ------------------------------------------------------------------ 列装配（t59：详情面板进左列 = 品牌/HUD 之下同列） */
+  append(colTL, [brand, hud, infoPanel]);
   append(colTR, [viewPanel, zonePanel, envPanel, loadingPanel, helpPanel]);
-  append(colBC, [toast, infoPanel]);
+  // t59：中轴导览移到下方中央列（原本与左下小地图同列，加上详情面板后 1440×900 会与左列相撞）
+  append(colBC, [tourPanel, toast]);
 
   /* ------------------------------------------------------------------ 交互辅助 */
   function tourTakeover(reason) {
@@ -351,14 +365,52 @@ export function createUI({
     refs.toastTimer = Math.max(1.2, (TRANSITION_MS * 20) / 1000);
   }
 
-  function infoTextFor(info) {
+  /**
+   * 详情面板文案（t59）。字段全部来自 catalog（建筑槽位 + config/layout 派生），
+   * 不在 UI 里写死任何建筑数值：尺寸由 bounds 推导，等级/屋顶名取自 config.GRADES / config.ROOF_TYPES。
+   */
+  /**
+   * 详情面板文案（t59 建、t80/F7 修）。字段全部来自 catalog（建筑槽位 + config/layout 派生），
+   * 不在 UI 里写死任何建筑数值：尺寸由 bounds 推导，等级/屋顶名取自 config.GRADES / config.ROOF_TYPES。
+   *
+   * **高度口径（F7）**：只把**实测**高度当权威展示并标注"实测"（`userData.kit.worldBounds` 的 Box3 高度，
+   * 经 `catalog.detail().heightMeasured` 传出）；没有实测时才降级为显式标注的"约 …（估值）"。
+   * 这里**不得**直接消费 layout 槽位的估值高度字段（与 kit 举架真值中位差 26.7%，CONTRACTS §4.1）。
+   */
+  function infoTextFor(info, detail) {
     if (!info) return null;
+    const d = detail ?? {};
+    const kindZh = { hall: '殿堂', gateHall: '宫门', sideHall: '配殿/厢房', pavilion: '亭阁', cornerTower: '角楼', courtyardGate: '院门' }[info.kind] ?? info.kind ?? '';
+    const sizeParts = [];
+    if (d.width !== null && d.width !== undefined) sizeParts.push(`${d.width} × ${d.depth} m（平面）`);
+    if (d.areaM2) sizeParts.push(`占地 ${d.areaM2} m²`);
+    if (d.terraceH ? d.terraceH > 0 : false) sizeParts.push(`台基 ${d.terraceH} m`);
+    // 实测优先：只有实测高度才作为权威展示；估值仅在无实测时降级出现且必须带"估值"字样
+    if (d.heightMeasured !== null && d.heightMeasured !== undefined) {
+      sizeParts.push(`脊高 ${d.heightMeasured} m（实测）`);
+    } else if (d.heightEstimated) {
+      sizeParts.push(`脊高约 ${d.heightEstimated} m（估值）`);
+    }
+    const specParts = [
+      kindZh ? `形制：${kindZh}` : '',
+      d.roofLabel ? `屋顶：${d.roofLabel}` : '',
+      d.grade !== null && d.grade !== undefined ? `等级：${d.grade} 级${d.gradeIsTop ? '（最高）' : d.gradeIsLowest ? '（最低）' : ''}${d.gradeEaveFactor ? ` · 檐高系数 ${d.gradeEaveFactor}` : ''}` : '',
+      d.bays ? `${d.bays} 开间` : '',
+      d.facing ? `朝向：${{ south: '南', north: '北', east: '东', west: '西' }[d.facing] ?? d.facing}` : '',
+    ];
+    const whereParts = [d.zoneName ? `所属：${d.zoneName}` : '', d.courtyardName ? `院落：${d.courtyardName}` : ''];
     return {
       name: info.name,
       visit: info.visitable ? '可进入内景' : '不可进入',
       usage: info.usage ? `用途：${info.usage}` : '',
-      meta: [info.kind ? `形制：${info.kind}` : '', info.zone ? `分区：${info.zone}` : '', info.courtyard ? `院落：${info.courtyard}` : ''].filter(Boolean).join(' · '),
-      info: info.info ?? '',
+      meta: whereParts.filter(Boolean).join(' · '),
+      spec: specParts.filter(Boolean).join(' · '),
+      size: sizeParts.filter(Boolean).join(' · '),
+      note: info.info ?? '',
+      fHint: info.visitable
+        ? `按 F 进入「${info.name}」内景（再按 F 返回原视角）`
+        : '按 F 会提示"此建筑不可进入内景"，不会改变当前视角',
+      visitableTag: info.visitable,
     };
   }
 
@@ -487,7 +539,7 @@ export function createUI({
   /** 每帧易变量（相机位置相关）：HUD 位置/分区、分区按钮激活态、小地图、标签 —— 与 state 无关。 */
   function syncVolatile() {
     const currentArea = layout.zoneAt(rig.position.x, rig.position.z) ?? null;
-    hudRows.position.textContent = `${rig.position.x.toFixed(0)}, ${rig.position.z.toFixed(0)}`;
+    hudRows.position.textContent = `${currentArea ?? '—'} · ${rig.position.x.toFixed(0)}, ${rig.position.z.toFixed(0)}`;
     hudRows.zone.textContent = currentArea ?? '—';
     syncZoneButtons(currentArea);
     drawMinimapNow();
@@ -502,11 +554,11 @@ export function createUI({
     hudRows.zone.textContent = layout.zoneAt(rig.position.x, rig.position.z) ?? '—';
     hudRows.time.textContent = TIME_LABELS[state.timePreset] ?? state.timePreset;
     hudRows.quality.textContent = QUALITY_LABELS[state.quality] ?? state.quality;
-    hudRows.position.textContent = `${rig.position.x.toFixed(0)}, ${rig.position.z.toFixed(0)}`;
+    const currentArea = layout.zoneAt(rig.position.x, rig.position.z);
+    hudRows.position.textContent = `${currentArea ?? '—'} · ${rig.position.x.toFixed(0)}, ${rig.position.z.toFixed(0)}`;
     for (const [mode, btn] of viewButtons) btn.classList.toggle('is-active', mode === state.viewMode);
     for (const [preset, btn] of timeButtons) btn.classList.toggle('is-active', preset === state.timePreset);
     for (const [tier, btn] of qualityButtons) btn.classList.toggle('is-active', tier === state.quality);
-    const currentArea = layout.zoneAt(rig.position.x, rig.position.z);
     syncZoneButtons(currentArea ?? null);
     const tour = snapshot.tour;
     tourButtons.start.disabled = tour.active;
@@ -519,15 +571,20 @@ export function createUI({
     for (let i = 0; i < tour.total; i += 1) {
       tourDots.appendChild(h('span', { class: `palace-tour__dot${i === tour.index ? ' is-current' : i < tour.index ? ' is-done' : ''}` }));
     }
-    const info = snapshot.selected ? infoTextFor(snapshot.selected) : null;
+    const detail = snapshot.selected ? interaction.catalog.detail(snapshot.selected.id) : null;
+    const info = snapshot.selected ? infoTextFor(snapshot.selected, detail) : null;
     infoPanel.hidden = !info;
     if (info) {
       infoName.textContent = info.name;
       infoVisit.textContent = info.visit;
-      infoVisit.className = `palace-info__tag${info.visitable ? '' : ' palace-info__tag--no'}`;
+      infoVisit.className = `palace-info__tag${info.visitableTag ? '' : ' palace-info__tag--no'}`;
       infoUsage.textContent = info.usage;
-      infoMeta.textContent = [info.meta, info.info].filter(Boolean).join(' · ');
-      infoInterior.disabled = !info.visitable;
+      infoMeta.textContent = info.meta;
+      infoSpec.textContent = info.spec;
+      infoSize.textContent = info.size;
+      infoNote.textContent = info.note;
+      infoFHint.textContent = info.fHint;
+      infoInterior.disabled = !info.visitableTag;
     }
     infoPanel.dataset.selected = state.selectedBuildingId ?? '';
     syncLabels(state);
@@ -551,6 +608,7 @@ export function createUI({
     loadTitle.textContent = `${payload?.stage ?? '加载'}${payload?.total ? `（${payload.loaded}/${payload.total}）` : ''}`;
     if (progress !== null) loadFill.style.width = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
     hudRows.load.textContent = `${payload?.stage ?? '加载'} ${progress === null ? '' : `${Math.round(progress * 100)}%`}`;
+    hudLoadRow.hidden = false;
   };
   const onAssetFailure = (payload) => {
     loadError.textContent = `资源失败：${payload?.url ?? ''} ${payload?.error ?? ''}${payload?.retriable ? '（可重试）' : '（不可重试）'}`;
@@ -568,6 +626,7 @@ export function createUI({
     loadError.textContent = '';
     retryButton.hidden = true;
     hudRows.load.textContent = `区域 ${payload?.zone ?? ''} 就绪`;
+    hudLoadRow.hidden = true;
   }));
 
   /* ------------------------------------------------------------------ 窄屏 */

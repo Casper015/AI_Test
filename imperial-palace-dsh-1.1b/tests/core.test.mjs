@@ -889,7 +889,18 @@ await runner.test('查询辅助：按点/包围盒取建筑、最近 fp-spawn、
   const lamps = registry.nearestLightAnchors({ x: 0, y: 0, z: -390 }, 3);
   assertEqual(lamps.length, 3);
   assert(lamps[0].distance <= lamps[2].distance, '灯位应按距离升序');
-  assertEqual(registry.viewpointsByMode('interior').length, 2, 'B/C 各 1 个 interior 机位');
+  // t76：interior 机位由 layout 驱动（LAYOUT 1.1.4 = 43 栋内景各 1 个），不再硬编码 2
+  const interiorVpIds = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').map((v) => v.id);
+  assertEqual(
+    registry.viewpointsByMode('interior').length,
+    interiorVpIds.length,
+    `interior 机位数应等于 layout 中 mode=interior 的登记数（实际登记 ${interiorVpIds.length}）`,
+  );
+  assertEqual(interiorVpIds.length, 43, 'LAYOUT 1.1.4：43 栋内景各 1 个 interior 机位（t72 城门 4 + t73 12 + t74 23 + 既有门殿 4）');
+  assert(
+    interiorVpIds.every((id) => /-interior$/.test(id)),
+    `interior 机位命名应统一为 *-interior（异常：${interiorVpIds.filter((id) => !/-interior$/.test(id)).join(',')}）`,
+  );
   assertEqual(registry.viewpointsByMode('fp-spawn').length, 5, '五个区域各 1 个 fp-spawn');
 });
 
@@ -903,7 +914,7 @@ async function greyResult() {
   return grey;
 }
 
-await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 / 81 障碍 / 28 可走面 / 20 视角 / 49 灯位）', async () => {
+await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 / 81 障碍 / 112 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.4）', async () => {
   const grey = await greyResult();
   const { problems, stats } = validateZoneResult('GREYBOX', grey.result, { THREE, scope: 'city', expectBuildings: LAYOUT.SLOTS.length });
   assertNoProblems(problems);
@@ -913,8 +924,27 @@ await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 
   assertEqual(stats.walkable, LAYOUT.WALKABLE.length);
   assertEqual(stats.viewpoints, LAYOUT.VIEWPOINTS.length);
   assertEqual(stats.lightAnchors, LAYOUT.LIGHT_ANCHORS.length);
-  assertEqual(stats.viewpointsByMode['fp-spawn'], 5);
-  assertEqual(stats.viewpointsByMode.interior, 2);
+  assertEqual(stats.viewpointsByMode['fp-spawn'], 5, '五个区域各 1 个 fp-spawn（t75 未改）');
+  // t76：按 layout 实际值（LAYOUT 1.1.4：interior 43 / zone 7 / focus-extra 6 ⇒ 合计 61）
+  const byMode = LAYOUT.VIEWPOINTS.reduce((acc, v) => {
+    acc[v.mode] = (acc[v.mode] ?? 0) + 1;
+    return acc;
+  }, {});
+  assertEqual(stats.viewpointsByMode.interior, 43, '43 栋内景机位（t72 4 城门 + t73 12 hall + t74 23 sideHall + 既有 4）');
+  assertEqual(stats.viewpointsByMode.interior, byMode.interior, '应等于 layout 中 mode=interior 的登记数');
+  assertEqual(stats.viewpointsByMode.zone, byMode.zone, 'zone 机位数应等于 layout 登记数');
+  assertEqual(stats.viewpointsByMode['focus-extra'], byMode['focus-extra'], 'focus-extra 机位数应等于 layout 登记数');
+  assertEqual(
+    stats.viewpointsByMode.interior + stats.viewpointsByMode.zone + stats.viewpointsByMode['focus-extra'] + stats.viewpointsByMode['fp-spawn'],
+    LAYOUT.VIEWPOINTS.length,
+    '四种机位模式之和应等于 layout.VIEWPOINTS 总数（61）',
+  );
+  assertEqual(LAYOUT.WALKABLE.length, 112, 'LAYOUT 1.1.4：可行走面 112 条（含 43 条 kind=passage 门洞通道面）');
+  assertEqual(
+    LAYOUT.WALKABLE.filter((w) => w.kind === 'passage').length,
+    43,
+    'passage 门洞通道面应为 43 条（t75；不参与内景包围盒）',
+  );
   assertEqual(grey.result.root.parent, null, 'root 未挂载（挂载归 main.js）');
   const transformOk = ['x', 'y', 'z'].every((k) => grey.result.root.position[k] === 0);
   assert(transformOk, 'root 必须保持单位变换');

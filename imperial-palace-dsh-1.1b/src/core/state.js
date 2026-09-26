@@ -75,8 +75,12 @@ export function createStateStore({ events, initial = {}, onChange = null } = {})
     focusBuildingId: null,
     /** 'axis' 模式的中轴段序号（1-based） */
     axisIndex: 1,
-    /** 'interior' 模式使用的机位 id */
+    /** 'interior' 模式使用的**内景机位 id**（t65：唯一权威；缺失/无效时相机按 area 回退并告警） */
     interiorViewpointId: null,
+    /** 'interior' 模式的目标建筑 slotId（t65：可由相机解析成内景机位，作为 id 缺失时的次优来源） */
+    interiorSlotId: null,
+    /** 'interior' 回退用的区域（t65：仅为 legacy 兼容，不参与精确寻址） */
+    interiorArea: null,
   };
 
   const subscribers = new Set();
@@ -216,6 +220,21 @@ export function createStateController({ events, store, camera = null, environmen
       reject(EVENTS.requestViewMode, 'payload 缺少 mode/index', payload);
       return;
     }
+    // t65：interior 请求可携带目标（机位 id / 建筑 slotId / 区域）——控制器只搬运**标识符**，
+    // 解析成具体内景由相机（消费 layout 的显式映射）完成，state 层不依赖 layout 数据。
+    const extra = {};
+    if (mode === 'interior') {
+      const vpId = payload.interiorViewpointId ?? payload.viewpointId ?? null;
+      if (typeof vpId === 'string' && vpId.trim()) extra.interiorViewpointId = vpId.trim();
+      const slotId = payload.interiorSlotId ?? payload.slotId ?? payload.buildingId ?? null;
+      if (typeof slotId === 'string' && slotId.trim()) extra.interiorSlotId = slotId.trim();
+      if (typeof payload.area === 'string' && payload.area.trim()) extra.area = payload.area.trim();
+      if (payload.interiorSlotId === null || payload.interiorViewpointId === null) {
+        // 显式清空（等价"未指定"）：清掉旧值，避免上一次的内景残留在 store.view 里被静默复用
+        if (payload.interiorViewpointId === null) extra.interiorViewpointId = null;
+        if (payload.interiorSlotId === null) extra.interiorSlotId = null;
+      }
+    }
     // F 为切换：已在第一人称时再请求 fp → 恢复进入前的模式
     if (mode === 'fp' && store.state.viewMode === 'fp') {
       const restore = store.view.previousMode ?? 'oblique';
@@ -224,7 +243,7 @@ export function createStateController({ events, store, camera = null, environmen
       if (camera?.exitFp) camera.exitFp({ source, reason: 'toggle' });
       return;
     }
-    setViewMode(mode, source);
+    setViewMode(mode, source, extra);
   });
 
   /* --- 2. 分区视角（消费 config.CAMERA.zoneViewpointByArea） --- */

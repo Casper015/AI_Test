@@ -34,6 +34,7 @@ import {
   bayMetrics, PROPORTIONS, ROOF_TYPE_IDS, GRADE_IDS, REQUIRED_PARAM_FIELDS,
 } from './tokens.js';
 import { makeRng } from './props.js';
+import { interiorSet as buildInteriorSet, INTERIOR_KINDS, INTERIOR_MATERIALS } from './interiors.js';
 
 /**
  * 构件库版本。递增规则：任何**几何/材质/合批行为**变化都必须递增本版本号，
@@ -66,6 +67,8 @@ const BUILDING_FACTORY_NAMES = Object.freeze([
   'hall', 'gateHall', 'sideHall', 'pavilion', 'cornerTower', 'wall', 'courtyardGate', 'corridor', 'terrace', 'stairs', 'bridge',
 ]);
 const PROP_FACTORY_NAMES = Object.freeze(['tree', 'rockery', 'lantern', 'railing', 'bronze', 'screenWall', 'water', 'paving']);
+/** 室内陈设套件（t61）：一套工厂按 kind 分层覆盖殿/配殿/门殿/角楼。 */
+const INTERIOR_FACTORY_NAMES = Object.freeze(['interiorSet']);
 
 /**
  * 创建构件库。
@@ -156,6 +159,8 @@ export function createKit(ctx = {}) {
     ...buildingFactories,
     // —— 共享摆件工厂
     ...props,
+    // —— 室内陈设套件（t61）：kit.interiorSet({ kind, grade, bounds, groundY, ceilingY, entrance, seed, lod })
+    interiorSet: (params = {}) => buildInteriorSet(env, params),
 
     // —— 组合 / 批处理
     merge: (geometries, options) => mergeGeometries(THREE_NS, geometries, options),
@@ -228,7 +233,7 @@ export function createKit(ctx = {}) {
         materials: materials.stats(),
         assets: assets.stats(),
         diagnostics: diagnostics.map((d) => ({ code: d.code, kind: d.kind, id: d.id })),
-        factories: { buildings: BUILDING_FACTORY_NAMES, props: PROP_FACTORY_NAMES },
+        factories: { buildings: BUILDING_FACTORY_NAMES, props: PROP_FACTORY_NAMES, interiors: INTERIOR_FACTORY_NAMES },
       };
       if (root) {
         base.scene = {
@@ -268,6 +273,9 @@ export default createKit;
 export {
   CONFIG,
   FALLBACK_THREE as THREE,
+  INTERIOR_KINDS,
+  INTERIOR_MATERIALS,
+  buildInteriorSet as interiorSet,
   sharedDeriveSeed as deriveSeed,
   THREE_RESOLUTION,
   BUILDING_FACTORY_NAMES,

@@ -86,13 +86,15 @@ const INSIDE_C = { x: 0, y: 4.05, z: 157 }; // VP-C-interior（寝殿）
 runner.section('1. A 内景专属补光：入内点亮 / 在外为零 / 与全局 ambient 解耦');
 /* ========================================================================== */
 
-await runner.test('内景体积由 layout 内景可行走面派生（B/C 两处，且两个内景机位都在体积内）', () => {
+await runner.test('内景体积由 layout 内景可行走面派生（按区聚合；每个内景机位都在本区体积内）', () => {
   const { environment } = makeEnv();
   const interior = environment.describe().interior;
-  assertEqual(interior.volumes.length, 2, `应有 2 个内景体积（实际 ${interior.volumes.length}）`);
-  assertEqual(interior.volumes.join(','), 'B,C', '内景体积应覆盖 B（金銮殿）与 C（寝殿）');
   const interiors = LAYOUT.WALKABLE.filter((w) => w.kind === 'interior');
-  assertEqual(interiors.length, 2, 'layout 应有 2 个 kind=interior 的可行走面');
+  // t76：体积是**按区聚合**的补光体积（不是每栋一个），故条数 = 有内景的区数
+  const zonesWithInterior = [...new Set(interiors.map((w) => w.zone))].sort();
+  assertEqual(interior.volumes.length, 5, `应有 5 个内景体积（B/C/D/E/F 各 1；实际 ${interior.volumes.length}）`);
+  assertEqual([...interior.volumes].sort().join(','), zonesWithInterior.join(','), '内景体积应覆盖全部有内景的区');
+  assertEqual(interiors.length, 43, 'LAYOUT 1.1.4：layout 应有 43 个 kind=interior 的可行走面');
   for (const [zone, point] of [['B', INSIDE_B], ['C', INSIDE_C]]) {
     const box = interior.volumeBounds.find((v) => v.zone === zone);
     assert(box, `${zone} 应有内景体积`);
@@ -101,6 +103,19 @@ await runner.test('内景体积由 layout 内景可行走面派生（B/C 两处�
       `${zone} 内景机位 (${point.x},${point.y},${point.z}) 应落在体积 ${JSON.stringify(box)} 内`,
     );
   }
+  // t76 加强：**全部 43 个内景机位**都必须落在其所在区的体积内（原来只抽查 B/C 两个）
+  const vpByZone = new Map(interior.volumeBounds.map((v) => [v.zone, v]));
+  let checked = 0;
+  for (const vp of LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior')) {
+    const box = vpByZone.get(vp.area ?? vp.zone);
+    assert(box, `机位 ${vp.id} 所在区（${vp.area ?? vp.zone}）应有内景体积`);
+    assert(
+      vp.position.x >= box.minX && vp.position.x <= box.maxX && vp.position.z >= box.minZ && vp.position.z <= box.maxZ && vp.position.y >= box.minY && vp.position.y <= box.maxY,
+      `内景机位 ${vp.id} (${vp.position.x},${vp.position.y},${vp.position.z}) 应落在体积 ${JSON.stringify(box)} 内`,
+    );
+    checked += 1;
+  }
+  assertEqual(checked, 43, `应逐个体检 43 个内景机位（实际 ${checked}）`);
 });
 
 await runner.test('相机在内景体积内 → 补光点亮；相机在外 → 强度恒为 0（外景不受影响）', () => {

@@ -84,18 +84,29 @@ await test('A2 iso 为正交投影、其余为透视；过渡时长 = config 1.2
   return `iso=orthographic · 其余=perspective · transition=${CAM.transitionSeconds}s`;
 });
 
-await test('A3 分区机位齐全：zone 每区 ≥1、fp-spawn 每区 1、B/C 各 1 个 interior', async () => {
+await test(`A3 机位普查与 LAYOUT ${LAYOUT.LAYOUT_VERSION} 实测一致（zone ${LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'zone').length} / fp-spawn ${LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'fp-spawn').length} / interior ${LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').length} / focus-extra ${LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'focus-extra').length}，共 ${LAYOUT.VIEWPOINTS.length}）`, () => {
   const areas = LAYOUT.ZONES.map((z) => z.id);
   const zoneVp = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'zone');
   const spawn = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'fp-spawn');
   const interior = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior');
+  const focusExtra = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'focus-extra');
+  const zoneByMode = LAYOUT.VIEWPOINTS.reduce((acc, v) => { acc[v.mode] = (acc[v.mode] ?? 0) + 1; return acc; }, {});
+  // 语义保持（原意）：① zone 机位覆盖每个区域；② 每区恰有 1 个 fp-spawn；③ B/C 必须有 interior；
+  // ④ interior 机位与 INTERIOR_BY_SLOT 一一对应（t70/t72/t74 为每栋有门建筑派生）；⑤ focus-extra 每区 1。
   for (const area of areas) {
     assert(zoneVp.some((v) => (v.area ?? v.zone) === area), `区域 ${area} 缺 zone 机位`);
-    assert(spawn.some((v) => (v.area ?? v.zone) === area), `区域 ${area} 缺 fp-spawn`);
+    assert(spawn.filter((v) => (v.area ?? v.zone) === area).length === 1, `区域 ${area} fp-spawn 数 ${spawn.filter((v) => (v.area ?? v.zone) === area).length} ≠ 1`);
   }
-  assert(interior.filter((v) => (v.area ?? v.zone) === 'B').length === 1, 'B 缺 interior');
-  assert(interior.filter((v) => (v.area ?? v.zone) === 'C').length === 1, 'C 缺 interior');
-  return `zone ${zoneVp.length} · fp-spawn ${spawn.length} · interior ${interior.length}（区域 ${areas.join('/')}）`;
+  for (const area of ['B', 'C']) {
+    assert(interior.some((v) => (v.area ?? v.zone) === area), `${area} 缺 interior`);
+  }
+  const slots = Object.keys(LAYOUT.INTERIOR_BY_SLOT ?? {});
+  assert(interior.length === slots.length, `interior 机位 ${interior.length} ≠ INTERIOR_BY_SLOT ${slots.length}`);
+  const perAreaInterior = interior.reduce((acc, v) => { const a = v.area ?? v.zone; acc[a] = (acc[a] ?? 0) + 1; return acc; }, {});
+  // focus-extra = 6：B/C/D/E 各 1 + F 2（南/北城门），是 1.1.4 实际注册表的稳定集合
+  assert(focusExtra.length === 6, `focus-extra ${focusExtra.length} ≠ 6`);
+  for (const area of ['B', 'C', 'D', 'E']) assert(focusExtra.some((v) => (v.area ?? v.zone) === area), `${area} 缺 focus-extra`);
+  return `zone ${zoneByMode.zone}（覆盖 ${areas.join('/')}）· fp-spawn ${zoneByMode['fp-spawn']}（每区 1）· interior ${zoneByMode.interior}（按区 ${JSON.stringify(perAreaInterior)}，= INTERIOR_BY_SLOT ${slots.length} 条）· focus-extra ${zoneByMode['focus-extra']}；依据：LAYOUT ${LAYOUT.LAYOUT_VERSION} 实际注册表（t70/t72/t74 派生内景机位、t75 加门洞通道面）`;
 });
 
 await test('A4 键盘 1–8 与 F/Esc 都走同一条 view:request-mode 请求事件（无第二套状态）', async () => {

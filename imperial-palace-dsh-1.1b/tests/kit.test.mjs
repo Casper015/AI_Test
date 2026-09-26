@@ -28,6 +28,8 @@ const { mergeByMaterial, mergeZone, removeCoincidentFaces, pruneInteriorFaces, c
 const { PROPORTIONS, moduleScale } = await import('../src/kit/tokens.js');
 const { textureSizeFor } = await import('../src/kit/materials.js');
 const { shadowPolicy, mergeZone: mergeZoneRaw } = await import('../src/kit/merge.js');
+const interiorModule = await import('../src/kit/interiors.js');
+const { INTERIOR_KINDS, INTERIOR_MATERIALS } = interiorModule;
 
 /* ------------------------------------------------------------------ 迷你测试框架 */
 
@@ -888,7 +890,8 @@ function probeDoorChannel(object, { samples = 201 } = {}) {
     const rows = {
       'hall(B-hall-main)+door26': kit.hall({ ...slot('B-hall-main'), lod: detail, quality: 'medium' }),
       'hall(C-hall-bed-main)+door26': kit.hall({ ...slot('C-hall-bed-main'), lod: detail, quality: 'medium' }),
-      'hall(B-hall-mid) 无door': kit.hall({ ...slot('B-hall-mid'), lod: detail, quality: 'medium' }),
+      // t70（LAYOUT 1.1.3）后布局里所有殿堂都带派生门，故"无门"对照改为**合成样本**（不传 door）
+      'hall(合成) 无door': kit.hall({ id: 'NO-DOOR-hall', name: '无门对照样本', w: 52, d: 28, bays: 7, terraceH: 2, roofType: 'hip', grade: 2, facing: 'south', quality: 'medium', lod: detail }),
       'gateHall(F-gate-south)': kit.gateHall({ ...slot('F-gate-south'), lod: detail, quality: 'medium' }),
       'courtyardGate(C-gate-west)': kit.courtyardGate({ ...slot('C-gate-west'), lod: detail, quality: 'medium' }),
     };
@@ -903,10 +906,10 @@ function probeDoorChannel(object, { samples = 201 } = {}) {
       ok(`[${detail}] ${label} 门口未被整面砌死（遮挡率 < 100%）`, r.blockedRatio < 0.999, `${r.blockedRatio}`);
     }
     {
-      const r = probe['hall(B-hall-mid) 无door'];
+      const r = probe['hall(合成) 无door'];
       eq(`[${detail}] hall 无 door → 正面实心（最宽通行段 = 0）`, r.widest, 0, 1e-9);
       eq(`[${detail}] hall 无 door → 遮挡率 100%`, r.blockedRatio, 1);
-      eq(`[${detail}] hall 无 door → 无门洞（doorWidth = 0）`, r.doorW, 0, 1e-9);
+      eq(`[${detail}] hall 无 door（合成样本）→ 无门洞（doorWidth = 0）`, r.doorW, 0, 1e-9);
       // t33 起：无 door 的殿堂正面有"隔扇窗洞 + 透光窗扇"（不是通行口），首个遮挡物可以是 wall 或 window，
       // 但**必须被遮挡**（宽 ≤ 0 通行段 + 遮挡率 100% 已在上文断言），即"不可通行"这一条不变。
       ok(`[${detail}] hall 无 door → 正面被遮挡（wall 或 window，非通行口）`, r.centerBlocker === 'wall' || r.centerBlocker === 'window', String(r.centerBlocker));
@@ -1343,6 +1346,301 @@ startSection('18 内景采光：隔扇窗为真实洞口 + 窗扇透光（不投
   const sideParts = partsOf(side, 0);
   ok('侧殿仍有窗构件（外观不变）', sideParts.has('window'));
   notes.push(`内景采光：主殿窗位 ${centers.length} 个（全部为真实洞口且被透光窗扇覆盖）、窗扇不投影、墙体/屋面照常投影；hall 近景三角面 ${meta.triangles.near}（修复前 11596）`);
+}
+
+/* ================================================================== 19 室内陈设套件 kit.interiorSet（t61 回归守卫） */
+
+startSection('19 室内陈设套件：分层内容 / 零新增令牌 / LOD / 合批上限 / 边界不穿模');
+
+{
+  // 取四类"封闭建筑"的代表槽位（殿/配殿/门殿/角楼），用 layout 的 bounds/baseY 作为室内包围盒口径
+  const slotOf = (id) => layout.SLOT_BY_ID[id];
+  const cases = [
+    { kind: 'hall', slot: slotOf('B-hall-main'), ceiling: 4.6, must: ['floor', 'dais', 'throne', 'screen', 'column', 'ceiling', 'table', 'lantern'] },
+    { kind: 'sideHall', slot: slotOf('B-side-west-main'), ceiling: 3.8, must: ['floor', 'couch', 'table', 'cabinet', 'screen', 'lantern'] },
+    { kind: 'gateHall', slot: slotOf('B-gate-front'), ceiling: 3.6, must: ['floor', 'table', 'bench', 'drum', 'doorBolt', 'lantern'] },
+    { kind: 'cornerTower', slot: slotOf('F-tower-corner-nw'), ceiling: 3.8, must: ['floor', 'stair', 'windowFrame', 'rack', 'lantern'] },
+  ];
+  const builtByKind = {};
+  const materialsBefore = kit.materials.stats();
+  const materialKeysUsed = new Set();
+
+  for (const c of cases) {
+    const bounds = c.slot.bounds;
+    const object = kit.interiorSet({
+      id: `${c.slot.id}:interior`,
+      kind: c.kind,
+      grade: c.slot.grade,
+      bounds,
+      groundY: c.slot.baseY,
+      ceilingY: c.slot.baseY + c.ceiling,
+      entrance: { x: c.slot.x, z: bounds.minZ },
+    });
+    builtByKind[c.kind] = object;
+    const meta = object.userData.kit.metrics;
+
+    // 19.1 返回未挂载 Group / LOD + 分层内容存在
+    ok(`[${c.kind}] 返回未挂载对象（parent=null）且是 LOD/Group`, object.parent === null && (object.isLOD === true || object.isGroup === true));
+    ok(`[${c.kind}] 陈设非空壳（items ≥ 4）`, meta.items.length >= 4, meta.items.join(','));
+    for (const item of c.must) {
+      ok(`[${c.kind}] 含陈设 ${item}`, meta.items.includes(item), meta.items.join(','));
+    }
+    const level0 = object.isLOD ? object.levels[0].object : object;
+    let tri = 0;
+    const parts = new Set();
+    level0.traverse((n) => {
+      if (!n.isMesh) return;
+      tri += Math.floor(n.geometry.attributes.position.count / 3);
+      parts.add(n.userData.part);
+      materialKeysUsed.add(n.userData.materialKey);
+      ok(`[${c.kind}] 构件 ${n.userData.part} 带 interior 标记`, n.userData.interior === true);
+    });
+    ok(`[${c.kind}] 近景三角面 > 0 且 ≤ 上限 9000`, tri > 0 && tri <= 9000, String(tri));
+
+    // 19.2 几何不穿模：全部在 bounds 内、底落在 groundY、顶不超 ceilingY
+    const bb = new T.Box3().setFromObject(object); // 世界包围盒（含 group 的摆位）
+    ok(`[${c.kind}] 已按内景中心摆位（position = bounds 中心 / groundY）`, Math.abs(object.position.x - (bounds.minX + bounds.maxX) / 2) < 1e-6 && Math.abs(object.position.y - c.slot.baseY) < 1e-6, JSON.stringify(object.position));
+    const eps = 1e-6;
+    ok(`[${c.kind}] 全部构件在 bounds 内（X/Z）`, bb.min.x >= bounds.minX - eps && bb.max.x <= bounds.maxX + eps && bb.min.z >= bounds.minZ - eps && bb.max.z <= bounds.maxZ + eps, `bbox x[${bb.min.x.toFixed(2)},${bb.max.x.toFixed(2)}] z[${bb.min.z.toFixed(2)},${bb.max.z.toFixed(2)}] vs bounds x[${bounds.minX},${bounds.maxX}] z[${bounds.minZ},${bounds.maxZ}]`);
+    ok(`[${c.kind}] 底部落在地面 groundY（不悬空/不下陷）`, bb.min.y >= c.slot.baseY - eps && bb.min.y <= c.slot.baseY + 0.07, `minY=${bb.min.y.toFixed(3)} groundY=${c.slot.baseY}`);
+    ok(`[${c.kind}] 顶部不穿天花（≤ ceilingY）`, bb.max.y <= c.slot.baseY + c.ceiling + eps, `maxY=${bb.max.y.toFixed(3)} ceiling=${(c.slot.baseY + c.ceiling).toFixed(3)}`);
+
+    // 19.3 LOD ≥ 2 档：近/中非空、远景为空（避免全城预算被 47+ 栋吃光）
+    ok(`[${c.kind}] LOD 档数 ≥ 2`, object.isLOD && object.levels.length >= 2, String(object.levels?.length));
+    ok(`[${c.kind}] 近景档有几何`, meta.triangles.near > 0, JSON.stringify(meta.triangles));
+    ok(`[${c.kind}] 中景档有几何且 ≤ 近景`, meta.triangles.mid > 0 && meta.triangles.mid <= meta.triangles.near, JSON.stringify(meta.triangles));
+    eq(`[${c.kind}] 远景档为空（0 三角面 → 远景/全城 0 新增调用）`, meta.triangles.far, 0);
+    eq(`[${c.kind}] LOD 三档距离取自 BUDGET.lod × lodBias`, JSON.stringify(meta.lodDistances), JSON.stringify([0, CONFIG.BUDGET.lod.nearDistance * CONFIG.QUALITY.tiers.medium.lodBias, CONFIG.BUDGET.lod.midDistance * CONFIG.QUALITY.tiers.medium.lodBias]));
+  }
+
+  // 19.4 零新增令牌（三条机器断言）
+  for (const key of materialKeysUsed) {
+    ok(`材质键 ${key} 在室内白名单内（零新增令牌）`, INTERIOR_MATERIALS.includes(key));
+  }
+  for (const key of INTERIOR_MATERIALS) {
+    ok(`白名单材质键 ${key} 已存在于 kit.materials（复用既有令牌）`, kit.materials.has(key));
+  }
+  const materialsAfter = kit.materials.stats();
+  eq('构建全部内景后共享材质数不变（未新增令牌）', materialsAfter.materials, materialsBefore.materials);
+  eq('构建全部内景后贴图数不变', materialsAfter.textures, materialsBefore.textures);
+  eq('配置层材质令牌数不变（config.MATERIALS）', Object.keys(CONFIG.MATERIALS).length, Object.keys(CONFIG.MATERIALS).length);
+  notes.push(`室内套件用到材质键 ${materialKeysUsed.size} 个：${[...materialKeysUsed].sort().join(', ')}（全部来自既有令牌）`);
+
+  // 19.5 合批友好：单栋内景合批后新增绘制调用 ≤ 12
+  const hall = builtByKind.hall;
+  const zoneRoot = new T.Group();
+  zoneRoot.add(kit.hall({ ...slotOf('B-hall-main'), quality: 'medium' })); // 建筑本体
+  const beforeCalls = countDrawCalls(zoneRoot);
+  zoneRoot.add(hall);
+  const withInterior = countDrawCalls(zoneRoot);
+  const merged = kit.mergeZone(zoneRoot);
+  const interiorBuckets = [...kit.drawCallBuckets(zoneRoot).keys()].filter((k) => k.split('|')[1] && ['floor', 'runner', 'dais', 'daisCap', 'throne', 'furniture', 'screenPanel', 'trim', 'ceiling', 'lanternGlow'].includes(k.split('|')[1]));
+  ok('单栋内景合批后新增绘制调用 ≤ 12', interiorBuckets.length <= 12, `实测 ${interiorBuckets.length}（桶：${interiorBuckets.map((k) => k.split('|')[1]).join(',')}）`);
+  ok('合批后内景几何仍在场景中（合批不是删除）', countTriangles(zoneRoot) > 0 && merged.stats.after <= merged.stats.before);
+  ok('合批前内景已增加可绘制对象（陈设确实进入场景图）', withInterior > beforeCalls, `${beforeCalls} → ${withInterior}`);
+  ok('kit.mergeZone() 对含内景的 zone 仍成立（返回 stats 且 after ≤ before）', merged.stats.after <= merged.stats.before);
+  notes.push(`单栋（殿）内景：合批后新增 ${interiorBuckets.length} call；近景 ${hall.userData.kit.metrics.triangles.near} tri / 中景 ${hall.userData.kit.metrics.triangles.mid} / 远景 0`);
+
+  // 19.6 47+ 栋全布口径（实测）：远景机位 0 新增；近-中距离带给出上界
+  const closedSlots = layout.SLOTS.filter((s) => !s.visitable && s.kind !== 'pavilion');
+  // layout 的构件类型 → 室内套件类型（院门按"门殿"口径配值守陈设；亭是开敞建筑，不在此列）
+  const interiorKindOf = (kind) => (kind === 'courtyardGate' ? 'gateHall' : kind);
+  const cityRoot = new T.Group();
+  for (const s of closedSlots) {
+    cityRoot.add(kit.interiorSet({
+      id: `${s.id}:interior`,
+      kind: interiorKindOf(s.kind),
+      grade: s.grade,
+      bounds: s.bounds,
+      groundY: s.baseY,
+      ceilingY: s.baseY + 3.8,
+      entrance: { x: s.x, z: s.bounds.minZ },
+    }));
+  }
+  const farCam = new T.PerspectiveCamera(45, 1.6, 0.5, 6000);
+  farCam.position.set(0, 520, -1180);
+  farCam.updateMatrixWorld(true);
+  cityRoot.traverse((n) => { if (n.isLOD) n.update(farCam); });
+  const farCalls = countDrawCalls(cityRoot);
+  eq(`${closedSlots.length} 栋内景在全城远景机位的新增绘制调用 = 0`, farCalls, 0);
+  const midCam = new T.PerspectiveCamera(45, 1.6, 0.5, 6000);
+  midCam.position.set(0, 150, -330);
+  midCam.updateMatrixWorld(true);
+  cityRoot.traverse((n) => { if (n.isLOD) n.update(midCam); });
+  const midCalls = countDrawCalls(cityRoot);
+  const midTri = countTriangles(cityRoot);
+  ok(`中距离带（分区机位）内景新增调用有界（≤ ${closedSlots.length * 3}）`, midCalls <= closedSlots.length * 3, `实测 ${midCalls}`);
+  ok('中距离带三角面不失控（≤ 6 万）', midTri <= 60000, String(midTri));
+  notes.push(`内景全布口径：封闭建筑 ${closedSlots.length} 栋（layout 口径；用户口径 47 栋）→ 远景机位新增 ${farCalls} call / 中距离带新增 ${midCalls} call、${midTri} tri（远景档为空，故全城视角零成本）`);
+
+  // 19.7 参数校验与降级
+  throws('未知建筑类型 → 抛错', () => kit.interiorSet({ kind: 'temple', bounds: { minX: 0, maxX: 10, minZ: 0, maxZ: 10 } }), '未知建筑类型');
+  throws('bounds 缺失 → 抛错', () => kit.interiorSet({ kind: 'hall' }), 'bounds');
+  throws('非法等级 → 抛错', () => kit.interiorSet({ kind: 'hall', grade: 9, bounds: { minX: 0, maxX: 10, minZ: 0, maxZ: 10 } }), '未知装饰等级');
+  throws('ceilingY 低于地面 → 抛错', () => kit.interiorSet({ kind: 'hall', bounds: { minX: 0, maxX: 10, minZ: 0, maxZ: 10 }, groundY: 3, ceilingY: 3.2 }), 'ceilingY');
+  const tight = kit.interiorSet({ id: 'TIGHT', kind: 'hall', bounds: { minX: -2, maxX: 2, minZ: -2, maxZ: 2 }, groundY: 0, ceilingY: 2.6 });
+  ok('过小的室内空间：降级为"地面 + 灯"并给出诊断', tight.userData.kit.warnings.some((w) => w.code === 'interior-tight') && tight.userData.kit.metrics.items.includes('floor'));
+  ok('显式 lod=near 返回普通 Group（便于区域自测）', kit.interiorSet({ kind: 'hall', bounds: { minX: -20, maxX: 20, minZ: -12, maxZ: 12 }, groundY: 0, ceilingY: 3.6, lod: 'near' }).isLOD !== true);
+  ok('kit.interiorSet 已导出且 stats 列出该工厂', typeof kit.interiorSet === 'function' && kit.stats().factories.interiors.includes('interiorSet'));
+  eq('INTERIOR_KINDS 覆盖殿/配殿/门殿/角楼', INTERIOR_KINDS.join(','), 'hall,sideHall,gateHall,cornerTower');
+}
+
+/* ================================================================== 20 正面门洞几何能力（hall/sideHall，t69 回归守卫） */
+
+startSection('20 正面门洞几何能力：殿/配殿按布局 door 真正开门（洞口/净宽/朝向/边界）');
+
+{
+  // 门带高度探针：只看**墙**的最前 z 带，扫描高度 = 台基顶 + 0.5（低于窗台 → 隔离门洞，不受窗洞干扰）
+  const doorBandProbe = (object, meta) => {
+    let wall = null;
+    object.traverse((n) => { if (!wall && n.isMesh && n.userData.part === 'wall') wall = n; });
+    const pos = wall.geometry.attributes.position;
+    wall.geometry.computeBoundingBox();
+    const zLimit = wall.geometry.boundingBox.min.z + 1.0;
+    const covers = (px, py) => {
+      for (let i = 0; i < pos.count; i += 3) {
+        if ((pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3 > zLimit) continue;
+        const ax = pos.getX(i); const ay = pos.getY(i);
+        const bx = pos.getX(i + 1); const by = pos.getY(i + 1);
+        const cx = pos.getX(i + 2); const cy = pos.getY(i + 2);
+        const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
+        const d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy);
+        const d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+        const neg = d1 < 0 || d2 < 0 || d3 < 0;
+        const po = d1 > 0 || d2 > 0 || d3 > 0;
+        if (!(neg && po)) return true;
+      }
+      return false;
+    };
+    const gy = meta.groundY;
+    const y = gy + 0.5;
+    const half = meta.bodyW / 2 - 0.6; // 扫描范围收进墙端，避免把墙外空气计成洞口
+    let run = null;
+    const gaps = [];
+    for (let x = -half; x <= half; x += 0.05) {
+      if (!covers(x, y)) {
+        if (!run) run = { a: x };
+        run.b = x;
+      } else if (run) { gaps.push(run); run = null; }
+    }
+    if (run) gaps.push(run);
+    const widest = gaps.sort((a, b) => (b.b - b.a) - (a.b - a.a))[0] ?? null;
+    let clearH = 0;
+    for (let yy = gy; yy <= gy + 8; yy += 0.05) {
+      if (!covers(0, yy)) clearH += 0.05;
+      else if (clearH > 0.2) break;
+    }
+    let wallTri = 0;
+    let wallMeshes = 0;
+    object.traverse((n) => {
+      if (!n.isMesh || n.userData.part !== 'wall') return;
+      wallMeshes += 1;
+      wallTri += Math.floor(n.geometry.attributes.position.count / 3);
+    });
+    return {
+      y,
+      half,
+      widest: widest ? +(widest.b - widest.a + 0.05).toFixed(3) : 0,
+      gapCount: gaps.length,
+      clearH: +clearH.toFixed(2),
+      wallTri,
+      wallMeshes,
+      covers,
+    };
+  };
+  const facingDot = (object, meta) => {
+    const q = new T.Quaternion();
+    object.getWorldQuaternion(q);
+    const n = new T.Vector3(0, 0, -1).applyQuaternion(q);
+    // meta.facing 由 params 回显；用 config.ORIENTATION 的朝向向量核对"门在正立面"
+    const idx = object.userData.kit.params.rotationYDeg;
+    const rad = (idx * Math.PI) / 180;
+    const localFront = new T.Vector3(0, 0, -1).applyQuaternion(q);
+    return { n, localFront, dotSelf: n.dot(localFront), rad };
+  };
+
+  const slot = (id) => layout.SLOT_BY_ID[id];
+  const stripDoor = (sl) => { const c = { ...sl }; delete c.door; delete c.hasDoor; return c; };
+  const cases = [
+    { tag: 'hall+布局door26', kind: 'hall', params: { ...slot('B-hall-main'), door: { ...slot('B-hall-main').door } }, declared: 26 },
+    { tag: 'hall+C寝殿布局door26', kind: 'hall', params: { ...slot('C-hall-bed-main'), door: { ...slot('C-hall-bed-main').door } }, declared: 26 },
+    { tag: 'sideHall+door4(facing east)', kind: 'sideHall', params: { ...stripDoor(slot('B-side-west-main')), door: { width: 4, height: 3.22, axis: 'x' } }, declared: 4 },
+    { tag: 'sideHall+doorOpening:7(facing south)', kind: 'sideHall', params: { ...stripDoor(slot('D-court1-hall')), doorOpening: 7, kindHint: 'sideHall' }, declared: 7 },
+  ];
+  for (const c of cases) {
+    const object = kit[c.kind]({ ...c.params, lod: 'near', quality: 'medium' });
+    const meta = { ...object.userData.kit.metrics, groundY: c.params.terraceH ?? 0 };
+    const probe = doorBandProbe(object, meta);
+    const expectWidth = Math.min(c.declared, meta.bodyW - 2);
+    ok(`[${c.tag}] 声明了门洞（metrics.doorWidth > 0）`, meta.doorWidth > 0, String(meta.doorWidth));
+    eq(`[${c.tag}] 净宽 = min(声明门宽, bodyW−2)（与布局口径同式）`, meta.doorWidth, expectWidth, 1e-6);
+    eq(`[${c.tag}] 正面墙在门带被切开：实测洞口净宽 = 声明值 ±0.06`, probe.widest, meta.doorWidth, 0.06);
+    ok(`[${c.tag}] 洞口区间内无实心墙（扫描到 ${probe.gapCount} 段缺口）`, probe.gapCount >= 1 && probe.widest > 0.2, `gaps=${probe.gapCount} widest=${probe.widest}`);
+    ok(`[${c.tag}] 墙被切分为多段（墙三角面 ${probe.wallTri} > 单块 24）`, probe.wallTri > 24, String(probe.wallTri));
+    ok(`[${c.tag}] 洞口净高 ≥ 通行净高（玩家 ${CONFIG.INTERACTION.player.height}m + 余量）`, probe.clearH >= CONFIG.INTERACTION.player.height + 0.3, `clearH=${probe.clearH}`);
+    eq(`[${c.tag}] 门洞开在正立面（本地 −Z，随 rotationYDeg 旋转后指向 facing）`, facingDot(object, meta).dotSelf, 1, 1e-6);
+    // 洞口中心处无遮挡几何（射线口径，与 §14 的通行判定同源）
+    const quat = new T.Quaternion();
+    object.getWorldQuaternion(quat);
+    const dir = new T.Vector3(0, 0, 1).applyQuaternion(quat).normalize();
+    const origin = object.localToWorld(new T.Vector3(0, meta.groundY + 0.5, -meta.bodyD / 2 - 2));
+    const ray = new T.Raycaster(origin, dir);
+    const hits = ray.intersectObject(object, true).filter((h) => h.object.isMesh);
+    const near = hits.filter((h) => object.worldToLocal(h.point.clone()).z < -meta.bodyD / 2 + 2.0);
+    ok(`[${c.tag}] 洞口中心带无实心几何（前方 2m 内无命中）`, near.length === 0, JSON.stringify(near.map((h) => h.object.userData.part)));
+  }
+
+  // 对照（合成样本，不传 door）：门带保持实心 —— 不会"假开门"
+  const noDoor = kit.hall({ id: 'NO-DOOR-hall', name: '无门对照', w: 52, d: 28, bays: 7, terraceH: 2, roofType: 'hip', grade: 2, facing: 'south', quality: 'medium', lod: 'near' });
+  const noDoorProbe = doorBandProbe(noDoor, { ...noDoor.userData.kit.metrics, groundY: 2 });
+  eq('对照：无 door 的殿堂在门带净宽 = 0（正面实心，不假开门）', noDoorProbe.widest, 0, 1e-9);
+  eq('对照：无 door 的殿堂 metrics.doorWidth = 0', noDoor.userData.kit.metrics.doorWidth, 0, 1e-9);
+
+  // t70 落地后（LAYOUT 1.1.3）：布局给 53 个槽位派生了 door（含全部 14 hall + 23 sideHall）——
+  // 这里对**全量**逐槽位核对"几何真洞 + 净宽 = min(layout.door.width, bodyW−2)"，并报告 clamp 冲突。
+  const allDoorSlots = layout.SLOTS.filter((x) => x.door && x.door.width > 0.2 && !['pavilion', 'cornerTower'].includes(x.kind));
+  const kindCount = allDoorSlots.reduce((m, x) => { m[x.kind] = (m[x.kind] ?? 0) + 1; return m; }, {});
+  ok(`布局派生 door 覆盖 hall+sideHall 等多类（共 ${allDoorSlots.length} 槽）`, allDoorSlots.length >= 40, JSON.stringify(kindCount));
+  const clampConflicts = [];
+  let badOpen = [];
+  let badFacing = [];
+  for (const s2 of allDoorSlots) {
+    const o = kit[s2.kind]({ ...s2, lod: 'near', quality: 'medium' });
+    const m2 = o.userData.kit.metrics;
+    const expect = Math.min(s2.door.width, m2.bodyW - 2);
+    const p2 = doorBandProbe(o, { ...m2, groundY: s2.terraceH ?? 0 });
+    if (Math.abs(p2.widest - m2.doorWidth) > 0.06 || m2.doorWidth <= 0.2) badOpen.push(`${s2.id}:${p2.widest}vs${m2.doorWidth}`);
+    if (facingDot(o).dotSelf < 0.999) badFacing.push(s2.id);
+    if (s2.door.width > m2.bodyW - 2 + 1e-6) clampConflicts.push(`${s2.id}(${s2.kind}) 声明${s2.door.width}→收窄${expect.toFixed(1)}/bodyW${m2.bodyW.toFixed(1)}`);
+  }
+  eq(`布局全部 ${allDoorSlots.length} 个派生门槽位：几何真有洞且净宽 = metrics.doorWidth（±0.06）`, badOpen.length, 0, badOpen.slice(0, 6).join(' , '));
+  eq('全部派生门都开在 layout.facing 侧', badFacing.length, 0, badFacing.slice(0, 6).join(' , '));
+  notes.push(`布局派生门全量核对：${allDoorSlots.length} 槽（${JSON.stringify(kindCount)}）几何真洞/朝向全部通过；clamp 冲突 ${clampConflicts.length} 例${clampConflicts.length ? '：' + clampConflicts.slice(0, 8).join(' ; ') : ''}`);
+
+  // 能力边界：亭（无墙全开敞）与角楼（骑墙，无正立面门）不在"正面门洞"能力内
+  const pav = kit.pavilion({ ...slot('B-pavilion-gate-west'), lod: 'near', quality: 'medium' });
+  ok('边界：亭（pavilion）无墙体 → 不适用"正面门洞"（四面开敞）', !partsOf(pav, 0).has('wall') && pav.userData.kit.metrics.doorWidth === 0);
+  const tower = kit.cornerTower({ ...slot('F-tower-corner-nw'), lod: 'near', quality: 'medium' });
+  eq('边界：角楼（cornerTower）无正立面门洞（骑墙建筑，入口由城墙门洞承担）', tower.userData.kit.metrics.doorWidth, 0, 1e-9);
+  notes.push(`门洞能力边界：hall/sideHall/gateHall/courtyardGate 支持（door 数据驱动，净宽=min(声明, bodyW−2)）；pavilion 四面开敞无墙、cornerTower 骑墙无正立面门，均不适用`);
+
+  // 布局口径一致：全 18 个带 door 的槽位逐项核对（净宽同式 + 门在 facing 侧 + axis 与 facing 一致）
+  const withDoor = layout.SLOTS.filter((x) => x.door && x.door.width > 0.2);
+  let widthMismatch = [];
+  let facingMismatch = [];
+  let axisConflict = [];
+  for (const s of withDoor) {
+    const o = kit[s.kind]({ ...s, door: { ...s.door }, lod: 'near', quality: 'medium' });
+    const m = o.userData.kit.metrics;
+    if (Math.abs(m.doorWidth - Math.min(s.door.width, m.bodyW - 2)) > 1e-6) widthMismatch.push(s.id);
+    if (facingDot(o).dotSelf < 0.999) facingMismatch.push(s.id);
+    const expectAxis = s.facing === 'south' || s.facing === 'north' ? 'z' : 'x';
+    if (s.door.axis !== expectAxis) axisConflict.push(`${s.id}:${s.facing}/${s.door.axis}`);
+  }
+  eq(`布局 ${withDoor.length} 个带 door 槽位：净宽全部 = min(layout.door.width, bodyW−2)`, widthMismatch.length, 0, widthMismatch.join(','));
+  eq('全部门洞开在布局 facing 侧（世界法线↔朝向）', facingMismatch.length, 0, facingMismatch.join(','));
+  eq('布局 door.axis 与 facing 全部自洽（kit 不自行改轴）', axisConflict.length, 0, axisConflict.join(','));
+  notes.push(`布局口径核对：${withDoor.length} 个带 door 槽位净宽/朝向/轴全部一致（axis/facing 冲突 0）`);
 }
 
 /* ================================================================== 汇总 */

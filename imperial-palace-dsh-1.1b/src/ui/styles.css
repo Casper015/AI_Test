@@ -47,6 +47,14 @@
   top: var(--palace-space-md);
   left: var(--palace-space-md);
   align-items: flex-start;
+  /* t59：品牌 + HUD + 建筑详情面板同列；上限留出左下列（小地图/导览）占用高度，
+     超出部分由本列自身滚动 —— 保证 1440×900 下两列永不重叠（实测校准：小地图收至 150px、
+     HUD 压到 4 行、导览移出左下后，本列可用 60vh，详情面板全部字段与按钮首屏可见） */
+  max-height: 64vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-right: var(--palace-space-xxs);
 }
 
 #palace-ui .palace-col--tr {
@@ -278,12 +286,16 @@
   align-items: center;
 }
 
-/* ---------------------------------------------------------------- 建筑信息 */
+/* ---------------------------------------------------------------- 建筑详情（t59：左上角列内） */
 
 #palace-ui .palace-info {
   pointer-events: auto;
   min-width: 260px;
   max-width: 380px;
+  /* 详情本身也可滚动：即使窗口很矮也不会把同列的 HUD 挤出去（34vh = 306px，容下全部字段 + 按钮行） */
+  max-height: 34vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 #palace-ui .palace-info__name {
@@ -311,6 +323,26 @@
   margin: 0 0 var(--palace-space-xs);
   font-size: var(--palace-font-caption-size);
   color: rgba(240, 236, 225, 0.86);
+}
+
+/* 说明行最多两行（与"用途"常重复，避免把按钮行挤出可视区） */
+#palace-ui [data-ui-part="info-note"] {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 规格/尺寸行用暗金细线分隔，突出"详情"层级 */
+#palace-ui [data-ui-part="info-spec"],
+#palace-ui [data-ui-part="info-size"] {
+  color: rgba(240, 236, 225, 0.94);
+  border-top: var(--palace-border-width) solid rgba(223, 161, 18, 0.22);
+  padding-top: var(--palace-space-xs);
+}
+
+#palace-ui [data-ui-part="info-f"] {
+  margin-bottom: var(--palace-space-xs);
 }
 
 /* ---------------------------------------------------------------- 标签层 */
@@ -360,6 +392,8 @@
 
 #palace-ui .palace-minimap__canvas {
   display: block;
+  width: 150px;
+  height: 150px;
   border: var(--palace-border-width) solid var(--palace-panel-border);
   border-radius: var(--palace-radius);
   cursor: crosshair;

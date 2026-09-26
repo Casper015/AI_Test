@@ -31,7 +31,7 @@
  * 契约来源：docs/CONTRACTS.md §3（返回值/ctx）、§4（建筑字段）、§5（机位）、§6（碰撞）、§8.3（灯位）。
  */
 
-import { CONFIG } from '../shared/config.js';
+import { CONFIG, deriveSeed } from '../shared/config.js';
 import { rampsFromRoads } from '../core/layout-slice.js';
 
 export const ZONE_ID = 'E';
@@ -48,6 +48,27 @@ export const ZONE_KIND = 'eastCourts';
 /** 主体构件细节档：E 区 15 栋全部 `mid`（实测：任何一栋取 mid 都会引入同一套部件桶，
  *  其余栋取 mid 不再增加绘制批次，只增加三角面 ~6k/15 栋，远低于 150 万预算）。 */
 const BUILDING_DETAIL = 'mid';
+
+/** t63：可布内景的构件类型（`kit.interiorSet` 的四档之一；亭/院门不在内景注册表里）。 */
+const INTERIOR_KIND_OF = Object.freeze({ hall: 'hall', sideHall: 'sideHall', gateHall: 'gateHall', cornerTower: 'cornerTower' });
+/** t63：内景家具只在"人在室内 / 门口近景"时可见 —— 把 kit 返回的三档 LOD 档距整体收缩
+ *  （kit 的 far 档刻意留空），于是数十米之外（分区视角 150m+、全城 oblique 1000m+）切到空远景档、
+ *  0 新增绘制调用；而 `VP-<slotId>-interior` 机位（≤20m）仍取 near 全细节档。
+ *  收缩系数写在常量里，属 §8.2 的 LOD 优化手段（未删任何构件）。 */
+const INTERIOR_LOD_DISTANCE_SCALE = 0.4;
+
+function tightenInteriorLod(object) {
+  if (!object?.isLOD || !Array.isArray(object.levels)) return object;
+  for (const level of object.levels) {
+    if (typeof level.distance === 'number') level.distance = round(level.distance * INTERIOR_LOD_DISTANCE_SCALE);
+  }
+  if (object.userData?.kit) {
+    object.userData.kit.distances = object.levels.map((l) => l.distance);
+    object.userData.kit.interiorLodScaled = INTERIOR_LOD_DISTANCE_SCALE;
+  }
+  return object;
+}
+
 
 /** 铺装厚度 / 水池水片厚度（kit.water 的水片固定 6cm 厚，故底面标高 = 水面 − 该值）。 */
 const SCREEN_WALL_COURTS = Object.freeze(['CY-E-court2', 'CY-E-court3']);
@@ -658,10 +679,111 @@ export async function createZone(ctx) {
   stats.blossomTrees = trees.filter((t) => t.blossom).length;
 
   /* ========================================================================
+   *  6b. 内景（t63）：对 layout 注册了内景的每一栋布 kit.interiorSet
+   *      —— 尺寸/地坪只取自布局登记的室内可行走面（`WK-<slotId>-interior`，含别名映射）；
+   *      —— 天花由本区补一层（kit 屋面单面朝外，室内抬头会看见天空）；
+   *      —— 每栋登记 2 条室内灯位 + 2 座灯体（环境系统按距离激活，夜景内景可读性所需）。
+   * ====================================================================== */
+
+  const interiors = [];
+  const interiorLights = [];
+  const interiorRecordFor = (slotId) => {
+    const slice = (zone.interiors ?? []).find((r) => r.slotId === slotId);
+    if (slice) return slice;
+    return typeof ctx.layout?.interiorFor === 'function' ? ctx.layout.interiorFor(slotId) : null;
+  };
+  for (const slot of slots) {
+    const record = interiorRecordFor(slot.id);
+    if (!record) continue; // 布局未注册内景（亭 / 水榭 / 院门）→ 本卡排除
+    const surface = (zone.walkable ?? []).find((w) => w.id === record.walkableId) ?? null;
+    if (!surface) continue;
+    const interiorKind = INTERIOR_KIND_OF[slot.kind] ?? null;
+    if (!interiorKind || typeof kit.interiorSet !== 'function') continue;
+    const groundY = surface.y;
+    const fact = buildingFacts.find((f) => f.id === slot.id) ?? null;
+    const eaveY = fact?.eaveHeightAbsolute
+      ?? round(slot.baseY + MODULES.eaveHeight * config.GRADES[slot.grade].eaveHeightFactor);
+    const ceilingY = round(eaveY - MODULES.eaveSoffitDepth);
+    const bounds = { ...surface.bounds };
+    const set = kit.interiorSet({
+      id: `${slot.id}-interior`,
+      kind: interiorKind,
+      grade: slot.grade,
+      bounds,
+      groundY,
+      ceilingY,
+      entrance: { ...slot.entrance },
+      seed: deriveSeed(`${ZONE_ID}:${slot.id}`, 'interior'),
+    });
+    tightenInteriorLod(set);
+    root.add(set);
+
+    const margin = MODULES.courtyardWallThickness;
+    slab({
+      id: `${slot.id}-interior-ceiling`,
+      name: `${slot.name}天花`,
+      x: round((bounds.minX + bounds.maxX) / 2),
+      z: round((bounds.minZ + bounds.maxZ) / 2),
+      w: round(bounds.maxX - bounds.minX + margin * 2),
+      d: round(bounds.maxZ - bounds.minZ + margin * 2),
+      y: ceilingY,
+      thickness: round(MODULES.roofThickness * 0.5),
+      material: 'pavingLight',
+    });
+
+    const cx = round((bounds.minX + bounds.maxX) / 2);
+    const cz = round((bounds.minZ + bounds.maxZ) / 2);
+    const dx = round((bounds.maxX - bounds.minX) * 0.28);
+    for (const [i, offset] of [-dx, dx].entries()) {
+      const lamp = {
+        id: `LA-${ZONE_ID}-${slot.id}-${String(i + 1).padStart(2, '0')}`,
+        zone: ZONE_ID,
+        kind: 'lantern',
+        position: { x: round(cx + offset), y: groundY, z: cz },
+        height: 3.2,
+        role: 'interiorLantern',
+        buildingId: slot.id,
+      };
+      interiorLights.push(lamp);
+      if (typeof kit.lantern === 'function') {
+        root.add(kit.lantern({
+          id: `E-lamp-${lamp.id}`,
+          x: lamp.position.x,
+          y: groundY,
+          z: lamp.position.z,
+          height: lamp.height,
+          kind: 'post',
+          detail: 'far',
+        }));
+      }
+    }
+
+    const im = set.userData?.kit?.metrics ?? null;
+    interiors.push({
+      slotId: slot.id,
+      kind: interiorKind,
+      grade: slot.grade,
+      walkableId: surface.id,
+      groundY,
+      ceilingY,
+      eaveHeightAbsolute: eaveY,
+      bounds,
+      items: Array.isArray(im?.items) ? [...im.items] : [],
+      triangles: im?.triangles ?? null,
+      worldBounds: im?.worldBounds ?? null,
+      lodDistances: set.userData?.kit?.distances ?? im?.lodDistances ?? [],
+    });
+  }
+  stats.interiors = interiors;
+  stats.interiorCount = interiors.length;
+  stats.interiorLights = interiorLights.length;
+  /* ========================================================================
    *  7. 灯位与灯体（layout.LIGHT_ANCHORS 的 E 区条目 + 院门/池畔 6 座）
    * ====================================================================== */
 
   const lightAnchors = (zone.lightAnchors ?? []).map((a) => ({ ...a, position: { ...a.position } }));
+  // 各内景登记的室内灯位（每栋 2 条，t63）——一并交给环境系统按距离激活
+  lightAnchors.push(...interiorLights);
   const extraLampSpots = [];
   for (const courtyard of courtyards) {
     const gate = (courtyard.gates ?? []).map((id) => slotById(id)).find(Boolean);
@@ -728,6 +850,7 @@ export async function createZone(ctx) {
   }
   stats.bronzes = bronzes.length;
   stats.bronzeSpots = bronzes;
+
 
   /* ========================================================================
    *  9. 整区合批（跨建筑 × 同材质同部位）——§8.2 分区预算

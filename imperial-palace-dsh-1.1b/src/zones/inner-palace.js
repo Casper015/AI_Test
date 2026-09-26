@@ -33,7 +33,7 @@
  * 契约来源：docs/CONTRACTS.md §3（返回值/ctx）、§4（建筑字段）、§5（机位）、§6（碰撞）、§8.3（灯位）。
  */
 
-import { CONFIG } from '../shared/config.js';
+import { CONFIG, deriveSeed } from '../shared/config.js';
 import { rampsFromRoads } from '../core/layout-slice.js';
 
 export const ZONE_ID = 'C';
@@ -52,6 +52,27 @@ export const ZONE_KIND = 'innerPalace';
  */
 /** 用 `near` 档建造的重点建筑（其余 `mid`）：内廷门与寝殿正殿。 */
 const NEAR_DETAIL_SLOTS = Object.freeze(['C-gate-inner', 'C-hall-bed-main']);
+
+/** t63：可布内景的构件类型（`kit.interiorSet` 的四档之一；亭/院门不在内景注册表里）。 */
+const INTERIOR_KIND_OF = Object.freeze({ hall: 'hall', sideHall: 'sideHall', gateHall: 'gateHall', cornerTower: 'cornerTower' });
+/** t63：内景家具只在"人在室内 / 门口近景"时可见 —— 把 kit 返回的三档 LOD 档距整体收缩
+ *  （kit 的 far 档刻意留空），于是数十米之外（分区视角 150m+、全城 oblique 1000m+）切到空远景档、
+ *  0 新增绘制调用；而 `VP-<slotId>-interior` 机位（≤20m）仍取 near 全细节档。
+ *  收缩系数写在常量里，属 §8.2 的 LOD 优化手段（未删任何构件）。 */
+const INTERIOR_LOD_DISTANCE_SCALE = 0.4;
+
+function tightenInteriorLod(object) {
+  if (!object?.isLOD || !Array.isArray(object.levels)) return object;
+  for (const level of object.levels) {
+    if (typeof level.distance === 'number') level.distance = round(level.distance * INTERIOR_LOD_DISTANCE_SCALE);
+  }
+  if (object.userData?.kit) {
+    object.userData.kit.distances = object.levels.map((l) => l.distance);
+    object.userData.kit.interiorLodScaled = INTERIOR_LOD_DISTANCE_SCALE;
+  }
+  return object;
+}
+
 
 const round = (v) => Math.round(v * 1000) / 1000;
 
@@ -173,7 +194,6 @@ export async function createZone(ctx) {
   const roads = zone.roads ?? [];
   const corridors = zone.corridors ?? [];
   const terraceSpec = (zone.terraces ?? []).find((t) => t.id === 'TR-C-bed') ?? null;
-  const interiorSurface = (zone.walkable ?? []).find((w) => w.kind === 'interior') ?? null;
   const vegetation = (zone.vegetation ?? [])[0] ?? null;
 
   // `zoneLayout.courtyardWalls` 由 `src/core/layout-slice.js` 以 `w.zone` 过滤，而 `layout.WALLS` 的院墙
@@ -484,130 +504,108 @@ export async function createZone(ctx) {
   stats.corridors = corridors.length;
 
   /* ========================================================================
-   *  5. 内景（寝殿正殿）：金砖地面 + 天花藻井 + 床榻 + 屏风 + 铜器 + 室内宫灯
+   *  5. 内景（t63）：对 layout 注册了 `WK-<slotId>-interior` 的每一栋布 kit.interiorSet
+   *     —— 尺寸只取自布局登记的室内可行走面（不自行推断）；
+   *     —— 天花由本区补一层（kit 屋面为单面朝外，室内抬头会看见天空）；
+   *     —— 每栋登记 2 条室内灯位 + 2 座灯体（供环境系统按距离激活，夜景内景可读性所需）。
    * ====================================================================== */
 
+  const interiors = [];
   const interiorLights = [];
-  const interiorSummary = { props: [] };
-  if (interiorSurface) {
-    const ib = interiorSurface.bounds;
-    const floorY = interiorSurface.y;
-    const width = round(ib.maxX - ib.minX);
-    const depth = round(ib.maxZ - ib.minZ);
-    const center = { x: round((ib.minX + ib.maxX) / 2), z: round((ib.minZ + ib.maxZ) / 2) };
-    const floorTop = round(floorY + 0.02); // 抬 2cm：台上表面即室内地面，避开与 TR-C-bed 顶面共面闪烁
-
-    // 金砖地面
-    slab({
-      id: 'C-bed-interior-floor',
-      name: '寝殿金砖地面',
-      x: center.x,
-      z: center.z,
-      w: width,
-      d: depth,
-      y: floorTop,
-      thickness: round(MODULES.plinthHeightMin * 0.5),
-      material: 'interiorBrick',
-    });
-
-    // 天花 + 藻井：遮住"单面朝外"的屋面向内可视（否则室内抬头看见天空）
-    const hall = buildings.find((b) => b.id === 'C-hall-bed-main') ?? null;
-    const hallMetrics = buildingMetrics.get('C-hall-bed-main') ?? null;
-    const eaveY = hallMetrics?.eaveHeightAbsolute
-      ?? (hall ? round(hall.baseY + MODULES.eaveHeight * config.GRADES[hall.grade].eaveHeightFactor) : round(floorY + MODULES.eaveHeight));
+  // 内景登记的唯一权威来源：layout 的 INTERIOR_BY_SLOT（经 ctx.layout.interiorFor，含既有别名
+  // WK-C-bed-interior → C-hall-bed-main）；存在 `zoneLayout.interiors` 切片时优先用切片。
+  const interiorRecordFor = (slotId) => {
+    const slice = (zone.interiors ?? []).find((r) => r.slotId === slotId);
+    if (slice) return slice;
+    return typeof ctx.layout?.interiorFor === 'function' ? ctx.layout.interiorFor(slotId) : null;
+  };
+  for (const slot of slots) {
+    const record = interiorRecordFor(slot.id);
+    if (!record) continue; // 布局未注册内景（亭 / 院门）→ 本卡排除
+    const surface = (zone.walkable ?? []).find((w) => w.id === record.walkableId) ?? null;
+    if (!surface) continue;
+    const interiorKind = INTERIOR_KIND_OF[slot.kind] ?? null;
+    if (!interiorKind || typeof kit.interiorSet !== 'function') continue;
+    const groundY = surface.y;
+    const metrics = buildingMetrics.get(slot.id) ?? null;
+    const eaveY = metrics?.eaveHeightAbsolute
+      ?? round(slot.baseY + MODULES.eaveHeight * config.GRADES[slot.grade].eaveHeightFactor);
     const ceilingY = round(eaveY - MODULES.eaveSoffitDepth);
-    const ceilingMargin = MODULES.courtyardWallThickness; // 把天花顶到墙体，避免墙檐处露缝
+    const bounds = { ...surface.bounds };
+    const set = kit.interiorSet({
+      id: `${slot.id}-interior`,
+      kind: interiorKind,
+      grade: slot.grade,
+      bounds,
+      groundY,
+      ceilingY,
+      entrance: { ...slot.entrance },
+      seed: deriveSeed(`${ZONE_ID}:${slot.id}`, 'interior'),
+    });
+    tightenInteriorLod(set);
+    root.add(set);
+
+    // 天花：顶到墙（避免墙檐露缝），底面压在 kit 藻井之上
+    const margin = MODULES.courtyardWallThickness;
     slab({
-      id: 'C-bed-interior-ceiling',
-      name: '寝殿天花',
-      x: center.x,
-      z: center.z,
-      w: round(width + ceilingMargin * 2),
-      d: round(depth + ceilingMargin * 2),
+      id: `${slot.id}-interior-ceiling`,
+      name: `${slot.name}天花`,
+      x: round((bounds.minX + bounds.maxX) / 2),
+      z: round((bounds.minZ + bounds.maxZ) / 2),
+      w: round(bounds.maxX - bounds.minX + margin * 2),
+      d: round(bounds.maxZ - bounds.minZ + margin * 2),
       y: ceilingY,
       thickness: round(MODULES.roofThickness * 0.5),
       material: 'pavingLight',
     });
-    slab({
-      id: 'C-bed-interior-caisson',
-      name: '寝殿藻井',
-      x: center.x,
-      z: center.z,
-      w: round(width * 0.45),
-      d: round(depth * 0.45),
-      y: round(ceilingY + MODULES.roofThickness * 0.5),
-      thickness: round(MODULES.roofThickness * 0.5),
-      material: 'pavingLight',
-    });
 
-    // 床榻：基座取最低台基高，贴北侧后墙
-    const bedW = round(width * 0.45);
-    const bedD = round(depth * 0.42);
-    const bedZ = round(ib.maxZ - bedD / 2 - MODULES.plinthWidth);
-    const bed = kit.terrace({
-      id: 'C-bed-furniture-platform',
-      name: '寝殿床榻',
-      bounds: { minX: round(-bedW / 2), maxX: round(bedW / 2), minZ: round(bedZ - bedD / 2), maxZ: round(bedZ + bedD / 2) },
-      x: 0,
-      z: bedZ,
-      w: bedW,
-      d: bedD,
-      y0: floorTop,
-      y1: round(floorTop + MODULES.plinthHeightMin),
-      railing: false,
-      detail: 'mid',
-    });
-    root.add(bed);
-
-    // 屏风：立在床榻之后（kit.wall = 朱墙 + 青灰瓦顶，即照壁/屏风形制）
-    const screenHalf = round((bedW * 1.25) / 2);
-    const screenZ = round(ib.maxZ - MODULES.plinthWidth * 0.5);
-    const screen = kit.wall({
-      id: 'C-bed-furniture-screen',
-      name: '寝殿屏风',
-      from: { x: -screenHalf, z: screenZ },
-      to: { x: screenHalf, z: screenZ },
-      thickness: round(MODULES.courtyardWallThickness / 4),
-      height: round(MODULES.courtyardWallHeight * 0.8),
-      baseY: round(floorTop + MODULES.plinthHeightMin),
-      // 与院墙同样取 'far'：kit.wall 仅"压顶脊线"按 detail 分支，省下的批次留给 §8.2 分区预算余量
-      detail: 'far',
-    });
-    root.add(screen);
-
-    // 铜器陈设（香炉居中、缶分列东西；尺寸用 kit 默认值，不另写数值）
-    const bronzeSpots = [
-      { id: 'C-bed-censer', kind: 'censer', x: 0, z: round(ib.minZ + depth * 0.22) },
-      { id: 'C-bed-vessel-west', kind: 'vessel', x: round(-width * 0.13), z: round(ib.minZ + depth * 0.3) },
-      { id: 'C-bed-vessel-east', kind: 'vessel', x: round(width * 0.13), z: round(ib.minZ + depth * 0.3) },
-    ];
-    for (const spot of bronzeSpots) {
-      const mesh = kit.bronze({ id: spot.id, kind: spot.kind, x: spot.x, y: floorTop, z: spot.z, detail: 'far' });
-      root.add(mesh);
-      interiorSummary.props.push({ id: spot.id, kind: spot.kind, x: spot.x, z: spot.z, y: floorTop });
-    }
-
-    // 室内宫灯（4 座，均在室内包围盒内、避开床榻与铜器）——同时登记灯位（§8.3）
-    const lampSpots = [
-      { x: round(-width * 0.2), z: round(ib.minZ + depth * 0.1) },
-      { x: round(width * 0.2), z: round(ib.minZ + depth * 0.1) },
-      { x: round(-width * 0.2), z: round(ib.maxZ - depth * 0.18) },
-      { x: round(width * 0.2), z: round(ib.maxZ - depth * 0.18) },
-    ];
-    for (const [i, spot] of lampSpots.entries()) {
-      interiorLights.push({
-        id: `LA-C-bed-${String(i + 1).padStart(2, '0')}`,
+    // 室内灯位/灯体：沿进深中段两侧各一（均在室内包围盒内）
+    const cx = round((bounds.minX + bounds.maxX) / 2);
+    const cz = round((bounds.minZ + bounds.maxZ) / 2);
+    const dx = round((bounds.maxX - bounds.minX) * 0.28);
+    for (const [i, offset] of [-dx, dx].entries()) {
+      const anchor = {
+        id: `LA-${ZONE_ID}-${slot.id}-${String(i + 1).padStart(2, '0')}`,
         zone: ZONE_ID,
         kind: 'lantern',
-        position: { x: spot.x, y: floorY, z: spot.z },
+        position: { x: round(cx + offset), y: groundY, z: cz },
         height: 3.2,
         role: 'interiorLantern',
-      });
+        buildingId: slot.id,
+      };
+      interiorLights.push(anchor);
+      if (typeof kit.lantern === 'function') {
+        const mesh = kit.lantern({
+          id: `C-lamp-${anchor.id}`,
+          x: anchor.position.x,
+          y: groundY,
+          z: anchor.position.z,
+          height: anchor.height,
+          kind: 'post',
+          detail: 'far',
+        });
+        root.add(mesh);
+      }
     }
-    interiorSummary.floorY = floorY;
-    interiorSummary.bounds = { ...ib };
+
+    const m = set.userData?.kit?.metrics ?? null;
+    interiors.push({
+      slotId: slot.id,
+      kind: interiorKind,
+      grade: slot.grade,
+      walkableId: surface.id,
+      groundY,
+      ceilingY,
+      eaveHeightAbsolute: eaveY,
+      bounds,
+      items: Array.isArray(m?.items) ? [...m.items] : [],
+      triangles: m?.triangles ?? null,
+      worldBounds: m?.worldBounds ?? null,
+      lodDistances: set.userData?.kit?.distances ?? m?.lodDistances ?? [],
+    });
   }
-  stats.interiorProps = interiorSummary.props.length;
+  stats.interiors = interiors;
+  stats.interiorCount = interiors.length;
   stats.interiorLights = interiorLights.length;
 
   /* ========================================================================
@@ -738,7 +736,8 @@ export async function createZone(ctx) {
     }, {}),
     lightAnchors: lightAnchors.length,
     groundY,
-    interior: interiorSummary,
+    interiorCount: interiors.length,
+    interiors,
     buildingFacts,
     wallOpenings,
     kitSource: kit.__fallback === true ? 'fallback(greybox)' : `kit ${kit.version ?? '?'}`,

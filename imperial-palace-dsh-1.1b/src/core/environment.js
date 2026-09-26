@@ -527,6 +527,14 @@ export function createEnvironment({
    *   · `fog`：雾色 + 近远距离。**雾按深度插值，可以完全覆盖背景**（t44 议题：均匀无梯度的雾曾被当成天空）
    *     —— 工具应先比对 `hex`，再比对 `fog.hex`，两者都不匹配才说明是几何/材质。
    */
+  /**
+   * 天空网格（t50 掩码诊断用）：返回半径 4200、BackSide、toneMapped:false 的天空球。
+   * 只读访问器；掩码模式由 `src/core/renderer.js` 负责（本模块不参与渲染分支）。
+   */
+  function skyMesh() {
+    return sky;
+  }
+
   function describeSceneBackground() {
     const preset = presetOf(currentPreset);
     const bg = scene.background;
@@ -890,6 +898,8 @@ export function createEnvironment({
 
   return {
     root: envRoot,
+    /** t50：天空网格只读访问（掩码诊断用） */
+    skyMesh,
     sun,
     ambient,
     hemi,

@@ -23,7 +23,7 @@ const LAYOUT = await loadModule('src/shared/layout.js');
 const { createEventBus } = await loadModule('src/core/events.js');
 const { createStateStore, createStateController, validateStateShape } = await loadModule('src/core/state.js');
 const { createRegistry } = await loadModule('src/core/registry.js');
-const { createCameraRig } = await loadModule('src/core/camera.js');
+const { createCameraRig, interiorBoundsFor, describeInteriorTarget, INTERIOR_ADDRESS_STATS, focusSpecFor, buildingWorldBounds } = await loadModule('src/core/camera.js');
 
 const DEG = Math.PI / 180;
 
@@ -293,6 +293,166 @@ await runner.test('FP 下 rotate 不改变位置；退出 FP 仍能恢复原机�
   assertClose(rig.describe().position.x, beforeFp.position.x, 0.01, '退出 FP 应恢复原机位');
   assertClose(rig.describe().position.z, beforeFp.position.z, 0.01, '退出 FP 应恢复原机位');
   assertEqual(validateStateShape(store.state).length, 0);
+});
+
+/* ========================================================================== */
+runner.section('t65：一区多内景的显式寻址（按机位/地面，不再按区名猜）');
+/* ========================================================================== */
+
+const sameBox = (a, b) => a && b && a.minX === b.minX && a.maxX === b.maxX && a.minZ === b.minZ && a.maxZ === b.maxZ;
+const insideBox = (box, p) => p.x >= box.minX && p.x <= box.maxX && p.z >= box.minZ && p.z <= box.maxZ;
+const viewpointById = (id) => LAYOUT.VIEWPOINTS.find((v) => v.id === id) ?? null;
+
+await runner.test('同一 zone 内两个内景：按 viewpointId 解析得到**不同且各自正确**的包围盒', () => {
+  const hall = viewpointById('VP-B-interior');            // 金銮殿（zone B）
+  const mid = viewpointById('VP-B-hall-mid-interior');    // B-hall-mid（**同区 B**）
+  assert(hall && mid, 'B 区应同时存在金銮殿与 B-hall-mid 两个内景机位');
+  assertEqual(hall.area, mid.area, '两个机位必须属于同一 zone（本用例的前提）');
+
+  const boxHall = interiorBoundsFor({ viewpointId: hall.id });
+  const boxMid = interiorBoundsFor({ viewpointId: mid.id });
+  assert(boxHall && boxMid, '两个机位都应解析出包围盒');
+  assert(!sameBox(boxHall, boxMid), `同区两内景必须得到**不同**的盒（实际 hall=${boxHall.id} mid=${boxMid.id}）`);
+  assertEqual(boxHall.slotId, 'B-hall-main', '金銮殿盒应归属 B-hall-main');
+  assertEqual(boxMid.slotId, 'B-hall-mid', 'B-hall-mid 盒应归属 B-hall-mid');
+  assert(insideBox(boxHall, hall.position), '金銮殿机位应在自己的盒内');
+  assert(insideBox(boxMid, mid.position), 'B-hall-mid 机位应在自己的盒内');
+  assert(!insideBox(boxHall, mid.position), 'B-hall-mid 机位**不应**落在金銮殿盒内（否则说明仍在按区取盒）');
+  const zoneBox = interiorBoundsFor('B');
+  assertEqual(zoneBox.ambiguous, true, '一区多内景时 legacy 按区口径应标记 ambiguous（警告 + 计数）');
+  assert(sameBox(zoneBox, boxHall), 'legacy 按区口径应解析到该区 legacy 机位（B → 金銮殿），不得静默取"第一个面"');
+  assert(!sameBox(zoneBox, boxMid), 'legacy 区盒不得等于另一个内景的盒');
+  runner.info(`B 区两内景：${boxHall.id}(${boxHall.minX}..${boxHall.maxX}) vs ${boxMid.id}(${boxMid.minX}..${boxMid.maxX})，resolvedBy=${boxHall.resolvedBy}/${boxMid.resolvedBy}`);
+});
+
+await runner.test('slotId / surfaceId / 直接 WK-/VP- id 三种显式寻址与 viewpointId 等价', () => {
+  const boxVp = interiorBoundsFor({ viewpointId: 'VP-B-hall-mid-interior' });
+  const boxSlot = interiorBoundsFor({ slotId: 'B-hall-mid' });
+  const boxSurface = interiorBoundsFor({ surfaceId: 'WK-B-hall-mid-interior' });
+  const boxWkId = interiorBoundsFor('WK-B-hall-mid-interior');
+  const boxVpId = interiorBoundsFor('VP-B-hall-mid-interior');
+  for (const [name, box] of [['slotId', boxSlot], ['surfaceId', boxSurface], ['WK-id', boxWkId], ['VP-id', boxVpId]]) {
+    assert(box && sameBox(box, boxVp), `${name} 解析出的盒应与 viewpointId 完全一致`);
+  }
+  assertEqual(interiorBoundsFor({ viewpointId: 'VP-不存在' }), null, '无效机位 id 应明确返回 null（不得静默取别的内景）');
+  assertEqual(describeInteriorTarget({ slotId: 'B-hall-mid' }).resolvedBy, 'slotId', 'describeInteriorTarget 应给出解析来源');
+  runner.info('四种显式寻址等价；无效 id → null；解析来源字段可用');
+});
+
+await runner.test('全链路：interior 请求携带 viewpointId ⇒ state.view.interiorViewpointId ⇒ 相机按该机位夹取', () => {
+  const { events, store, rig, settle } = makeCore();
+  const target = viewpointById('VP-B-hall-mid-interior');
+  events.request(EVENTS.requestViewMode, { mode: 'interior', source: 'test', viewpointId: target.id });
+  assertEqual(store.view.interiorViewpointId, target.id, 'store.view.interiorViewpointId 应来自请求（不按 area 猜）');
+  settle();
+  const d = rig.describe();
+  assertEqual(d.mode, 'interior', '应进入 interior 模式');
+  assertEqual(d.interiorViewpointId, target.id, 'describe() 应回报实际使用的内景机位 id');
+  const box = interiorBoundsFor({ viewpointId: target.id });
+  assert(insideBox(box, d.position), `相机位置应被夹在**该机位**的室内盒内（pos=${d.position.x},${d.position.z} box=${box.id}）`);
+  assert(insideBox(box, d.target), '相机目标应被夹在该机位的室内盒内');
+  assertEqual(box.slotId, 'B-hall-mid', '盒应归属请求指定的建筑');
+  runner.info(`请求 ${target.id} ⇒ describe(): interiorViewpointId=${d.interiorViewpointId} slot=${d.interiorSlotId} resolvedBy=${d.interiorResolvedBy}`);
+});
+
+await runner.test('回退与告警：缺 id ⇒ 按 area 回退并计数；无效 id ⇒ 回退到已登记机位（绝不静默用错 id）', () => {
+  const { events, store, rig, settle } = makeCore();
+  const noIdBefore = INTERIOR_ADDRESS_STATS.fallbackNoId;
+  events.request(EVENTS.requestViewMode, { mode: 'interior', source: 'test' });
+  settle();
+  const d1 = rig.describe();
+  assertEqual(d1.mode, 'interior', '缺 id 时仍应可用（明确回退，而不是进不去）');
+  assert(INTERIOR_ADDRESS_STATS.fallbackNoId > noIdBefore, '缺 id 应计入 fallbackNoId（可观测，不静默）');
+  assert(String(d1.interiorResolvedBy ?? '').startsWith('fallback('), `缺 id 时应标注回退来源（实际 ${d1.interiorResolvedBy}）`);
+  assert(interiorBoundsFor({ viewpointId: d1.interiorViewpointId }), '回退得到的机位必须是已登记的内景机位');
+
+  const badBefore = INTERIOR_ADDRESS_STATS.fallbackBadId;
+  events.request(EVENTS.requestViewMode, { mode: 'interior', source: 'test', viewpointId: 'VP-根本不存在' });
+  settle();
+  const d2 = rig.describe();
+  assert(INTERIOR_ADDRESS_STATS.fallbackBadId > badBefore, '无效 id 应计入 fallbackBadId');
+  assert(d2.interiorViewpointId !== 'VP-根本不存在', '不得把无效 id 当成实际机位（必须回退到已登记机位）');
+  assert(interiorBoundsFor({ viewpointId: d2.interiorViewpointId }), '回退后的机位仍应可解析出室内盒');
+  runner.info(`回退链：缺 id→${d1.interiorViewpointId}（${d1.interiorResolvedBy}）；无效 id→${d2.interiorViewpointId}（${d2.interiorResolvedBy}）`);
+});
+
+await runner.test('次级来源：只给 slotId 时，相机按 layout 的建筑→内景映射解析机位', () => {
+  const { events, store, rig, settle } = makeCore();
+  events.request(EVENTS.requestViewMode, { mode: 'interior', source: 'test', slotId: 'C-hall-bed-main' });
+  settle();
+  const d = rig.describe();
+  assertEqual(d.mode, 'interior');
+  const box = interiorBoundsFor({ slotId: 'C-hall-bed-main' });
+  assertEqual(d.interiorViewpointId, box.viewpointId, '应按 layout 映射解析出该建筑的内景机位');
+  assert(insideBox(box, d.position), '位置应夹在该建筑自己的室内盒内');
+  assertEqual(box.slotId, 'C-hall-bed-main');
+  runner.info(`slotId 次优来源：C-hall-bed-main → ${d.interiorViewpointId}（box=${box.id}）`);
+});
+
+/* ========================================================================== */
+runner.section('t78：focus 取景不得落空/退化（全部有门槽位）');
+/* ========================================================================== */
+
+/** 取景不变量：距离 ≥ 按包围球与 FOV 反推的入镜距离、相机在建筑盒外、数值有限。 */
+function assertFocusInvariants(spec, label) {
+  const f = spec.framing;
+  assert(f, `${label}：focus 规格应带 framing 诊断字段`);
+  const dist = Math.hypot(spec.position.x - spec.target.x, spec.position.y - spec.target.y, spec.position.z - spec.target.z);
+  for (const [k, v] of Object.entries({ 'position.x': spec.position.x, 'position.y': spec.position.y, 'position.z': spec.position.z, 'target.x': spec.target.x, 'target.y': spec.target.y, 'target.z': spec.target.z })) {
+    assert(Number.isFinite(v), `${label}：${k} 必须有限（实际 ${v}）`);
+  }
+  assert(dist >= f.fitDistance - 1e-6, `${label}：取景距离 ${dist.toFixed(2)} 必须 ≥ 最小入镜距离 ${f.fitDistance}（否则建筑出画/贴脸）`);
+  assert(dist >= 24 - 1e-6, `${label}：取景距离 ${dist.toFixed(2)} 必须 ≥ 24m（下限，防退化包围盒）`);
+  assert(f.radius >= 4, `${label}：包围球半径 ${f.radius} 应 ≥4m`);
+  const outsideXZ = Math.abs(spec.position.x - spec.target.x) > f.w / 2 || Math.abs(spec.position.z - spec.target.z) > f.d / 2;
+  assert(outsideXZ, `${label}：相机不得落在建筑平面包围盒内（dx=${Math.abs(spec.position.x - spec.target.x).toFixed(2)}, dz=${Math.abs(spec.position.z - spec.target.z).toFixed(2)}, w=${f.w}, d=${f.d}）`);
+  return { dist, ...f };
+}
+
+await runner.test('全部有门槽位：focus 取景规格均不落空/不退化（相机在盒外、距离 ≥ 入镜距离、数值有限）', () => {
+  const { registry } = makeCore();
+  const doorSlots = LAYOUT.SLOTS.filter((s) => s.hasDoor);
+  assertEqual(doorSlots.length, 53, `有门槽位应为 53 个（实际 ${doorSlots.length}）`);
+  const rows = [];
+  for (const slot of doorSlots) {
+    const building = registry.getBuilding(slot.id);
+    assert(building, `槽位 ${slot.id} 应能在注册表中取到建筑`);
+    const spec = focusSpecFor(building);
+    const info = assertFocusInvariants(spec, slot.id);
+    rows.push({ id: slot.id, kind: slot.kind, degenerate: info.degenerate, dist: info.dist });
+  }
+  const degenerate = rows.filter((r) => r.degenerate);
+  runner.info(`53 槽位 focus 取景：距离 ${Math.min(...rows.map((r) => r.dist)).toFixed(1)}–${Math.max(...rows.map((r) => r.dist)).toFixed(1)}m；退化包围盒 ${degenerate.length} 个${degenerate.length ? '（' + degenerate.map((r) => r.id).join(',') + '）' : ''}`);
+});
+
+await runner.test('退化包围盒防护（突变证明）：零厚度/NaN 体量不得让相机落进建筑（旧公式在此类输入上会塌缩）', () => {
+  // ① 合成"嵌在院墙里的薄片院门"：进深 0（旧实现 distance = max(w,0)*1.7 + h*1.55，最小仅 ~20m）
+  const thinGate = {
+    id: 'SYNTH-thin-gate',
+    facing: 'west',
+    baseY: 0.4,
+    totalHeight: 8,
+    bounds: { minX: -6, maxX: 6, minZ: 124, maxZ: 124 },
+  };
+  const specThin = focusSpecFor(thinGate);
+  assertEqual(specThin.framing.degenerate, true, '零进深应被识别为退化包围盒');
+  assertFocusInvariants(specThin, 'SYNTH-thin-gate');
+
+  // ② 突变对照：把退化防护去掉（用旧公式）后，同一输入的距离会小于最小入镜距离 ⇒ 断言必失败
+  const f = specThin.framing;
+  const legacyDistance = Math.max(f.rawW ?? 20, f.rawD ?? 20) * 1.7 + (f.rawH ?? 20) * 1.55;
+  assert(
+    legacyDistance < f.fitDistance,
+    `旧公式在同一退化输入上的距离 ${legacyDistance.toFixed(2)} 必须小于最小入镜距离 ${f.fitDistance}（这是空白缺陷的机制；若此断言失败说明样本不再具备区分力）`,
+  );
+
+  // ③ NaN/缺字段输入：不得产出 NaN 机位（旧实现在 worldBounds 含 NaN 时会直接给 NaN 机位 ⇒ 整帧空白）
+  const brokenBox = { id: 'SYNTH-nan', facing: 'south', baseY: 0, totalHeight: 12, worldBounds: { minX: NaN, maxX: NaN, minZ: 0, maxZ: 10, minY: 0, maxY: 12 } };
+  const specNan = focusSpecFor(brokenBox);
+  assertEqual(specNan.framing.degenerate, true, 'NaN 包围盒应被识别为退化');
+  assert(Number.isFinite(specNan.position.x) && Number.isFinite(specNan.position.z) && Number.isFinite(specNan.position.y), 'NaN 输入下机位仍须有限');
+  assertFocusInvariants(specNan, 'SYNTH-nan');
+  runner.info(`退化样本：thin-gate 距离 ${specThin.framing.distance}（旧公式 ${legacyDistance.toFixed(2)} < 入镜 ${specThin.framing.fitDistance}）；NaN 输入机位有限 ✓`);
 });
 
 /* ========================================================================== */

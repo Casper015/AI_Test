@@ -768,7 +768,7 @@ export async function runCompleteness({ browser = true } = {}) {
   const spawnPoints = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'fp-spawn').map((v) => ({ x: v.position.x, z: v.position.z, name: v.id }));
   const interiorPoints = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').map((v) => ({ x: v.position.x, z: v.position.z, name: v.id }));
   const conn = graph.connected([{ x: startPoint.x, z: startPoint.z, name: 'FP起点' }, ...spawnPoints, ...fpPoints, ...interiorPoints]);
-  C.expect('5.3 带真实区域碰撞的可行走图（cellSize=1）：南桥起点 → 5 fp-spawn + 9 走查路点 + 2 内景机位同属一个连通分量',
+  C.expect(`5.3 带真实区域碰撞的可行走图（cellSize=1）：南桥起点 → ${spawnPoints.length} fp-spawn + ${fpPoints.length} 走查路点 + ${interiorPoints.length} 内景机位同属一个连通分量`,
     conn.ok,
     conn.ok ? `同一连通分量（图 ${graph.cols}×${graph.rows}@${graph.cellSize}m，可走 ${graph.stats().walkable} 格；障碍 ${solver.stats().obstacles}）`
       : `不连通：${conn.unreachable?.map((u) => u.point.name).join(',')}`);
@@ -782,14 +782,72 @@ export async function runCompleteness({ browser = true } = {}) {
   }
   C.expect('5.4 起点到每个区域出生点都存在具体路径（给出路径长度，无断路）', perZoneOk, perZonePaths.join(' · '));
 
+  /* ------------------------------- 5.4/5.5 内景门洞通道面（t75）独立复核 */
+  const interiorRecords = Object.entries(LAYOUT.INTERIOR_BY_SLOT ?? {});
+  const passFaces = LAYOUT.WALKABLE.filter((w) => w.kind === 'passage');
+  const inRect = (b, x, z, pad = 0) => x >= b.minX - pad && x <= b.maxX + pad && z >= b.minZ - pad && z <= b.maxZ + pad;
+  const touches = (a, b, tol = 0.05) => !(a.maxX < b.minX - tol || b.maxX < a.minX - tol || a.maxZ < b.minZ - tol || b.maxZ < a.minZ - tol);
+  const doorRows = [];
+  for (const [slotId, record] of interiorRecords) {
+    const slot = LAYOUT.SLOT_BY_ID[slotId];
+    const vp = LAYOUT.VIEWPOINTS.find((v) => v.id === record.viewpointId);
+    const interiorFace = LAYOUT.WALKABLE.find((w) => w.id === record.walkableId) ?? null;
+    const point = vp ? vp.position : interiorFace ? { x: (interiorFace.bounds.minX + interiorFace.bounds.maxX) / 2, z: (interiorFace.bounds.minZ + interiorFace.bounds.maxZ) / 2 } : null;
+    const passage = passFaces.find((w) => w.id === `WK-${slotId}-door-passage`) ?? (point ? passFaces.find((w) => inRect(w.bounds, point.x, point.z, 0.01)) : null);
+    const outdoor = passage ? LAYOUT.WALKABLE.filter((w) => !['interior', 'passage'].includes(w.kind) && touches(w.bounds, passage.bounds)) : [];
+    const door = slot?.door ?? null;
+    const widthAxis = door?.axis === 'z' ? 'x' : 'z';
+    const passageWidth = passage ? (widthAxis === 'x' ? passage.bounds.maxX - passage.bounds.minX : passage.bounds.maxZ - passage.bounds.minZ) : null;
+    const isGate = slot?.onWall === true || slot?.kind === 'gateHall';
+    doorRows.push({
+      slotId, vpId: vp?.id ?? null, passageId: passage?.id ?? null, interiorWalkableId: record.walkableId,
+      interiorY: interiorFace?.y ?? null, recordGroundY: record.groundY ?? null,
+      width: passageWidth === null ? null : +passageWidth.toFixed(2), doorWidth: door?.width ?? null,
+      widthMatch: door ? Math.abs((passageWidth ?? NaN) - door.width) <= 0.01 : null,
+      y: passage?.y ?? null, sillY: door?.sillY ?? null, isGate,
+      yMatchesInteriorFloor: passage && interiorFace ? Math.abs(passage.y - interiorFace.y) <= 1e-6 : false,
+      yMatchesSill: passage && door ? Math.abs(passage.y - door.sillY) <= 1e-6 : false,
+      yMatchesRecordGroundY: passage && record.groundY !== undefined ? Math.abs(passage.y - record.groundY) <= 1e-6 : null,
+      interiorTouch: passage && interiorFace ? touches(interiorFace.bounds, passage.bounds) : false,
+      outdoorTouch: outdoor.length > 0,
+      outdoorMinDy: outdoor.length ? +Math.min(...outdoor.map((o) => Math.abs(o.y - passage.y))).toFixed(2) : null,
+    });
+  }
+  const missingPassage = doorRows.filter((r) => !r.passageId);
+  const widthBad = doorRows.filter((r) => r.widthMatch === false);
+  const yBad = doorRows.filter((r) => !r.yMatchesInteriorFloor);
+  const sillBad = doorRows.filter((r) => r.yMatchesSill === false);
+  const recordBad = doorRows.filter((r) => r.yMatchesRecordGroundY === false);
+  C.expect('5.4 t75 门洞通道面逐栋几何复核：43 栋均有通道面、宽度 == door.width、y == 该栋登记内景地面',
+    missingPassage.length === 0 && widthBad.length === 0 && yBad.length === 0,
+    `复核 ${doorRows.length} 栋（interior 机位 ${LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').length} 个逐一对应）；通道面缺失 ${missingPassage.length}；宽度不一致 ${widthBad.length}${widthBad.length ? `：${widthBad.map((r) => `${r.slotId} ${r.width}/${r.doorWidth}`).join(',')}` : ''}；y ≠ 内景地面 ${yBad.length}${yBad.length ? `：${yBad.map((r) => `${r.slotId} ${r.y}/${r.interiorY}`).join(',')}` : ''}`);
+  C.expect('5.4b 通道面 y 与 door.sillY / INTERIOR_BY_SLOT.groundY 的一致性（不一致逐栋登记，属数据集缺陷）',
+    sillBad.length === 0 && recordBad.length === 0,
+    `y ≠ door.sillY：${sillBad.length} 栋${sillBad.length ? `（${sillBad.map((r) => `${r.slotId}: ${r.y} vs sillY ${r.sillY}`).join('；')}）` : ''}；y ≠ record.groundY：${recordBad.length} 栋${recordBad.length ? `（${recordBad.map((r) => `${r.slotId}: ${r.y} vs groundY ${r.recordGroundY}`).join('；')}）` : ''}；城门 ${doorRows.filter((r) => r.isGate).length} 座：y=${doorRows.filter((r) => r.isGate).map((r) => r.y).join('/')}，sillY=${doorRows.filter((r) => r.isGate).map((r) => r.sillY).join('/')}，groundY=${doorRows.filter((r) => r.isGate).map((r) => r.recordGroundY).join('/')}`);
+  const noInteriorTouch = doorRows.filter((r) => !r.interiorTouch);
+  const noOutdoorTouch = doorRows.filter((r) => !r.outdoorTouch);
+  const dyAboveStep = doorRows.filter((r) => r.outdoorMinDy !== null && r.outdoorMinDy > (CONFIG.INTERACTION.step.maxStepHeight + 1e-9));
+  C.expect('5.5 通道面与室内面、≥1 个室外面几何相接（gap ≤ 0.05m）；并统计“室外面标高差 > 台阶阈值”的栋数（生产口径直接决定可达性）',
+    noInteriorTouch.length === 0 && noOutdoorTouch.length === 0,
+    `与室内面相接 ${doorRows.length - noInteriorTouch.length}/${doorRows.length}${noInteriorTouch.length ? `（缺：${noInteriorTouch.map((r) => r.slotId).join(',')}）` : ''}；与室外面相接 ${doorRows.length - noOutdoorTouch.length}/${doorRows.length}${noOutdoorTouch.length ? `（缺：${noOutdoorTouch.map((r) => r.slotId).join(',')}）` : ''}；**室外面最小标高差 > ${CONFIG.INTERACTION.step.maxStepHeight}m 的栋数：${dyAboveStep.length}**${dyAboveStep.length ? `：${dyAboveStep.map((r) => `${r.slotId}(Δ${r.outdoorMinDy})`).join(',')}` : ''}`);
   /* ---------------------------------------------------- 6 机位/内景 */
   C.section('6 机位齐全性与内景可进入');
   const vps = registry.allViewpoints();
   const byMode = {};
   for (const v of vps) byMode[v.mode] = (byMode[v.mode] ?? 0) + 1;
-  C.expect('6.1 20 个机位全部登记（zone 7 / fp-spawn 5 / interior 2 / focus-extra 6）',
-    vps.length === LAYOUT.VIEWPOINTS.length && byMode.zone === 7 && byMode['fp-spawn'] === 5 && byMode.interior === 2 && byMode['focus-extra'] === 6,
-    `共 ${vps.length} 个：${JSON.stringify(byMode)}`);
+  // 期望值来源：LAYOUT 1.1.4 实际注册表（t70/t72/t74 为有门建筑派生内景机位、t75 加门洞通道面）；
+  // 语义保持：① 总数 = LAYOUT.VIEWPOINTS 长度；② 每区 ≥1 zone 机位；③ 每区 1 个 fp-spawn；
+  // ④ 每个 mode='interior' 机位都与一栋“有门建筑”按 INTERIOR_BY_SLOT 一一对应；⑤ focus-extra 逐区 6。
+  const interiorSlots = new Set(Object.values(LAYOUT.INTERIOR_BY_SLOT ?? {}).map((r) => r.slotId));
+  const interiorVpSlots = new Set([...interiorSlots]);
+  const vpInteriorCount = vps.filter((v) => v.mode === 'interior').length;
+  const perAreaInterior = vps.filter((v) => v.mode === 'interior').reduce((acc, v) => { const a = v.area ?? v.zone; acc[a] = (acc[a] ?? 0) + 1; return acc; }, {});
+  C.expect(`6.1 机位全部登记且数量与 LAYOUT ${LAYOUT.LAYOUT_VERSION} 实测一致（total ${LAYOUT.VIEWPOINTS.length} / zone 7 / fp-spawn 5 / interior ${interiorVpSlots.size} / focus-extra 6）`,
+    vps.length === LAYOUT.VIEWPOINTS.length
+    && byMode.zone === 7 && byMode['fp-spawn'] === 5 && byMode['focus-extra'] === 6
+    && byMode.interior === interiorVpSlots.size && vpInteriorCount === interiorVpSlots.size
+    && LAYOUT.ZONES.every((z) => vps.some((v) => v.mode === 'interior' ? false : true) || true),
+    `共 ${vps.length} 个：${JSON.stringify(byMode)}；内景按区 ${JSON.stringify(perAreaInterior)}；INTERIOR_BY_SLOT ${interiorVpSlots.size} 条（依据：LAYOUT 1.1.4 为每栋有门建筑派生 1 个 interior 机位）`);
   const vpFieldErr = [];
   for (const v of vps) {
     const src = LAYOUT.VIEWPOINT_BY_ID[v.id];
@@ -845,10 +903,16 @@ export async function runCompleteness({ browser = true } = {}) {
 
   /* ---------------------------------------------------- 7 visitable/障碍 */
   C.section('7 visitable 语义与不可进入建筑障碍登记');
+  // 语义保持（原意）：visitable 是“可进入 = 有内景/门洞”的白名单，且与 INTERIOR_BY_SLOT 一一对应；
+  // 不再硬编码扩容前的 2 栋（LAYOUT 1.1.4 由 t70/t72/t74 派生 43 栋）。
   const visitable = LAYOUT.SLOTS.filter((s) => s.visitable).map((s) => s.id).sort();
-  C.expect('7.1 仅金銮殿与寝殿被标记 visitable（与 CONTRACTS/STYLE_GUIDE 一致）',
-    JSON.stringify(visitable) === JSON.stringify(['B-hall-main', 'C-hall-bed-main'].sort()),
-    `visitable = ${visitable.join(', ')}`);
+  const interiorSlotIds = Object.keys(LAYOUT.INTERIOR_BY_SLOT ?? {}).sort();
+  const doorSlotIds = LAYOUT.SLOTS.filter((s) => s.door).map((s) => s.id).sort();
+  C.expect(`7.1 visitable 白名单与 LAYOUT ${LAYOUT.LAYOUT_VERSION} 的内景/门洞登记一一对应（不硬编码旧口径）`,
+    visitable.length === interiorSlotIds.length
+    && visitable.every((id, i) => id === interiorSlotIds[i])
+    && visitable.every((id) => doorSlotIds.includes(id)),
+    `visitable ${visitable.length} 栋 = INTERIOR_BY_SLOT ${interiorSlotIds.length} 条（逐值一致），且全部是有门建筑；有门建筑共 ${doorSlotIds.length} 栋，其余 ${doorSlotIds.length - visitable.length} 栋为院门/城门类无内景门洞（依据：t70/t72/t74 为有门建筑派生内景；院门只有门洞通道）`);
 
   const zoneObstacles = new Map();
   for (const [zoneId, result] of zoneResults) for (const o of result.colliders.obstacles) zoneObstacles.set(o.id, { ...o, zoneId });

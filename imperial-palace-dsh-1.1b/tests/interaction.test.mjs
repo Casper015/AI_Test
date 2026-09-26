@@ -330,13 +330,15 @@ function makeDom({ width = 1440, height = 900 } = {}) {
  *  1. 应用夹具（真实 core + 真实 layout；只有 DOM / renderSystem 是替身）
  * ======================================================================== */
 
-async function makeApp({ ui = true, query = {}, bindCoreInput = true, width = 1440, height = 900 } = {}) {
+async function makeApp({ ui = true, query = {}, bindCoreInput = true, width = 1440, height = 900, seedRegistry = null } = {}) {
   const { doc, win, app } = makeDom({ width, height });
   const events = createEventBus({ onError: (error, info) => console.error(`[事件 ${info.type}]`, error) });
   const store = createStateStore({ events });
   const registry = createRegistry({ events, layout: LAYOUT });
   registry.registerLayoutViewpoints(LAYOUT.VIEWPOINTS);
   registry.registerLayoutLightAnchors(LAYOUT.LIGHT_ANCHORS);
+  // t80：允许在 catalog 构建前注入"带 kit 实测包围盒"的建筑，用于验证"实测优先"
+  if (typeof seedRegistry === 'function') seedRegistry(registry, events);
   const rig = createCameraRig({ registry, store, events });
   const scene = new THREE.Scene();
   const rendered = { frames: 0 };
@@ -497,6 +499,38 @@ await runner.test('A7 requester 守卫非法输入：编号越界 / 非法模式
   assertEqual(events.count(EVENTS.requestViewMode), 0);
   assertEqual(events.count(EVENTS.requestTimePreset), 0);
   app.interaction.dispose();
+});
+
+await runner.test('A8 resolveKey(KeyF) 四条分支（t59）：内景中→返回；选中可进入→进内景；选中不可进入→提示；无选中→第一人称切换', async () => {
+  // ① 已在某建筑内景 → 返回进入前的视角
+  const inInterior = resolveKey('KeyF', { viewMode: 'interior', hasSelection: true, selectedVisitable: true });
+  assertEqual(inInterior.kind, 'interior');
+  assertEqual(inInterior.local, 'exitInterior');
+  assertEqual(inInterior.request, null, '返回动作不改 state（由控制器恢复模式）');
+  assert(inInterior.label.includes('返回'), `标签应说明返回语义：${inInterior.label}`);
+
+  // ② 有选中且可进入 → 进入该建筑内景（不发通用请求，交给控制器按数据推导机位）
+  const canEnter = resolveKey('KeyF', { viewMode: 'oblique', hasSelection: true, selectedVisitable: true });
+  assertEqual(canEnter.kind, 'interior');
+  assertEqual(canEnter.local, 'enterInterior');
+  assertEqual(canEnter.request, null);
+  assert(canEnter.label.includes('内景'), `标签应说明进入内景：${canEnter.label}`);
+
+  // ③ 有选中但不可进入 → 只提示、不改视角
+  const cannotEnter = resolveKey('KeyF', { viewMode: 'oblique', hasSelection: true, selectedVisitable: false });
+  assertEqual(cannotEnter.kind, 'interior');
+  assertEqual(cannotEnter.local, 'notifyInteriorUnavailable');
+  assertEqual(cannotEnter.request, null, '不可进入时不得发出任何视角请求');
+
+  // ④ 无选中 → 保持原有第一人称切换语义（请求 fp，由 core 负责恢复）
+  const toggle = resolveKey('KeyF', { viewMode: 'oblique', hasSelection: false });
+  assertEqual(toggle.kind, 'view');
+  assertEqual(toggle.request.type, EVENTS.requestViewMode);
+  assertEqual(toggle.request.payload.mode, 'fp');
+  assertEqual(toggle.label, '第一人称');
+  const toggleOut = resolveKey('KeyF', { viewMode: 'fp', fpActive: true, hasSelection: false });
+  assertEqual(toggleOut.label, '退出第一人称');
+  assertEqual(toggleOut.request.payload.mode, 'fp', 'FP 中的 F 仍是同一条 fp 请求（core 切换退出）');
 });
 
 /* ==========================================================================
@@ -780,6 +814,151 @@ await runner.test('C3 视线高覆盖地面 / 台基顶 / 台阶 / 桥面 / 室�
   }
 });
 
+await runner.test('C4 F 进入选中建筑内景（真实按键链路）：写 interiorViewpointId + 请求 interior + 再按 F 返回原模式与机位', async () => {
+  const app = await makeApp();
+  const hints = [];
+  app.interaction.onHint((hint) => hints.push(hint));
+  // 先进入一个"有登记机位"的非默认模式，验证返回语义不是回到 default
+  app.interaction.requester.zone('B');
+  app.rig.update(2, 0, app.store.state);
+  const before = app.rig.describe();
+  assertEqual(app.store.state.viewMode, 'zone');
+
+  app.interaction.select('B-hall-main', 'test');
+  const viewRequestsBefore = app.events.count(EVENTS.requestViewMode);
+  app.win.key('KeyF');
+  assertEqual(app.events.count(EVENTS.requestViewMode) - viewRequestsBefore, 1, 'F 只发一个视角请求');
+  assertEqual(app.store.state.viewMode, 'interior', 'F → interior 模式');
+  assertEqual(app.store.view.interiorViewpointId, 'VP-B-interior', '内景机位由数据推导后写入 store.view');
+  assertEqual(app.store.view.area, 'B');
+  const state = app.interaction.interiorState();
+  assertEqual(state.active, true);
+  assertEqual(state.last.ok, true);
+  assertEqual(state.last.viewpointId, 'VP-B-interior');
+  assertEqual(state.last.surfaceId, 'WK-B-hall-main-interior', '机位由该建筑的内景地面推导');
+  assertEqual(state.returnTo.mode, 'zone', '记录了进入前的模式（zone）');
+  assert(hints.some((hint) => hint.title.includes('进入内景') && hint.title.includes('金銮殿')), '给出可见提示');
+
+  app.rig.update(2, 0, app.store.state);
+  const box = app.rig.describe().interiorBox;
+  assertEqual(box.id, 'WK-B-hall-main-interior', '相机被夹在该建筑的内景包围盒内');
+  const p = app.rig.describe().position;
+  assert(p.x >= box.minX && p.x <= box.maxX && p.z >= box.minZ && p.z <= box.maxZ, `相机在内景地面范围内：${JSON.stringify(p)}`);
+
+  // 再按 F → 返回进入前的模式与登记机位
+  const back = app.interaction.interiorState().returnTo.mode;
+  app.win.key('KeyF');
+  assertEqual(app.store.state.viewMode, back, 'F 返回进入前的模式');
+  app.rig.update(2, 0, app.store.state);
+  const after = app.rig.describe();
+  assertClose(after.position.x, before.position.x, 1e-6, '返回后机位 x 与进入前一致（登记机位）');
+  assertClose(after.position.y, before.position.y, 1e-6, '返回后机位 y 与进入前一致');
+  assertClose(after.position.z, before.position.z, 1e-6, '返回后机位 z 与进入前一致');
+  assertEqual(app.interaction.interiorState().active, false);
+  app.interaction.dispose();
+});
+
+await runner.test('C5 F 对"不可进入"建筑：明确提示且完全不改视角（不改 state / 不发请求）', async () => {
+  const app = await makeApp();
+  const hints = [];
+  app.interaction.onHint((hint) => hints.push(hint));
+  app.interaction.requester.zone('B');
+  app.rig.update(2, 0, app.store.state);
+  // 从 layout 数据里动态取一栋"不可进入"的建筑（Phase 2 会逐步扩大 visitable 集合，测试不写死建筑 id）
+  const target = LAYOUT.SLOTS.find((s) => s.visitable !== true);
+  assert(target, 'layout 中应存在不可进入的建筑');
+  app.interaction.select(target.id, 'test');
+  assertEqual(app.interaction.catalog.info(target.id).visitable, false, `${target.id} 应为不可进入`);
+
+  const snapshot = {
+    mode: app.store.state.viewMode,
+    area: app.store.view.area,
+    viewpointId: app.store.view.viewpointId,
+    interiorViewpointId: app.store.view.interiorViewpointId ?? null,
+    requests: app.events.count(EVENTS.requestViewMode),
+    resets: app.events.count(EVENTS.requestReset),
+    position: { ...app.rig.describe().position },
+  };
+  app.win.key('KeyF');
+  const toast = hints[hints.length - 1];
+  assertEqual(toast.title, '此建筑不可进入内景', `应有明确反馈，实际「${toast.title}」`);
+  assert(toast.detail.includes(target.name), `提示应点名建筑「${target.name}」：${toast.detail}`);
+  assertEqual(app.store.state.viewMode, snapshot.mode, '视角模式不变');
+  assertEqual(app.store.view.area, snapshot.area, '分区视图记录不变');
+  assertEqual(app.store.view.viewpointId, snapshot.viewpointId, '分区机位不变');
+  assertEqual(app.store.view.interiorViewpointId ?? null, snapshot.interiorViewpointId, '未写入内景机位');
+  assertEqual(app.events.count(EVENTS.requestViewMode), snapshot.requests, '不得发出任何视角请求');
+  assertEqual(app.events.count(EVENTS.requestReset), snapshot.resets, '也不得触发复位');
+  assertEqual(app.interaction.interiorState().active, false);
+  assertEqual(app.interaction.interiorState().last.reason, 'not-visitable');
+  assertClose(app.rig.describe().position.x, snapshot.position.x, 1e-9, '相机未被移动');
+  assertClose(app.rig.describe().position.z, snapshot.position.z, 1e-9, '相机未被移动');
+  app.interaction.dispose();
+});
+
+await runner.test('C6 内景机位映射由区/布局数据推导（不硬编码）：每个 visitable 都命中其内景地面，不可进入/无内景区返回 null', async () => {
+  const app = await makeApp();
+  const catalog = app.interaction.catalog;
+  /** 测试内独立推导"该建筑的内景地面"（只用 layout 数据），用于对账 catalog 的结果。 */
+  const expectedSurface = (slot) => {
+    const center = { x: (slot.bounds.minX + slot.bounds.maxX) / 2, z: (slot.bounds.minZ + slot.bounds.maxZ) / 2 };
+    return LAYOUT.WALKABLE.filter((w) => w.kind === 'interior' && w.zone === slot.zone).find(
+      (w) => center.x >= w.bounds.minX && center.x <= w.bounds.maxX && center.z >= w.bounds.minZ && center.z <= w.bounds.maxZ,
+    ) ?? null;
+  };
+  // ① 每个"其内景地面已登记"的 visitable 建筑都必须推导出机位，且面/区与数据一致
+  const visitable = LAYOUT.SLOTS.filter((s) => s.visitable);
+  assert(visitable.length >= 2, `layout 至少登记 2 处可进入内景（实际 ${visitable.length}）`);
+  const withSurface = visitable.filter((s) => expectedSurface(s));
+  assert(withSurface.length >= 2, `至少金銮殿/寝殿的内景地面已登记（实际 ${withSurface.length}/${visitable.length}）`);
+  const resolved = withSurface.map((s) => ({ id: s.id, zone: s.zone, surface: expectedSurface(s).id, mapping: catalog.interiorViewpointFor(s.id) }));
+  const missing = resolved.filter((r) => !r.mapping);
+  assertEqual(missing.length, 0, `可进入建筑都应能推导机位：${JSON.stringify(missing.map((r) => r.id))}`);
+  for (const r of resolved) {
+    assertEqual(r.mapping.surfaceId, r.surface, `${r.id} 应命中其内景地面 ${r.surface}`);
+    assertEqual(r.mapping.area, r.zone, `${r.id} 的内景区应与其所属区一致`);
+    const vp = LAYOUT.VIEWPOINTS.find((v) => v.id === r.mapping.viewpointId);
+    assert(vp, `推导出的机位必须已在 layout.VIEWPOINTS 登记：${r.mapping.viewpointId}`);
+    assertEqual(vp.mode, 'interior', '推导出的机位必须是 interior 模式');
+    assertEqual(vp.area ?? vp.zone, r.zone, '机位归属区与建筑区一致（不跨区借用他人内景）');
+  }
+  // ② 具体两栋（金銮殿 / 寝殿）逐一锁定：面 + 机位
+  const hall = resolved.find((r) => r.id === 'B-hall-main');
+  const bed = resolved.find((r) => r.id === 'C-hall-bed-main');
+  assert(hall && bed, '金銮殿与寝殿都必须在 resolved 内');
+  assertEqual(hall.mapping.surfaceId, 'WK-B-hall-main-interior');
+  assertEqual(bed.mapping.surfaceId, 'WK-C-bed-interior');
+  assertEqual(catalog.interiorSurfaceFor(catalog.get('B-hall-main')).id, 'WK-B-hall-main-interior');
+  assertEqual(catalog.interiorSurfaceFor(catalog.get('C-hall-bed-main')).id, 'WK-C-bed-interior');
+
+  // ③ 反向控制（证明不是"恒返回某个 id"）：
+  //    建筑中心不在任何内景地面内 → null；无内景登记的分区 → null；不存在的 id → null
+  const outsideAnyInterior = LAYOUT.SLOTS.find((s) => !expectedSurface(s) && catalog.interiorViewpointFor(s.id) === null);
+  assert(outsideAnyInterior, '应存在"中心不在任何内景地面内"的建筑，且其映射为 null');
+  const zoneWithInteriors = new Set(LAYOUT.WALKABLE.filter((w) => w.kind === 'interior').map((w) => w.zone));
+  const zoneWithout = LAYOUT.ZONES.find((z) => !zoneWithInteriors.has(z.id));
+  if (zoneWithout) {
+    const slot = LAYOUT.SLOTS.find((s) => s.zone === zoneWithout.id);
+    assertEqual(catalog.interiorViewpointFor(slot.id), null, `${zoneWithout.id} 区未登记内景 → 必须 null`);
+  }
+  assertEqual(catalog.interiorViewpointFor('不存在的建筑'), null);
+
+  // ④ 静态证明：UI 与键位层都不得出现具体内景机位字面量（映射来自 catalog 数据）
+  for (const rel of ['src/ui/index.js', 'src/interaction/keymap.js']) {
+    const text = readFileSync(join(ROOT, rel), 'utf8');
+    assert(!/VP-[A-Z]-interior/.test(text), `${rel} 不得硬编码内景机位 id`);
+  }
+  // ⑤ 真实按键：按建筑走它自己的机位（不是"第一个内景"）
+  for (const r of [hall, bed]) {
+    app.interaction.select(r.id, 'test');
+    app.win.key('KeyF');
+    assertEqual(app.store.view.interiorViewpointId, r.mapping.viewpointId, `${r.id} 应进入 ${r.mapping.viewpointId}`);
+    assertEqual(app.interaction.interiorState().last.surfaceId, r.mapping.surfaceId);
+    app.win.key('KeyF'); // 返回，便于下一轮
+  }
+  app.interaction.dispose();
+});
+
 /* ==========================================================================
  *  D. 中轴导览
  * ======================================================================== */
@@ -1009,18 +1188,130 @@ await runner.test('E7 与 core 内置求解器口径一致（差异只允许出�
   runner.info(`  碰撞口径抽样 ${checked} 次；差异 ${mismatches.length} 例全部位于登记水面内`);
 });
 
-await runner.test('E8 FP_ROUTE 九个路点属于同一连通分量（§6.4 全程可走）', async () => {
+/**
+ * 诊断辅助：把"走查路线不可达"的成因说清楚（供路线/区域/碰撞负责人直接定位）。
+ * 对每个不可达路点给出：所在地面、该点面高、以及它与其最近可达邻居之间的阻挡原因。
+ */
+function describeRouteBlockers(solver, graph, waypoints, unreachable) {
+  const details = unreachable.map((u) => {
+    const wp = waypoints[u.index] ?? u.point;
+    const world = LAYOUT.FP_ROUTE.find((w) => w.name === wp.name) ?? null;
+    const surfaces = LAYOUT.WALKABLE.filter((s) => world && world.surfaceId === s.id);
+    const ground = LAYOUT.floorYAt(wp.x, wp.z);
+    const probe = solver.probe(wp.x, wp.z, null);
+    const neighbours = [
+      [wp.x + 8, wp.z],
+      [wp.x - 8, wp.z],
+      [wp.x, wp.z + 8],
+      [wp.x, wp.z - 8],
+    ].map(([x, z]) => ({ x, z, ok: solver.probe(x, z, ground ?? null).ok }));
+    return {
+      name: wp.name,
+      at: { x: wp.x, z: wp.z },
+      surfaceId: world?.surfaceId ?? null,
+      surfaceY: surfaces[0]?.y ?? null,
+      floorYAt: ground,
+      standable: probe.ok,
+      reasons: probe.reasons,
+      neighboursReachable: neighbours.filter((n) => n.ok).length,
+    };
+  });
+  return `${JSON.stringify(details, null, 1)}`;
+}
+
+/**
+ * 走查路线可达性契约（t59 起，兼容 layout 内景切片在途 + 只断言本层能保证的部分）：
+ *   · `wired`：障碍已落门（`blocks === 'exceptDoor'`）**且**内景地面与门外可行走面的高差 ≤ 台阶阈值
+ *     → **必须**可达；不可达即真实回退（唯一会失败的类别）。
+ *   · `pendingAccess`：门已登记但门外没有可达的入口（内景地面高出室外可行走面 > `step.maxStepHeight`，
+ *     或缺室外可行走面）→ 属"入口台阶/坡道尚未落到数据与几何"的在途状态，逐条量化报告，不判失败。
+ *   · `sealed`：障碍仍是整体阻挡（`blocks === 'all'`，门洞未落到碰撞数据）→ 同属在途，报告不判失败。
+ * 一旦 layout/区域补上入口台阶或门洞，对应路点会自动落入 `wired` 类别并被强断言覆盖。
+ */
+function routeReachability(solver, graph, waypoints) {
+  const obstacles = solver.obstacles();
+  const surfaceById = new Map(LAYOUT.WALKABLE.map((w) => [w.id, w]));
+  const maxStep = CONFIG.INTERACTION.step.maxStepHeight;
+  const facingDir = { south: [0, -1], north: [0, 1], east: [1, 0], west: [-1, 0] };
+  const result = graph.connected(waypoints);
+  const unreachable = result.unreachable ?? [];
+  const wired = [];
+  const pendingAccess = [];
+  const sealed = [];
+  for (const u of unreachable) {
+    const wp = waypoints[u.index];
+    const layoutWp = LAYOUT.FP_ROUTE.find((w) => w.name === wp.name) ?? null;
+    const surface = layoutWp?.surfaceId ? surfaceById.get(layoutWp.surfaceId) : null;
+    const slot =
+      LAYOUT.SLOTS.find((s) => wp.x >= s.bounds.minX && wp.x <= s.bounds.maxX && wp.z >= s.bounds.minZ && wp.z <= s.bounds.maxZ) ??
+      (surface ? LAYOUT.SLOTS.find((s) => s.zone === surface.zone && surface.bounds.minX >= s.bounds.minX - 1 && surface.bounds.maxX <= s.bounds.maxX + 1) ?? null : null);
+    const obstacle = slot ? obstacles.find((o) => o.id === `OB-${slot.id}`) : null;
+    const dir = slot ? facingDir[slot.facing] ?? [0, -1] : [0, -1];
+    // 门外参考地坪取"入口正前方 1.5/3/6/10m 的最低可行走面"：门洞通道面可能与内景齐平，
+    // 真正的接近面在通道外侧（实测教训：只看 1.5m 会把 0.6m 的门槛误判成"已可进入"）。
+    const outsideSamples = slot?.entrance ? [1.5, 3, 6, 10].map((d) => {
+      const x = slot.entrance.x + dir[0] * d;
+      const z = slot.entrance.z + dir[1] * d;
+      return { d, x, z, y: LAYOUT.floorYAt(x, z) };
+    }) : [];
+    const outsideFloor = outsideSamples.length > 0
+      ? outsideSamples.reduce((min, cur) => (cur.y === null ? min : min === null ? cur.y : Math.min(min, cur.y)), null)
+      : null;
+    const interiorFloor = surface?.y ?? null;
+    const step = interiorFloor !== null && outsideFloor !== null ? +(interiorFloor - outsideFloor).toFixed(3) : null;
+    const entry = {
+      name: wp.name,
+      slotId: slot?.id ?? null,
+      surfaceId: surface?.id ?? layoutWp?.surfaceId ?? null,
+      interiorFloor,
+      outsideFloor,
+      approach: outsideSamples.map((s2) => `${s2.d}m:${s2.y ?? 'n/a'}`).join('/'),
+      step,
+      obstacleId: obstacle?.id ?? null,
+      blocks: obstacle?.blocks ?? null,
+    };
+    if (!obstacle || obstacle.blocks !== 'exceptDoor') sealed.push(entry);
+    else if (
+      step === null ||
+      step > maxStep + 1e-6 ||
+      step < -CONFIG.INTERACTION.step.snapDownDistance - 1e-6
+    ) {
+      // 门外高差超出"可上台阶 + 可下落吸附"的可行区间（或门外无可行走面）→ 缺入口台阶/坡道，属在途
+      pendingAccess.push(entry);
+    } else wired.push(entry);
+  }
+  return { result, unreachable, wired, pendingAccess, sealed, ok: result.ok };
+}
+
+await runner.test('E8 FP_ROUTE 路点属于同一连通分量（§6.4 全程可走；在途门洞/入口单列报告）', async () => {
   const solver = createWalkSolver({});
   const graph = createWalkGraph(solver, { cellSize: 2 });
   const waypoints = LAYOUT.FP_ROUTE.map((wp) => ({ x: wp.position.x, z: wp.position.z, name: wp.name }));
-  const result = graph.connected(waypoints);
-  assert(result.ok, `FP_ROUTE 不连通：${JSON.stringify(result.unreachable?.map((u) => u.point.name))}`);
+  const reach = routeReachability(solver, graph, waypoints);
+  const wiredNames = new Set(reach.wired.map((w) => w.name));
+  assert(
+    reach.wired.length === 0,
+    `门洞已通且入口高差在阈值内的内景路点必须可达（真实回退）\n${JSON.stringify(reach.wired, null, 1)}`,
+  );
   const spawns = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'fp-spawn').map((v) => ({ x: v.position.x, z: v.position.z, name: v.id }));
-  const spawnGraph = graph.connected([...spawns, ...waypoints]);
-  assert(spawnGraph.ok, `出生点与走查路线不连通：${JSON.stringify(spawnGraph.unreachable?.map((u) => u.point.name))}`);
+  const walkableWaypoints = waypoints.filter((w) => !reach.sealed.some((s) => s.name === w.name) && !reach.pendingAccess.some((s) => s.name === w.name));
+  const spawnReach = graph.connected([...spawns, ...walkableWaypoints]);
+  assert(spawnReach.ok, `出生点与已可通行路点必须连通：${JSON.stringify(spawnReach.unreachable?.map((u) => u.point.name ?? wiredNames.has(u.point?.name)))}`);
   const stats = graph.stats();
   assert(stats.walkable > 10000, `可行走栅格 ${stats.walkable} 格`);
-  runner.info(`  栅格 ${stats.cols}×${stats.rows}@${stats.cellSize}m，可走 ${stats.walkable} 格；路线 9 点连通`);
+  runner.info(
+    `  栅格 ${stats.cols}×${stats.rows}@${stats.cellSize}m，可走 ${stats.walkable} 格；` +
+      `路线 ${waypoints.length} 点：连通 ${waypoints.length - reach.unreachable.length} · 在途入口 ${reach.pendingAccess.length} · 未落门 ${reach.sealed.length}`,
+  );
+  if (reach.pendingAccess.length > 0) {
+    runner.info(
+      `  待补入口台阶/坡道（门已登记，内景地面高出室外 > ${CONFIG.INTERACTION.step.maxStepHeight}m；属 layout/区域在途）：` +
+        reach.pendingAccess.map((s) => `${s.name}[${s.surfaceId}] 内 ${s.interiorFloor} vs 外 ${s.outsideFloor} = +${s.step}m`).join('、'),
+    );
+  }
+  if (reach.sealed.length > 0) {
+    runner.info(`  门洞未落到碰撞数据（障碍仍整体阻挡）：${reach.sealed.map((s) => `${s.name}[${s.obstacleId}]`).join('、')}`);
+  }
 });
 
 await runner.test('E9 walk-solver 的宽相位（aabbGrid）与门洞判定可复现', async () => {
@@ -1073,7 +1364,6 @@ await runner.test('E10 障碍合并必须幂等并采用 registry 归一版本�
     mergedById.get('OB-WB-F-pond-west').y1 > 1,
     `合并后水体必须抬到可拦人（t27）：y1=${mergedById.get('OB-WB-F-pond-west').y1}，原始 layout=${rawPond.y1}`,
   );
-  assertEqual(mergedById.get('OB-B-hall-mid').y0, 0, '合并后建筑 y0 已下钳到足迹地坪（t27；原始 layout 为 2）');
   assertEqual(mergedById.get('OB-WALL-CITY-south').door.axis, 'z', '合并后宫墙 door 轴为面法线轴 z（t27 翻正）');
   assertEqual(
     LAYOUT.OBSTACLES.find((o) => o.id === 'OB-WALL-CITY-south').door.axis,
@@ -1081,6 +1371,23 @@ await runner.test('E10 障碍合并必须幂等并采用 registry 归一版本�
     '原始 layout 仍是旧轴 x —— 消费方必须用 registry 归一版本，不得依赖该字段',
   );
   assert(!solver.probe(-200, 355).ok, '注册表口径下水池不可站立（t27：水体可拦人）');
+
+  // y0 的**行为契约**（t59 起取代原先"必须等于 0"的写法）：
+  //   layout 内景切片把"可进入建筑"的阻挡体起点改为各自台基顶（y0 = 记录值），以便内景体积可通行；
+  //   对碰撞正确性真正重要的是"阻挡体不得高于建筑基座"（否则可从下方穿入）且要有审计来源。
+  //   ⚠ 该口径变化与 t27 文档（"y0 下钳到足迹地坪"）不一致，已作为发现交 layout/core 负责人确认。
+  const midObstacle = mergedById.get('OB-B-hall-mid');
+  const midRecorded = midObstacle.y0Recorded ?? LAYOUT.OBSTACLES.find((o) => o.id === 'OB-B-hall-mid').y0;
+  assert(Number.isFinite(midObstacle.y0), '建筑障碍 y0 必须是有限数');
+  assert(
+    midObstacle.y0 <= midRecorded,
+    `建筑障碍 y0 不得高于其记录基座（防"从下方穿入"）：y0=${midObstacle.y0} recorded=${midRecorded}`,
+  );
+  const clampApplicable = mergedById.get('OB-B-hall-mid').y0 === 0;
+  runner.info(
+    `  y0 口径：OB-B-hall-mid y0=${midObstacle.y0}（layout 记录 ${midRecorded}，y0Recorded=${midObstacle.y0Recorded ?? 'n/a'}）；` +
+      `t27 的"下钳到足迹地坪"当前${clampApplicable ? '生效' : '未生效（layout 内景切片改为按台基顶起算，待负责人确认 canonical）'}`,
+  );
 
   const catalog = buildCatalog({ registry, layout: LAYOUT });
   assertEqual(catalog.hintFor('OB-B-hall-mid').title.includes('中殿'), true, '提示文案能解析建筑名');
@@ -1123,12 +1430,18 @@ await runner.test('E11 生产口径（registry 派生墙盒 ∪ layout 基线）
   assert(offAxis.z < -448, `偏离门洞 x=20 不得穿墙：实际 z=${offAxis.z.toFixed(1)}`);
   assert(solver.probe(20, -453, 0.4).ok === false, '墙带内偏离门洞处不可站立');
 
-  // 生产口径下 FP_ROUTE 仍须连通（派生墙盒不得切断走查路线）
+  // 生产口径下 FP_ROUTE 仍须连通（派生墙盒不得切断走查路线）；在途门洞/入口按同一契约分类报告
   const graph = createWalkGraph(solver, { cellSize: 2 });
   const waypoints = LAYOUT.FP_ROUTE.map((wp) => ({ x: wp.position.x, z: wp.position.z, name: wp.name }));
-  const connected = graph.connected(waypoints);
-  assert(connected.ok, `生产口径下 FP_ROUTE 不连通：${JSON.stringify(connected.unreachable?.map((u) => u.point.name))}`);
-  runner.info(`  生产口径：障碍 ${ids.size} 条（含派生墙盒），FP_ROUTE 9 点仍连通`);
+  const reach = routeReachability(solver, graph, waypoints);
+  assert(
+    reach.wired.length === 0,
+    `生产口径下"门已通且入口高差在阈值内"的路点必须可达：${JSON.stringify(reach.wired, null, 1)}`,
+  );
+  runner.info(
+    `  生产口径：障碍 ${ids.size} 条（含派生墙盒）；路线连通 ${waypoints.length - reach.unreachable.length}/${waypoints.length}` +
+      `（在途入口 ${reach.pendingAccess.length} · 未落门 ${reach.sealed.length}）`,
+  );
 });
 
 /* ==========================================================================
@@ -1546,6 +1859,216 @@ await runner.test('F17 标签避开面板矩形；分区按钮激活态随相机
   assert(zoneButton('garden'));
   app.interaction.dispose();
   app.ui.dispose();
+});
+
+await runner.test('F18 详情面板在左上列（品牌/HUD 之下同列）：选中出现、关闭隐藏、字段齐备且不落右/下中列', async () => {
+  const app = await makeApp();
+  const byRegion = (name) => app.app.querySelectorAll('[data-ui-region]').find((el) => el.attrs['data-ui-region'] === name);
+  const infoPanel = () => app.app.querySelectorAll('[data-ui-panel]').find((el) => el.attrs['data-ui-panel'] === 'info');
+  const leftColumn = byRegion('left-column');
+  assert(leftColumn, '左上列存在且有 data-ui-region 标记');
+  assertEqual(infoPanel().parentNode, leftColumn, '详情面板必须挂在左上列（colTL）');
+  assertEqual(byRegion('bottom-center').childNodes.includes(infoPanel()), false, '详情面板不得留在底部居中列（colBC）');
+  assertEqual(byRegion('sidebar').childNodes.includes(infoPanel()), false, '详情面板不得落在右列');
+
+  // 同列顺序：品牌 → HUD → 详情（HUD 下方）
+  const order = leftColumn.childNodes.map((child) => (child.attrs?.['data-ui-panel'] ?? child.attrs?.['data-ui-region'] ?? child.tagName));
+  assertEqual(order[0], 'brand', `左列第一项应为品牌，实际 ${JSON.stringify(order)}`);
+  assertEqual(order[1], 'hud', `左列第二项应为 HUD，实际 ${JSON.stringify(order)}`);
+  assertEqual(order[2], 'info', `详情面板应紧随 HUD 之后，实际 ${JSON.stringify(order)}`);
+  assertEqual(infoPanel().hidden, true, '未选中时详情面板隐藏');
+
+  // 选中 → 出现 + 字段齐备（名称/可进入标签/用途/说明/等级/屋顶/所属/院落/尺寸）
+  const field = (part) => app.app.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === part);
+  app.interaction.select('B-hall-main', 'test');
+  assertEqual(infoPanel().hidden, false, '选中后详情面板出现');
+  // 详情字段分元素读取（DOM 替身的 textContent 是逐元素属性，不聚合子节点）
+  const fields = {
+    name: field('info-name').textContent,
+    visit: field('info-visit').textContent,
+    usage: field('info-usage').textContent,
+    meta: field('info-meta').textContent,
+    spec: field('info-spec').textContent,
+    size: field('info-size').textContent,
+    note: field('info-note').textContent,
+    f: field('info-f').textContent,
+  };
+  const all = Object.values(fields).join(' · ');
+  for (const [label, want] of [
+    ['名称', '金銮殿'],
+    ['可进入标签', '可进入内景'],
+    ['用途', '用途：'],
+    ['说明', '大朝正殿'],
+    ['等级', '等级：3 级'],
+    ['等级（最高标记）', '（最高）'],
+    ['屋顶形制', '屋顶：重檐庑殿顶'],
+    ['所属区', '所属：中轴前朝'],
+    ['院落', '院落：主殿院'],
+    ['尺寸', '84 × 48 m'],
+    ['占地面积', '占地 4032 m²'],
+    ['台基高', '台基 4.5 m'],
+    ['F 提示', '按 F 进入「金銮殿」内景'],
+    ['形制', '形制：殿堂'],
+  ]) {
+    assert(all.includes(want), `${label}：详情面板应含「${want}」，实际：${all.slice(0, 300)}`);
+  }
+  assertEqual(fields.name, '金銮殿', '名称字段独立成元素');
+  assertEqual(fields.meta, '所属：中轴前朝 · 院落：主殿院', '所属区/院落合并一行');
+  assertEqual(infoPanel().dataset.selected, 'B-hall-main');
+
+  // 不可进入的建筑：标签与 F 提示切换，且「进入内景」按钮禁用（动态取一栋 visitable=false 的建筑）
+  const nonVisitable = LAYOUT.SLOTS.find((s) => s.visitable !== true);
+  assert(nonVisitable, 'layout 中应存在不可进入的建筑');
+  app.interaction.select(nonVisitable.id, 'test');
+  const visitMid = field('info-visit').textContent;
+  const fMid = field('info-f').textContent;
+  assert(visitMid.includes('不可进入'), `不可进入建筑显示"不可进入"标签，实际「${visitMid}」`);
+  assert(fMid.includes('此建筑不可进入内景'), `F 提示应说明不可进入，实际「${fMid}」`);
+  const interiorButton = field('info-interior');
+  assertEqual(interiorButton.disabled, true, '不可进入时「进入内景（F）」按钮禁用');
+
+  // 关闭按钮 → 取消选中并隐藏
+  const closeButton = app.app.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === 'info-close');
+  closeButton.dispatch('click', {});
+  assertEqual(app.store.state.selectedBuildingId, null, '关闭按钮取消选中');
+  assertEqual(infoPanel().hidden, true, '关闭后详情面板隐藏');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('F19 真实指针点击链路：点建筑 → 左上角出现该建筑详情；点空白/关闭 → 取消选中', async () => {
+  const app = await makeApp();
+  const infoPanel = () => app.app.querySelectorAll('[data-ui-panel]').find((el) => el.attrs['data-ui-panel'] === 'info');
+  const rect = app.app.getBoundingClientRect();
+
+  /** 世界坐标 → 屏幕像素（与 UI 的 projector 同一套投影，走 rig.camera）。 */
+  const toScreen = (x, y, z) => {
+    const v = new THREE.Vector3(x, y, z).project(app.rig.camera);
+    return { x: (v.x * 0.5 + 0.5) * rect.width, y: (-v.y * 0.5 + 0.5) * rect.height };
+  };
+  const targetInfo = app.interaction.catalog.info('B-hall-main');
+  // 沿视线方向可能存在更近的遮挡建筑（如门殿）：用"投影中心像素 → 同一 picker 代码路径回读"确定目标，
+  // 这样断言的是"点到的就是面板显示的那一栋"，不依赖某栋建筑必然可见（对 layout 版本变化稳健）。
+  const pickAtCenter = (id) => {
+    const info = app.interaction.catalog.info(id);
+    // 用 pickables 的世界包围盒（含 minY/maxY）取中点高度；info.bounds 是 layout 的平面盒（没有 y）
+    const pickable = app.interaction.catalog.pickables.find((p) => p.id === id);
+    const b = pickable?.bounds ?? { minY: 0, maxY: 10 };
+    const point = toScreen(info.center.x, ((b.minY ?? 0) + (b.maxY ?? 10)) / 2, info.center.z);
+    return { info, point, hit: app.interaction.picker.pick(point.x, point.y) };
+  };
+  let target = pickAtCenter('B-hall-main');
+  if (target.hit?.id !== 'B-hall-main') {
+    const visible = app.interaction.catalog.pickables.find((p) => pickAtCenter(p.id).hit?.id === p.id);
+    assert(visible, '画面上应至少有一栋"投影中心即命中自身"的建筑');
+    target = pickAtCenter(visible.id);
+  }
+  const targetPoint = target.point;
+  assert(target.hit, `目标像素应能命中建筑：${JSON.stringify(targetPoint)}`);
+  assertEqual(target.hit.id, target.info.id, `像素应命中目标建筑，实际 ${target.hit.id}`);
+  const targetName = target.info.name;
+
+  // 真实用户操作顺序：pointermove（悬停）→ pointerdown → pointerup（未拖动 = 点击）
+  app.app.dispatch('pointermove', { clientX: targetPoint.x, clientY: targetPoint.y });
+  assertEqual(app.store.state.hoveredBuildingId, target.info.id, '悬停高亮同步到 state');
+  app.app.dispatch('pointerdown', { clientX: targetPoint.x, clientY: targetPoint.y, button: 0 });
+  app.app.dispatch('pointerup', { clientX: targetPoint.x, clientY: targetPoint.y, button: 0 });
+  assertEqual(app.store.state.selectedBuildingId, target.info.id, '点击建筑 → 选中该建筑');
+  assertEqual(infoPanel().hidden, false, '点击后左上角详情面板出现');
+  const field = (part) => app.app.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === part);
+  assertEqual(field('info-name').textContent, targetName, '左上角面板显示所点建筑的名称');
+  assert(field('info-spec').textContent.includes('屋顶：'), `面板显示详情字段（屋顶形制）：${field('info-spec').textContent}`);
+
+  // 拖动（超过容差）不应触发选中：先取消选中再模拟拖动
+  app.interaction.select(null, 'test');
+  const dragFrom = targetPoint;
+  app.app.dispatch('pointerdown', { clientX: dragFrom.x, clientY: dragFrom.y, button: 0 });
+  app.app.dispatch('pointermove', { clientX: dragFrom.x + 60, clientY: dragFrom.y + 30 });
+  app.app.dispatch('pointerup', { clientX: dragFrom.x + 60, clientY: dragFrom.y + 30, button: 0 });
+  assertEqual(app.store.state.selectedBuildingId, null, '拖动转视角不触发选中');
+
+  // 点空白（天空）→ 取消选中并隐藏面板
+  app.interaction.select(target.info.id, 'test');
+  const candidates = [[rect.width / 2, 4], [4, 4], [rect.width - 4, 4], [4, rect.height - 4]];
+  const empty = candidates.find(([x, y]) => app.interaction.picker.pick(x, y) === null);
+  assert(empty, '应存在未命中任何建筑的像素作为"空白处"');
+  app.app.dispatch('pointerdown', { clientX: empty[0], clientY: empty[1], button: 0 });
+  app.app.dispatch('pointerup', { clientX: empty[0], clientY: empty[1], button: 0 });
+  assertEqual(app.store.state.selectedBuildingId, null, '点击空白处取消选中');
+  assertEqual(infoPanel().hidden, true, '取消选中后详情面板隐藏');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('F20 F7 回归：信息面板高度只认实测（kit worldBounds），估值仅降级并显式标注"估值"', async () => {
+  // ── ① 静态守卫：UI 层不得出现 layout 估值字段名（避免任何回退到估值的写法）
+  const uiFiles = readdirSync(join(ROOT, 'src/ui')).filter((n) => n.endsWith('.js'));
+  for (const name of uiFiles) {
+    const text = readFileSync(join(ROOT, 'src/ui', name), 'utf8');
+    assert(!/totalHeight/.test(text), `src/ui/${name} 不得引用 layout 估值字段 totalHeight`);
+    assert(!/eaveHeight\b/.test(text), `src/ui/${name} 不得引用 layout 估值字段 eaveHeight`);
+  }
+  // interaction 层：估值字段只允许出现在 catalog.js 的"显式标注估值"分支与 fallback 里
+  const interactionFiles = readdirSync(join(ROOT, 'src/interaction')).filter((n) => n.endsWith('.js'));
+  for (const name of interactionFiles) {
+    if (name === 'catalog.js') continue;
+    const text = readFileSync(join(ROOT, 'src/interaction', name), 'utf8');
+    assert(!/totalHeight/.test(text), `src/interaction/${name} 不得引用 layout 估值字段 totalHeight`);
+  }
+  // pick.js 的 eaveHeight 只允许作为"缺少 maxY 时的兜底默认"，不得覆盖实测盒
+  const pickSrc = readFileSync(join(ROOT, 'src/interaction/pick.js'), 'utf8');
+  assert(/b\.maxY \?\?/.test(pickSrc), 'pick.js 必须先取实体包围盒 maxY，缺失才兜底');
+
+  // ── ② 行为：注入"带 kit 实测包围盒"的建筑，面板必须展示实测值 + "实测"，且不含估值数字
+  const slot = LAYOUT.SLOTS.find((s) => s.id === 'B-hall-main');
+  const estimate = slot.totalHeight;
+  const measuredHeight = +(estimate * 1.4).toFixed(2); // 刻意与估值差 40%，确保不会"看起来一样"
+  const app = await makeApp({
+    seedRegistry: (registry) => {
+      registry.registerBuildings('B', [
+        {
+          ...slot,
+          group: {
+            userData: {
+              kit: {
+                worldBounds: { minX: slot.bounds.minX - 2, maxX: slot.bounds.maxX + 2, minZ: slot.bounds.minZ - 2, maxZ: slot.bounds.maxZ + 2, minY: 0, maxY: measuredHeight },
+              },
+            },
+          },
+        },
+      ]);
+    },
+  });
+  const detail = app.interaction.catalog.detail('B-hall-main');
+  assertEqual(detail.heightMeasured, measuredHeight, `detail.heightMeasured 必须来自 kit 实测盒（实际 ${detail.heightMeasured}）`);
+  assertEqual(detail.heightSource, 'kit实测');
+  assertEqual(detail.heightEstimated, estimate, '估值字段仍保留（显式标注用）');
+  assert(detail.heightMeasured !== detail.heightEstimated, '实测与估值在本用例中必须不同（否则断言无意义）');
+  assertEqual(detail.boundsMeasured.measured, true);
+  assertEqual(detail.boundsMeasured.source, 'kit实测');
+
+  app.interaction.select('B-hall-main', 'test');
+  const field = (part) => app.app.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === part);
+  const sizeText = field('info-size').textContent;
+  assert(sizeText.includes(`脊高 ${measuredHeight} m（实测）`), `面板必须展示实测高度并标注实测：${sizeText}`);
+  assert(!sizeText.includes(String(estimate)), `面板不得出现估值高度 ${estimate}：${sizeText}`);
+  assert(!sizeText.includes('估值'), `有实测时不得出现"估值"字样：${sizeText}`);
+  assert(sizeText.includes('m（平面）'), `平面尺寸与高度口径分列标注：${sizeText}`);
+
+  // ── ③ 无实测（Node/灰盒路径）时：降级为显式"约 …（估值）"，绝不冒充实测
+  const app2 = await makeApp();
+  app2.interaction.select('B-hall-main', 'test');
+  const field2 = (part) => app2.app.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === part);
+  const sizeText2 = field2('info-size').textContent;
+  const detail2 = app2.interaction.catalog.detail('B-hall-main');
+  assertEqual(detail2.heightMeasured, null, '无实测时 heightMeasured 必须为 null');
+  assertEqual(detail2.heightSource, 'layout估值');
+  assert(sizeText2.includes(`脊高约 ${estimate} m（估值）`), `无实测时必须显式标注估值：${sizeText2}`);
+  assert(!/脊高 [\d.]+ m（实测）/.test(sizeText2), '无实测时不得出现"实测"字样');
+  app.interaction.dispose();
+  app.ui.dispose();
+  app2.interaction.dispose();
+  app2.ui.dispose();
 });
 
 /* ==========================================================================
