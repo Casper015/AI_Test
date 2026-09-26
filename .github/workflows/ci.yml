@@ -1,0 +1,48 @@
+name: CI Automated Test & Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'imperial-palace-*/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  matrix-test:
+    name: ${{ matrix.project.name }} Test & Build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - name: "OpenCode 516k"
+            dir: "imperial-palace-opencode-516k"
+            command: "npm test && npm run build"
+          - name: "OpenCode 424k"
+            dir: "imperial-palace-opencode-424k"
+            command: "npm test && npm run build"
+          - name: "Command Code 36M"
+            dir: "imperial-palace-commandcode-36m"
+            command: "npm test && npm run build"
+          - name: "DSH 1.1B"
+            dir: "imperial-palace-dsh-1.1b"
+            command: "npm run build && node tests/layout.test.mjs && node tests/kit.test.mjs && node tests/core-registry.test.mjs"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Tests & Build (Zero External Dependencies)
+        working-directory: ${{ matrix.project.dir }}
+        run: |
+          echo "Testing ${{ matrix.project.name }} in ${{ matrix.project.dir }}..."
+          ${{ matrix.project.command }}
+          echo "✓ Completed successfully!"

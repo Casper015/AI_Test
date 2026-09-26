@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>紫禁天朝 · AI 智能体皇宫挑战赛 (Forbidden City AI Benchmark)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --card-bg: rgba(22, 27, 39, 0.75);
+      --card-border: rgba(212, 175, 55, 0.22);
+      --gold: #d4af37;
+      --gold-light: #f3e5ab;
+      --crimson: #c9372e;
+      --cyan: #38bdf8;
+      --emerald: #34d399;
+      --purple: #a855f7;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 50% 10%, rgba(201, 55, 46, 0.15) 0%, transparent 60%),
+        radial-gradient(circle at 85% 70%, rgba(212, 175, 55, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 15% 60%, rgba(56, 189, 248, 0.08) 0%, transparent 50%);
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* Hero Header */
+    header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+
+    .badge-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(212, 175, 55, 0.12);
+      border: 1px solid rgba(212, 175, 55, 0.35);
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gold-light);
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(8px);
+    }
+
+    h1 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: clamp(32px, 5vw, 56px);
+      font-weight: 900;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, #ffffff 20%, var(--gold-light) 60%, var(--gold) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+      text-shadow: 0 4px 24px rgba(212, 175, 55, 0.25);
+    }
+
+    .subtitle {
+      font-size: clamp(15px, 2vw, 18px);
+      color: var(--text-muted);
+      max-width: 720px;
+      margin: 0 auto 32px;
+      line-height: 1.6;
+    }
+
+    /* Stat Banner */
+    .stat-banner {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 20px 24px;
+      backdrop-filter: blur(12px);
+      margin-bottom: 48px;
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-val {
+      font-family: 'Cinzel', serif;
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--gold-light);
+      margin-bottom: 4px;
+    }
+
+    .stat-lbl {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Cards Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      margin-bottom: 64px;
+    }
+
+    .card {
+      position: relative;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      backdrop-filter: blur(16px);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--card-accent, var(--gold));
+      opacity: 0.8;
+    }
+
+    .card:hover {
+      transform: translateY(-6px);
+      border-color: var(--card-accent, var(--gold));
+      box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.6), 0 0 24px -4px var(--card-accent, var(--gold));
+    }
+
+    .card-top {
+      margin-bottom: 24px;
+    }
+
+    .card-tag {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+
+    .tag-blue { background: rgba(56, 189, 248, 0.15); color: var(--cyan); }
+    .tag-emerald { background: rgba(52, 211, 153, 0.15); color: var(--emerald); }
+    .tag-purple { background: rgba(168, 85, 247, 0.15); color: var(--purple); }
+    .tag-gold { background: rgba(212, 175, 55, 0.2); color: var(--gold-light); }
+
+    .card-title {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .card-tokens {
+      font-family: 'Cinzel', serif;
+      font-size: 14px;
+      color: var(--gold);
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    .feature-list {
+      list-style: none;
+      font-size: 13px;
+      color: #cbd5e1;
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .feature-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feature-list li::before {
+      content: '✦';
+      color: var(--gold);
+      font-size: 10px;
+    }
+
+    .btn-launch {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 14px 20px;
+      background: linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(201, 55, 46, 0.2) 100%);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      color: #fff;
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      transition: all 0.25s ease;
+      cursor: pointer;
+    }
+
+    .btn-launch:hover {
+      background: linear-gradient(135deg, rgba(212, 175, 55, 0.4) 0%, rgba(201, 55, 46, 0.4) 100%);
+      border-color: var(--gold-light);
+      box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3);
+      color: var(--gold-light);
+    }
+
+    /* Controls Cheat Sheet */
+    .controls-section {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 32px;
+      backdrop-filter: blur(12px);
+      margin-bottom: 64px;
+    }
+
+    .section-title {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--gold-light);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .keys-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .key-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+
+    kbd {
+      display: inline-block;
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--gold-light);
+      box-shadow: 0 2px 0 rgba(0,0,0,0.5);
+    }
+
+    .key-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Comparison Table */
+    .table-section {
+      margin-bottom: 64px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    th {
+      color: var(--gold-light);
+      font-family: 'Noto Serif SC', serif;
+      font-weight: 700;
+      background: rgba(15, 23, 42, 0.5);
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding-top: 32px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+    }
+
+    footer a {
+      color: var(--gold);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge-top">✦ GITHUB ACTIONS AUTOMATED SUITE ✦</div>
+      <h1>紫禁天朝 · AI 皇宫挑战赛</h1>
+      <p class="subtitle">
+        同一份自然语言三维规划规范，四种 AI Agent 架构独立实现。<br>
+        从轻量单智能体到 11 亿 Token 深度协同团队的演进与对比。
+      </p>
+
+      <div class="stat-banner">
+        <div class="stat-item">
+          <div class="stat-val">4</div>
+          <div class="stat-lbl">独立模型架构</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-val">1.14B+</div>
+          <div class="stat-lbl">累计消耗 Tokens</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-val">74 / 18</div>
+          <div class="stat-lbl">可探索建筑 / 规制院落</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-val">100%</div>
+          <div class="stat-lbl">本地内置零依赖 WebGL</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Project Cards Grid -->
+    <div class="grid">
+      <!-- 1. OpenCode 516k -->
+      <div class="card" style="--card-accent: var(--cyan);">
+        <div class="card-top">
+          <span class="card-tag tag-blue">OpenCode 基准</span>
+          <h2 class="card-title">OpenCode 516k</h2>
+          <div class="card-tokens">516,452 Tokens</div>
+          <p class="card-desc">
+            采用 opencode go + opencode cli 单智能体一次性代码生成，快速搭建紫禁城三维骨架与主要殿宇。
+          </p>
+          <ul class="feature-list">
+            <li>单 Agent 端到端生成</li>
+            <li>核心前朝与后廷主殿布局</li>
+            <li>内置三维机位漫游</li>
+          </ul>
+        </div>
+        <a class="btn-launch" href="./opencode-516k/" target="_blank">进入 3D 漫游 ➔</a>
+      </div>
+
+      <!-- 2. OpenCode 424k -->
+      <div class="card" style="--card-accent: var(--emerald);">
+        <div class="card-top">
+          <span class="card-tag tag-emerald">极限剪枝</span>
+          <h2 class="card-title">OpenCode 424k</h2>
+          <div class="card-tokens">424,497 Tokens</div>
+          <p class="card-desc">
+            在极低 Token 消耗下探索模块化构件工厂，拆分建筑模块与区域生成逻辑，实现极限精简的架构。
+          </p>
+          <ul class="feature-list">
+            <li>极低 Token 消耗与构件拆分</li>
+            <li>程序化台基与梁柱工厂</li>
+            <li>轻量交互与视角切换</li>
+          </ul>
+        </div>
+        <a class="btn-launch" href="./opencode-424k/" target="_blank">进入 3D 漫游 ➔</a>
+      </div>
+
+      <!-- 3. Command Code 36M -->
+      <div class="card" style="--card-accent: var(--purple);">
+        <div class="card-top">
+          <span class="card-tag tag-purple">深度重构</span>
+          <h2 class="card-title">Command Code 36M</h2>
+          <div class="card-tokens">35,900,000 Tokens</div>
+          <p class="card-desc">
+            采用 Command Code 对全城进行多轮深度代码重构，全面引入三大殿三层白石台基、飞檐斗栱与多视角控制。
+          </p>
+          <ul class="feature-list">
+            <li>完整前朝三大殿三层基台</li>
+            <li>金銮宝座与殿内藻井陈设</li>
+            <li>CDP 无头自动化快照与测试</li>
+          </ul>
+        </div>
+        <a class="btn-launch" href="./commandcode-36m/" target="_blank">进入 3D 漫游 ➔</a>
+      </div>
+
+      <!-- 4. DSH 1.1B -->
+      <div class="card" style="--card-accent: var(--gold);">
+        <div class="card-top">
+          <span class="card-tag tag-gold">工业级多智能体</span>
+          <h2 class="card-title">DeepSeek Harness 1.1B</h2>
+          <div class="card-tokens">1,111,473,426 Tokens</div>
+          <p class="card-desc">
+            Captain + 8 专职子 Agent 团队协同，23 组自动化契约测试，71 万网格可行走连通漫游，八视角与三时辰全绿。
+          </p>
+          <ul class="feature-list">
+            <li>74 栋规制建筑 + 18 处院落</li>
+            <li>711,227 个网格全城无阻碍漫游</li>
+            <li>晨昏/正午/寒月孤灯三时辰光影</li>
+            <li>23 组自动化单元与集成测试</li>
+          </ul>
+        </div>
+        <a class="btn-launch" href="./dsh-1.1b/" target="_blank">进入 3D 漫游 ➔</a>
+      </div>
+    </div>
+
+    <!-- Controls Cheat Sheet -->
+    <div class="controls-section">
+      <div class="section-title">
+        <span>🎮</span> 3D 漫游全局快捷键指南
+      </div>
+      <div class="keys-grid">
+        <div class="key-card">
+          <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>
+          <div class="key-desc">角色前后左右移动</div>
+        </div>
+        <div class="key-card">
+          <kbd>Shift</kbd>
+          <div class="key-desc">御前快跑加速</div>
+        </div>
+        <div class="key-card">
+          <kbd>1</kbd> ~ <kbd>8</kbd>
+          <div class="key-desc">快捷切换 8 种视角机位</div>
+        </div>
+        <div class="key-card">
+          <kbd>F</kbd> / <kbd>Esc</kbd>
+          <div class="key-desc">退出 / 开启第一人称视角</div>
+        </div>
+        <div class="key-card">
+          <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd>
+          <div class="key-desc">正午 / 傍晚 / 月夜切换</div>
+        </div>
+        <div class="key-card">
+          <kbd>鼠标左键</kbd>
+          <div class="key-desc">旋转视角 / 点击建筑查看详情</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Matrix Table -->
+    <div class="table-section">
+      <div class="section-title">
+        <span>📊</span> 核心架构参数与工程能力横向对照
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>项目版本</th>
+            <th>模型 / 架构</th>
+            <th>Token 消耗</th>
+            <th>场景建筑 / 院落</th>
+            <th>测试套件覆盖</th>
+            <th>漫游与碰撞体验</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>OpenCode 516k</strong></td>
+            <td>opencode go 单 Agent</td>
+            <td>516,452</td>
+            <td>45+ 栋 / 8 院</td>
+            <td>layout / kit / zones</td>
+            <td>轨道相机 + 基础地基</td>
+          </tr>
+          <tr>
+            <td><strong>OpenCode 424k</strong></td>
+            <td>opencode go 单 Agent</td>
+            <td>424,497</td>
+            <td>40+ 栋 / 8 院</td>
+            <td>layout</td>
+            <td>轨道相机 + 极简构件</td>
+          </tr>
+          <tr>
+            <td><strong>Command Code 36M</strong></td>
+            <td>commandcode goat</td>
+            <td>35,900,000</td>
+            <td>74 栋 / 18 院</td>
+            <td>layout / kit / zones</td>
+            <td>八视角 + 内景穿透 + 碰撞阻挡</td>
+          </tr>
+          <tr>
+            <td><strong>DeepSeek Harness 1.1B</strong></td>
+            <td>DSH Agent Team (9 角色)</td>
+            <td>1,111,473,426</td>
+            <td>74 栋 / 18 院</td>
+            <td>23 组独立验收测试</td>
+            <td>71 万格全通网格 + 真实第一人称物理</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <footer>
+      <div>本项目完全由 AI 智能体根据单一规格自然语言规划自主编码实现</div>
+      <div>
+        <a href="https://github.com/Casper015/AI_Test" target="_blank">
+          <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+          </svg>
+          Casper015 / AI_Test on GitHub
+        </a>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

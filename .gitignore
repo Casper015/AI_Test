@@ -33,21 +33,26 @@ pnpm-debug.log*
 dist/
 dist-ssr/
 build/
+_site/
 
 # Work & Headless / Probe Caches (Chrome User Data, LevelDB, WASM caches)
 work/
 **/work/
 
 # Screenshots & Visual Snapshots
-docs/shots/*.png
-docs/shots/**/*.png
-docs/shots/*.dom.html
+docs/shots*/*.png
+docs/shots*/**/*.png
+docs/shots*/*.invalid.png
+docs/shots*/**/*.invalid.png
+docs/shots*/*.dom.html
 docs/screenshots/*.png
 docs/screenshots/**/*.png
 docs/reports/**/*.png
-**/docs/shots/*.png
-**/docs/shots/**/*.png
-**/docs/shots/*.dom.html
+**/docs/shots*/*.png
+**/docs/shots*/**/*.png
+**/docs/shots*/*.invalid.png
+**/docs/shots*/**/*.invalid.png
+**/docs/shots*/*.dom.html
 **/docs/screenshots/*.png
 **/docs/screenshots/**/*.png
 **/docs/reports/**/*.png
