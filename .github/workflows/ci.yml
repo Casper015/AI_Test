@@ -30,6 +30,9 @@ jobs:
           - name: "DSH 1.1B"
             dir: "imperial-palace-dsh-1.1b"
             command: "npm run build && node tests/layout.test.mjs && node tests/kit.test.mjs && node tests/core-registry.test.mjs"
+          - name: "GPT-6 Luna"
+            dir: "imperial-palace-gpt6luna"
+            command: "npm ci && npm run check && npm run build"
 
     steps:
       - name: Checkout repository

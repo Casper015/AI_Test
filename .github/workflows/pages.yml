@@ -50,15 +50,19 @@ jobs:
           echo "Building DSH 1.1B..."
           (cd imperial-palace-dsh-1.1b && npm run build)
 
+          echo "Building GPT-6 Luna..."
+          (cd imperial-palace-gpt6luna && npm ci && npm run build)
+
       - name: Assemble multi-project exhibition directory
         run: |
-          mkdir -p _site/opencode-516k _site/opencode-424k _site/commandcode-36m _site/dsh-1.1b
+          mkdir -p _site/opencode-516k _site/opencode-424k _site/commandcode-36m _site/dsh-1.1b _site/gpt6luna
           
           # Copy dist assets
           cp -r imperial-palace-opencode-516k/dist/* _site/opencode-516k/
           cp -r imperial-palace-opencode-424k/dist/* _site/opencode-424k/
           cp -r imperial-palace-commandcode-36m/dist/* _site/commandcode-36m/
           cp -r imperial-palace-dsh-1.1b/dist/* _site/dsh-1.1b/
+          cp -r imperial-palace-gpt6luna/dist/* _site/gpt6luna/
           
           # Copy portal homepage
           cp portal/index.html _site/index.html

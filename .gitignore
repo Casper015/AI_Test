@@ -17,6 +17,8 @@ vc140.pdb
 
 # Dependencies & Package Managers
 node_modules/
+.npm-cache/
+**/.npm-cache/
 package-lock.json.log
 npm-debug.log*
 yarn-debug.log*
@@ -40,6 +42,8 @@ work/
 **/work/
 
 # Screenshots & Visual Snapshots
+live-check*.png
+task-graph.png
 docs/shots*/*.png
 docs/shots*/**/*.png
 docs/shots*/*.invalid.png

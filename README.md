@@ -13,7 +13,7 @@
 
 ---
 
-## 一、 4 个版本横向评测总览表
+## 一、 5 个版本横向评测总览表
 
 | 目录与 Git 仓库 | 在线试玩 (GitHub Pages) | 所用 AI 工具 / 框架 | 驱动模型 | 消耗 Token 统计 | 交付建筑 / 院落规模 | 核心工程特色与交付评级 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -21,6 +21,7 @@
 | **`imperial-palace-opencode-424k`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/opencode-424k/) | **OpenCode CLI** (v2) | `deepseek-v4.1-flash` (via OpenCode Go) | **424,497** tokens | **110 栋建筑**<br>24 处院落 | • **超高密度还原**：182段宫墙、54处台阶、9座桥、182株树<br>• Token 利用效率极高，完整实现了金銮殿与寝殿内景 |
 | **`imperial-palace-commandcode-36m`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/commandcode-36m/) | **Command Code** (v1.66.0) | `deepseek-v4.1-flash` (High Effort · Taste-1) | **35,900,000** tokens<br>(35.9M) | 74 栋建筑<br>18 处院落 | • **主-子 Agent 协同与根因修复**（耗时 36m 32s）<br>• 主动修复 4 大图形学底层 Bug（NaN屋面、变换丢失等）<br>• 重构 CDP 无头浏览器截图管线，版本规范升至 v1.0 |
 | **`imperial-palace-dsh-1.1b`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/dsh-1.1b/) | **DeepSeek Harness** (DSH) | `deepseek-v4.1-flash` (Deep-Agent 架构) | **1,111,473,426** tokens<br>(1.11B) | 67 栋建筑<br>18 处院落 | • **超大规模纵深研发**：耗费 11 亿 Tokens<br>• 23 组严格的契约测试与真机环境探针<br>• 具有最严苛的工程交付回执与证据链 |
+| **`imperial-palace-gpt6luna`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/gpt6luna/) | **ChatGPT (Codex Work)** | `GPT-6 Luna` (多子 Agent 分区协作) | 独立会话推进 | **88 栋建筑**<br>20 处院落 | • 5 大区域（前朝/后廷/东西苑/御花园）子 Agent 分工并行<br>• `check.mjs` 自动化边界、顶点有限值与唯一连接校验<br>• 现代化 Vite 构建，内置小地图定位与御前漫游 (F 键) |
 
 ---
 
@@ -96,18 +97,51 @@ debug 然后接着完成 太多图片了
 * **工程路径**：`AI_Test/imperial-palace-dsh-1.1b/`
 * **运行参数**：Deep-Agent 框架，消耗高达 **1,111,473,426 tokens（11.1 亿）**。
 * **特点**：
-  - 拥有 4 个版本中最庞大、严苛的测试与工程保障体系；
+  - 拥有 5 个版本中最庞大、严苛的测试与工程保障体系；
   - 建立了 23 组覆盖 Core、Kit、Zone、Interaction 的全量单元与集成测试（`tests/*.test.mjs`）；
   - 引入了完整的无头 Chrome 真实环境探针体系（`work/probe/`），对每一栋建筑的碰撞网格、行走步差（< 0.55m）、视锥剔除与内存指标进行了万级采样验证；
   - 配套完备的工程交接与证据链报告（`docs/reports/` 与 `docs/handoff-*.md`）。
 
 ---
 
+### 5. ChatGPT (GPT-6 Luna) 版本：`imperial-palace-gpt6luna`
+* **工程路径**：`AI_Test/imperial-palace-gpt6luna/`
+* **驱动模型**：`GPT-6 Luna`（在独立 Codex 工作区环境中全自主执行）
+* **开发策略**：
+  - 针对计划进行重构，确立了**“每个子 Agent 开工前必须先阅读共享规范、共用建筑库与材质、提交开工回执”**的协作契约；
+  - 划分为 5 大区域（前朝 `forecourt`、后廷 `inner-palace`、西苑 `west-courts`、东苑 `east-courts`、御花园及城墙 `garden-boundary`）；
+  - 严谨编写 `scripts/check.mjs`，遍历所有网格顶点保证坐标有限性、建筑槽位唯一性与 11 处跨区连接点单向归属；
+  - 引入现代化 Vite 8 打包流程与全景小地图导航。
+
+#### 核心对话记录：
+```text
+[USER @ 02:11]:
+修改一下这个 plan，把这个让其更适合分给多个子 agent 分工，并要求风格统一。
+允许他们使用外部依赖和别人的模型，但是要一整个皇宫，具体结构类似参考图，最后单独开一个文件夹把这些放在单独的文件夹里面。
+
+[ASSISTANT @ 02:21]:
+已修改，并迁入独立 imperial-palace 文件夹，包含计划、参考图和 README。
+- 改为参考图式的完整皇宫布局；
+- 允许外部依赖、第三方模型和贴图；
+- 按宫城区域分给子 agent，明确文件归属和接口；
+- 每个 agent 开工前必读统一规范，共用建筑库与材质。
+
+[USER @ 02:56]:
+把你这个任务复制一份出来，我要让 gpt6luna 执行一下：单独开一个文件夹来做这个的一切。
+
+[ASSISTANT (GPT-6 Luna) @ 02:57 - 04:13]:
+- 完整宫城已整理在独立文件夹，整城登记了 88 栋建筑、20 座庭院和 11 个连接点。
+- npm run check 与 npm run build 均全绿通过；
+- 浏览器中检查了分区导航、导览、昼夜切换、建筑信息和小地图第一人称漫游 (F 键)。
+```
+
+---
+
 ## 三、 本地快速启动与对比指南
 
-由于所有项目均采用 ES Modules + importmap 架构，**严禁直接在访达中双击 `index.html` 打开**（浏览器会触发跨域 CORS 拦截），推荐在终端中启动静态服务器访问：
+所有项目均支持本地静态服务器或开发服务器访问：
 
-### 1. 启动命令（四个版本可同时在不同端口运行）
+### 1. 启动命令（五个版本可同时在不同端口运行）
 
 ```bash
 # 1. 启动 OpenCode 516k 版本 (端口 8121)
@@ -125,6 +159,13 @@ python3 -m http.server 8125 --bind 127.0.0.1
 # 4. 启动 DSH 1.11B 版本 (当前后台运行在端口 8123)
 cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b"
 python3 -m http.server 8123 --bind 127.0.0.1
+
+# 5. 启动 GPT-6 Luna 版本 (端口 8126 或 Vite 开发服务器)
+cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-gpt6luna"
+# 方式 A (纯静态 dist 运行):
+python3 -m http.server 8126 --directory dist --bind 127.0.0.1
+# 方式 B (Vite 源码热更新运行):
+npm run dev -- --port 8126 --host 127.0.0.1
 ```
 
 ### 2. URL 调试参数快捷对照
