@@ -31,7 +31,7 @@
       },
       "executionPrompt": "项目：紫禁天朝·完整皇宫 3D 交互项目。\n根目录（含空格，命令必须加引号）：\"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3\"（下称 ROOT）。产物只能写在 ROOT 内；严禁修改同级 imperial-palace/、imperial-palace copy/、imperial-palace copy 2/ 及 AI_Test 其他任何文件（仅可只读参考）。\n必读：ROOT/imperial-palace-plan.md（§2 坐标与连接、§3 风格与光照、§6.1 契约、§6.3 光照、§6.4 八视角与第一人称、§7.2 批次、§8.2 性能预算）、ROOT/docs/CONTRACTS.md、ROOT/src/shared/*。\n开工前在 ROOT/docs/handoffs/<task-id>.md 写开工回执（已读版本/可写范围/依赖/冲突），完成后写交付回执（文件清单、接口、实测命令与真实输出、未验证项）。\n技术约束：Node v26；唯一依赖是本地内置 ROOT/public/vendor/three（three r169，含 OrbitControls、BufferGeometryUtils、postprocessing）。禁止 npm install；不得要求必需的网络资源。渲染必须可用 file:// 之外的方式通过 HTTP 预览，禁止绝对路径引用。\n纪律：只改任务 inScope 内文件；index.html、src/shared/*、tests/run.mjs、tests/harness.mjs 不归你，需要改动先报告主理人；完成前必须自己跑通 verify 命令并粘贴真实输出；不得伪造截图/性能数据；无法验证的项写“未验证”。\n你是唯一拥有 scene 挂载、renderer/composer、全局光照、相机装置与动画循环的人；其他区域只提供 createZone(ctx) 返回的未挂载 Group。注意：本机文件沙箱会阻止 headless Chrome 生成截图（报 Failed to create a unique user data directory for headless），截图脚本必须写清失败诊断，并且不能把截图当作唯一验证手段。",
       "joinedAt": 1790416546657,
-      "status": "idle"
+      "status": "working"
     },
     {
       "id": "bdf6ff33-fac9-472f-afe2-9979c49d2278",
@@ -59,7 +59,7 @@
       },
       "executionPrompt": "项目：紫禁天朝·完整皇宫 3D 交互项目。\n根目录（含空格，命令必须加引号）：\"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3\"（下称 ROOT）。产物只能写在 ROOT 内；严禁修改同级 imperial-palace/、imperial-palace copy/、imperial-palace copy 2/ 及 AI_Test 其他任何文件（仅可只读参考）。\n必读：ROOT/imperial-palace-plan.md（§2.3 边界与连接规则、§3 风格、§5.2 中轴前朝、§6.1 契约、§6.4 机位登记、§7.1、§8.3）、ROOT/docs/CONTRACTS.md、ROOT/docs/STYLE_GUIDE.md、ROOT/src/shared/layout.js（你的区域边界与槽位以此为准，不得自行扩张）、ROOT/src/kit/*、ROOT/tests/harness.mjs。\n开工前在 ROOT/docs/handoffs/<task-id>.md 写开工回执（已读版本/可写范围/依赖/冲突），完成后写交付回执（文件清单、接口、实测命令与真实输出、未验证项）。\n技术约束：Node v26；唯一依赖是本地内置 ROOT/public/vendor/three（three r169）。禁止 npm install；不得引入必需的网络资源。只能使用 kit 提供的构件与材质，缺构件向 kit-engineer 提需求，不自建私有素材或私有坐标。\n纪律：只写 src/zones/forecourt.js 与 tests/zone-forecourt.test.mjs 及自己的 handoff；src/shared/*、main.js、kit 不归你。完成前必须跑通 verify 命令并粘贴真实输出；不得伪造数据；无法验证的项写“未验证”。",
       "joinedAt": 1790416546753,
-      "status": "idle"
+      "status": "working"
     },
     {
       "id": "6041af0d-4a8c-4e3e-9453-a2a7dad86dc3",
@@ -115,7 +115,7 @@
       },
       "executionPrompt": "项目：紫禁天朝·完整皇宫 3D 交互项目。\n根目录（含空格，命令必须加引号）：\"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3\"（下称 ROOT）。只读验证交付代码：只允许新增/修改 ROOT/docs/reports/**、ROOT/docs/handoffs/**、ROOT/tests/verify-*.test.mjs、ROOT/scripts/verify-*.mjs；严禁改动 src/**、public/**、index.html、main.js，严禁修改同级其他 imperial-palace* 目录。\n必读：ROOT/imperial-palace-plan.md（§6.4 八视角与第一人称逐条要求、§8.1 G0–G5、§8.2 性能预算、§8.3 最终检查清单）、ROOT/docs/CONTRACTS.md、ROOT/docs/STYLE_GUIDE.md、ROOT/src/shared/layout.js、ROOT/src/shared/config.js。\n技术约束：Node v26；无 npm install；只用本地内置 three r169。文件沙箱会阻止 headless Chrome 生成截图（Failed to create a unique user data directory for headless；加 --user-data-dir 会挂起）：遇到这种情况必须如实记录为“未验证”并附命令与原始报错，绝对不得伪造截图或性能数字。Node 侧可做严肃验证：直接 import 区域模块、遍历场景图统计绘制批次/三角面、用碰撞数据做第一人称路线的几何走查（记录可通门洞、台阶高差、阻挡判定）。\n纪律：结论必须可复现（命令 + 真实输出 + 计数）；不得自己说自己合格、不得为了让任务通过而降低标准；发现不达标判失败并给出最小可执行修法；无法判定项明确标注不确定性。",
       "joinedAt": 1790416607627,
-      "status": "idle"
+      "status": "working"
     }
   ],
   "tasks": [
@@ -2283,7 +2283,6 @@
         "t119",
         "t120",
         "t121",
-        "t122",
         "t123",
         "t124",
         "t127",
@@ -2292,7 +2291,7 @@
       ],
       "attempt": 0,
       "createdAt": 1790416796886,
-      "updatedAt": 1790473444314,
+      "updatedAt": 1790480735271,
       "kind": "integration",
       "objective": "把五个区域、构件库、核心与 UI 集成为一整座可运行的皇宫：main.js 装配真实区域、构建 dist 并验证资源路径、README 命令实测可用、§8.3 清单逐条给出结论，形成可交付的独立项目文件夹。",
       "inScope": [
@@ -9296,14 +9295,13 @@
         "t90",
         "t97",
         "t100",
-        "t101",
         "t102",
         "t103",
         "t106"
       ],
       "attempt": 0,
       "createdAt": 1790457588759,
-      "updatedAt": 1790466945742,
+      "updatedAt": 1790480735271,
       "kind": "work",
       "objective": "第三方独立验证用户新增需求：47 栋封闭建筑\"点击→左上角详情面板→按 F 进入该建筑内景\"，含逐栋判定、不可进入项反馈、内景三时辰可读性（真天空掩码口径）、性能预算与碰撞抽查。",
       "inScope": [
@@ -10601,14 +10599,14 @@
       "id": "t77",
       "subject": "V1.1 验收套件期望同步 + 43 处内景连通性独立复验",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t75（门洞通道面：使 43 处内景与室外连通）。\n\n来源：t68 全量回归把 11 个红项分成两类，**(A) 该类 10 个 = \"期望值硬编码在扩容前口径\"**。本卡负责**本席（verifier）侧 2 个套件**：\n- `tests/verify-completeness.test.mjs` 5.3「可行走图…不连通」（t68 归入 (B) 真实缺口，由 t75 修复后此断言应转绿）\n- `tests/verify-experience.test.mjs`「6.1 20 个机位…共 61 个 `{zone:7,fp-spawn:5,interior:43,focus-extra:6}`」\n\n**独立性要求（本卡的核心）**：t75 由 layout 作者自证连通性（在其 `layout.test.mjs` 内）；**本席必须用自己的引擎独立复验**，逐栋（43 行）给出结论，并复现\"改动前不连通\"的对照——这是\"作者自证 + 独立复核\"的双轨，不允许用作者的断言代替自己的复核。\n\n必做：\n1. 更新两个套件的硬编码期望（LAYUOT 1.1.4 实际值 + 逐条依据）。\n2. 独立复验连通性：43 处内景各自与室外地面同属一个连通分量，逐栋给结论 + 改动前不连通对照。\n3. 独立复核 t75 通道面几何（y == door.sillY、宽 == doorWidth、与室内外均相交）——逐栋，不一致即判未通过。\n4. 不得放宽判据/删断言；不得把连通性改成弱形式规避。\n5. verify 三条（两套件 + 全量 verify-completeness）；只改 inScope。",
-      "status": "failed",
+      "status": "claimed",
       "assignee": "verifier",
       "dependencies": [
         "t75"
       ],
-      "attempt": 7,
+      "attempt": 8,
       "createdAt": 1790458758435,
-      "updatedAt": 1790478887012,
+      "updatedAt": 1790480742528,
       "kind": "repair",
       "objective": "同步本席两个验收套件中扩容前的硬编码期望（LAYOUT 1.1.4），并用本席自己的引擎独立复验 43 处内景的门洞连通性与 t75 通道面几何（逐栋、含改动前对照），不放宽任何判据。",
       "inScope": [
@@ -10674,104 +10672,7 @@
           }
         }
       ],
-      "attemptId": "be4b2a2b-bc60-42b8-8f7d-fb45a465471f",
-      "output": "t77（attempt 7）复测完成：**判 failed —— 但已大幅收敛**：`t151` 后 **43/43 内景全部可达**、**42/42 路点可达**、**B10 转绿**；仅剩 **2/49 走查段** 不可达，且底数据表明是**单向陷阱**（进得去、回不来），另发现一处**库级一致性缺陷**。\n\n## 1) 逐项对照（1.1.18 → 1.1.19）\n| 项 | 1.1.18 | **1.1.19** |\n| --- | --- | --- |\n| 内景可达（`path(南桥起点→内景)`，cS1 与 cS2） | 41/43 | **43/43 ✓**（`unreachableIds: []`） |\n| 42 个「门内」路点可达 | 40/42 | **42/42 ✓** |\n| 走查相邻段可达 | 46/49 | **47/49**（仍 2 段 ✗） |\n\n## 2) 2 条不可达段 = **单向陷阱**（只进不出 / 单向边）\n| 段 | 正向 | 反向 |\n| --- | --- | --- |\n| `寝殿西配殿门内→寝殿东配殿门内` | ✗ `unreachable`（cS1/cS2） | ✗ `unreachable` |\n| `寝殿东配殿门内→西配房门内` | ✗ `unreachable` | ✓ 216m |\n\n**单向实证**：`C-side-west-main` 内景 起点→点 **✓881m** / **点→起点 ✗**；`C-side-east-main` **✓880m** / **✗**；对照 `C-side-west-rear` 967m/967m ✓✓、`C-fp-spawn` 769m/769m ✓✓。\n⇒ t151 的下坡带（1.9/1.4）让玩家**能下到**殿内（所以 43/43 可达），但**回程需要 >0.5m 的上台阶** ⇒ `path(点→起点)` 失败。这也说明 t87 的“单向陷阱守卫”未覆盖“新增下坡带 ⇒ 回程不可行”这一类。\n\n## 3) 库级一致性缺陷（可复现，影响 5.3 的归因）\n同一 solver、三张**全新图**、同一 94 点：\n- 一次性 `connected([起点,…94 点])` → **4 点不可达**（`文华殿门内`、`陈设正堂门内`、`VP-E-court1/2-hall-interior`；g1 与 g3 两次复现同一集合）；\n- 另一张全新图**逐点** `path(起点→点)` → **0 点不可达**；\n- 对这 4 点**单独** `connected([起点,点])` → **0 点不可达**（anchor 距点 0–0.5m、`probe=true` y=1.40）。\n⇒ 5.3 的红 4 点属 **`src/interaction/walk-graph.js` 的 `connected()` 库口径缺陷**，**不是场景缺陷**；而 B1 的红（2 段）**是真实缺陷**。\n\n## 4) 最小修法（交回派单；本轮未改 `src/**`）\n- **t77-F10（blocker，layout/t151）**：门下坡带改为**双向可走**（每级落差 ≤0.5m；现回程有 >0.5m 上台阶）。建议 2.4→1.9→1.4→0.9 四级对称台阶并在通道面侧补齐。\n- **t77-F11（high，core/interaction）**：`connected()` 改为逐点 `flood`（与逐点 `path` 同口径）或查清多锚点取格差异根因。\n- **t77-F12（medium，core/interaction）**：单向陷阱守卫/逆向 BFS 审计扩展到**每处新增过渡带**。\n\n## 5) 三条 verify 真实状态（1.1.19）\n| 命令 | 结果 |\n| --- | --- |\n| `tests/verify-completeness.test.mjs` | **exit 1** · 52 项 **49 PASS / 2 FAIL**（5.3=库口径 4 点；5.4b 按契约口径 PASS、不计退出码） |\n| `tests/verify-experience.test.mjs` | **exit 1** · 35 项 **33 PASS / 2 FAIL**（**B1=2 段单向陷阱**；F1=非本卡 t13；**B10 转绿**） |\n| `scripts/verify-completeness.mjs`（含浏览器） | **exit 1** · 56 项 **53 PASS / 2 FAIL / 1 UNVERIFIED** |\n| `scripts/probe-global-reach.mjs`（只读诊断） | **exit 0** |\n| `scripts/audit.mjs --enforce` | **exit 0**（333/350、306,269 tri） |\n\n## 6) 范围\n本 attempt **仅改 `docs/report-completeness.md`**（新增 §23）；未改任何测试、`src/**`、既有 `scripts/**`。\n\n**距离全绿只差两件事**：① 把 t151 的下坡带做成**双向**（F10）；② 修 `connected()` 的库口径（F11）。两者落地后，B1/B10/5.3 应同时转绿，我用同一 43 行引擎复测即可闭环。",
-      "findings": [
-        {
-          "id": "t77-F10",
-          "severity": "blocker",
-          "problem": "【BLOCKER·单向陷阱】`t151` 的“C 两殿门外加法下坡带（1.9/1.4）”使两栋殿内**可进不可回**：`C-side-{west,east}-main` 内景 “起点→点” ✓ 881m/880m，但 **“点→起点” ✗ `unreachable`**；走查段 `寝殿西配殿门内→寝殿东配殿门内` **双向均 ✗**、`寝殿东配殿门内→西配房门内` **正向 ✗ / 反向 ✓ 216m** ⇒ 47/49 段可达、2 段单向不可行。",
-          "requiredFix": "owner layout（t151 作者）：把门下坡带改为**双向可走**——每级落差 ≤ `maxStepHeight 0.5`（现回程存在 >0.5m 的上台阶）；建议 2.4→1.9→1.4→0.9 四级对称台阶并在通道面侧补齐。不得改阈值。",
-          "file": "src/shared/layout.js",
-          "line": 0,
-          "resolved": false
-        },
-        {
-          "id": "t77-F11",
-          "severity": "high",
-          "problem": "【HIGH·库级一致性缺陷】同一 solver、同一 94 点：一次性 `connected([起点,…])` 报 **4 点不可达**（文华殿门内、陈设正堂门内、VP-E-court1/2-hall-interior；两张全新图两次复现同一集合），而逐点 `path(起点→点)`（另一张全新图）为 **0**；对这 4 点单独 `connected([起点,点])` 也为 **0**（anchor 距点 0–0.5m、`probe=true` y=1.40）。⇒ `verify-completeness.test.mjs` 的 5.3 红项**不是场景缺陷**而是库口径缺陷。",
-          "requiredFix": "owner core/interaction：把 `connected()` 改为逐点 `flood`（与本席逐点 `path` 同口径），或查清多锚点预采样下 `nearestCell` 取格差异的根因；修后 5.3 的 4 点应自然消失。",
-          "file": "src/interaction/walk-graph.js",
-          "line": 0,
-          "resolved": false
-        },
-        {
-          "id": "t77-F12",
-          "severity": "medium",
-          "problem": "【MEDIUM·守卫口径】t87 的“单向陷阱守卫”/逆向 BFS 审计当时为 0 陷阱，但 t151 新增的下坡带造成了新的单向不可行（§23.2）；说明该守卫的审计口径未覆盖“新增过渡带 ⇒ 回程不可行”这一类。",
-          "requiredFix": "owner core/interaction：把 `reverseFlood` 检查从既有栅格扩展到**每处新增过渡带**（或对“能进不能出”的点做穷举报警）。",
-          "file": "src/interaction/traversal.js",
-          "line": 0,
-          "resolved": false
-        }
-      ],
-      "changedPaths": [
-        "imperial-palace-dsh-1.1b/docs/report-completeness.md"
-      ],
-      "acceptanceResults": [
-        {
-          "criterion": "**期望同步**：两个套件按实际 LAYOUT 更新“扩容前硬编码”并逐条说明依据。",
-          "status": "passed",
-          "evidence": "**通过（沿用已完成的同步，本时点复查未退化）**：6.1 动态（total = `VIEWPOINTS.length` = 61；zone 7 / fp-spawn 5 / interior 43 / focus-extra 6）+ “interior 数 == `INTERIOR_BY_SLOT` 条数”；7.1 = 43 栋 == `INTERIOR_BY_SLOT` 43 条；A3 = 61（逐区 B10/C9/D4/E4/F4）；5.3 标题 = 5 fp-spawn + 50 路点 + 43 内景。本时点：`LAYOUT 1.1.19`；`walkable 171 / viewpoints 61 / FP_ROUTE 50 / interior 43`。"
-        },
-        {
-          "criterion": "**口径裁定**：约束口径 = 生产走查图（含 `CXN-*`），不是 surfaces-only。",
-          "status": "passed",
-          "evidence": "**通过**。全部结论取自生产引擎（`assembleCity()` + `createWalkGraph(solver,{cellSize:1,maxCells:2000000})`，并用 `cellSize:2` 对照）；逐时点登记 `connectorStats = {declared:32, ramps:0}`（connector 仍零贡献，本时点变化来自 t151 的**可行走面/台阶**）。另发现并登记了一处**库级口径缺陷**（`connected` 与 `path` 不一致，见 §23.3 与 finding t77-F11）。"
-        },
-        {
-          "criterion": "**逐栋独立复验（43 行）** + t13 复核；若确有建筑或路线不可达 ⇒ 判未通过 + 最小修法。",
-          "status": "failed",
-          "evidence": "**不通过（但已大幅收敛：座标全可达，仅剩“段”层缺陷）**。**43/43 内景可达**（`path(南桥起点→内景机位)`，cellSize 1 与 2 均 ✓；`unreachableIds: []`）；**42/42 “门内”路点可达**；但 **2/49 走查相邻段不可达**，且底数据表明是**单向陷阱**：`C-side-{west,east}-main` 内景 **起点→点 ✓ 881m/880m，点→起点 ✗ `unreachable`**（进了出不来）；含 `寝殿西配殿门内→寝殿东配殿门内`（双向均 ✗）与 `寝殿东配殿门内→西配房门内`（正向 ✗ / 反向 ✓ 216m）。最小修法：让 t151 的门下坡带**双向可走**（每级落差 ≤0.5m；现回程存在 >0.5m 上台阶）。另：5.3 报的 4 点（文华殿门内/陈设正堂门内/VP-E-court1/2-hall-interior）经**两种调用形态交叉验证**（见 §23.3）属**库级 `connected` 缺陷**，不是场景缺陷。"
-        },
-        {
-          "criterion": "**独立复核 t75 通道面几何**（逐栋 y==sillY / 宽 / 与室内外相交）。",
-          "status": "failed",
-          "evidence": "**部分不通过（与前几轮同值）**：通道面 43/43 · 宽 == `doorWidth` 43/43 · 与室内面**相接（≤0.05m）43/43**（严格重叠仅 2/43）· 与室外面相交 43/43 · **`y == door.sillY` 38/43**（5 处 = 城门双标高 + `C-gate-inner`，已按契约例外集在入口层复核为 PASS，见 §20.2）；**操作性可跨 43/43**（两栋 C 侧现可从起点进入）。"
-        },
-        {
-          "criterion": "**不得放宽判据/删语义断言**；不得把连通性改成弱形式。",
-          "status": "passed",
-          "evidence": "**满足**。本 attempt **未改任何测试或判据**（仅追加报告 §23）：5.3/B1/B10 仍为原强判据；B10 因 t151 而**真实转绿**（全部点同属起点分量），B1 仍红（2 段单向陷阱）。断言数只增不减。"
-        },
-        {
-          "criterion": "三条 verify 全绿或如实列出仍红项与非本卡归因；只改 inScope。",
-          "status": "passed",
-          "evidence": "**如实列出（1.1.19）**：`tests/verify-completeness.test.mjs` **exit 1 · 52 项 49 PASS / 2 FAIL**（5.3 = 库级 `connected` 口径缺陷 4 点；5.4b 已按契约口径 PASS 且不计退出码）；`tests/verify-experience.test.mjs` **exit 1 · 35 项 33 PASS / 2 FAIL**（**B1 = 2 段单向陷阱**；F1 = **非本卡** t13；**B10 转绿**）；`scripts/verify-completeness.mjs` **exit 1 · 56 项 53 PASS / 2 FAIL / 1 UNVERIFIED**；`scripts/probe-global-reach.mjs` **exit 0**；`scripts/audit.mjs --enforce` **exit 0**。本 attempt 仅改 `docs/report-completeness.md`（新增 §23）。"
-        }
-      ],
-      "commandsRun": [
-        {
-          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/verify-completeness.test.mjs",
-          "status": "failed",
-          "exitCode": 1,
-          "evidence": "exit 1；52 项 **49 PASS / 2 FAIL / 1 UNVERIFIED**（5.3 = 库级 `connected` 口径缺陷 4 点；5.4b 按契约口径 PASS、不计退出码）。"
-        },
-        {
-          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/verify-experience.test.mjs",
-          "status": "failed",
-          "exitCode": 1,
-          "evidence": "exit 1；35 项 **33 PASS / 2 FAIL**（**B1 = 2/49 段 = 单向陷阱**；F1 = 非本卡 t13）。**B10 转绿**（42 路点 + 5 fp-spawn + 43 内景同属起点分量）。"
-        },
-        {
-          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/verify-completeness.mjs",
-          "status": "failed",
-          "exitCode": 1,
-          "evidence": "exit 1；56 项 **53 PASS / 2 FAIL / 1 UNVERIFIED**（与 tests 入口同源）。"
-        },
-        {
-          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/probe-global-reach.mjs",
-          "status": "passed",
-          "exitCode": 0,
-          "evidence": "exit 0；局部 `facade→室内` ✓；全局点可达（43/43）；并输出断点定位。"
-        },
-        {
-          "command": "逐向 `path` 双向测试 + `connected` 两种调用形态交叉验证（/tmp 只读脚本）",
-          "status": "passed",
-          "exitCode": 0,
-          "evidence": "**单向陷阱实证**：`C-side-west-main` 起点→点 ✓881m / 点→起点 ✗`unreachable`；`C-side-east-main` ✓880m / ✗；`C-west-rear` 967m/967m ✓✓；`C-fp-spawn`、`WK-C-ground` 中心均 ✓✓。**库级不一致实证**（同一 solver、3 张全新图）：一次性 `connected([起点,…94 点])` → **4 点不可达**（g1/g3 两次复现同一集合）；另一张全新图逐点 `path` → **0 点不可达**；对这 4 点单独 `connected([起点,点])` → **0 点不可达**（anchor 距点 0–0.5m、probe=true）。"
-        }
-      ]
+      "attemptId": "21597679-3089-4507-9e3f-9c4489276cd1"
     },
     {
       "id": "t78",
@@ -15504,15 +15405,14 @@
       "id": "t115",
       "subject": "T8.2 五套 zone 测试期望同步到 LAYOUT 1.1.10（WALKABLE 112→157）",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 **t92**（zone-inner 正在改 `tests/zone-east.test.mjs` / `tests/zone-inner.test.mjs` ⇒ 必须串行）与 **t93**（同改 `tests/zone-*.test.mjs`，且 t93 先统一分区配额读 `perZone`）。\n\n来源：**t65 交回的 `run.mjs 14/22` 中的 7 条 zone 侧红项**（它**明确拒绝越界**修改，逐条归因）。根因：`LAYOUT 1.1.10` 使 **`WALKABLE 112 → 157`**（`t102` 的 43 级门外过渡台阶 + `t103` 的 2 条门槛面），而各 zone 测试仍按旧规模断言（例 `可行走面数 期望 27 实际 51`）。\n\n**主理人裁定**：属\"**陈旧数字**\"，**必须同步**（与 t108/t113 同类）；由 zone 侧 owner 执行，**不得放宽判据**。`verify-completeness`/`verify-experience` 红项归 **t77**（跑中）；`kit.test` 红项归 **t114**。\n\n必做：\n1. 五套 zone 测试逐条更新（file:line + 旧→新 + 依据），以当前树实测为准。\n2. 特别处理 `tests/zone-forecourt.test.mjs` 的 `walkable 27` 与\"走入门内 ≥4\"；涉及 dual 2 栋时如实按现状（41/43）并标注由 t77 判定，不得放宽路线断言。\n3. 同义替换、断言只增不减；真实缺陷则停手交回。\n4. 回归五套 zone 测试 + audit --enforce；不列 run.mjs；只改 inScope。",
-      "status": "pending",
+      "status": "in_progress",
       "assignee": "zone-forecourt",
       "dependencies": [
-        "t92",
-        "t93"
+        "t92"
       ],
-      "attempt": 0,
+      "attempt": 1,
       "createdAt": 1790470401548,
-      "updatedAt": 1790470401548,
+      "updatedAt": 1790480752265,
       "kind": "repair",
       "objective": "同步五套 zone 测试中因 LAYOUT 1.1.10（WALKABLE 112→157：t102 的 43 级过渡台阶 + t103 的 2 条门槛面）而陈旧的固定期望，逐条给出旧→新与依据；特别处理 tests/zone-forecourt.test.mjs 的 walkable 27 与\"走入门内 ≥4\"；不得放宽判据、不得改宽断言。",
       "inScope": [
@@ -15560,7 +15460,9 @@
         "计划 §8.3 注册表与渲染一致、判定依据可信",
         "计划 §6.1 碰撞数据格式与可行走面",
         "计划 §2.3 路径连通与连接规则"
-      ]
+      ],
+      "attemptId": "e931acf2-0a87-4b13-a843-ce3accd48957",
+      "reassigning": false
     },
     {
       "id": "t116",
@@ -17107,14 +17009,12 @@
       "id": "t129",
       "subject": "T2.31 加入抗锯齿（MSAA / SMAA·FXAA）+ 质量档接入与 §12 重测",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t122（同属 `src/core/**` 的后期处理链：t122 改 `environment.js` 的 Bloom 覆盖路径，本卡改 `renderer.js` 的 composer，串行避免后期链语义冲突）。\n\n**来源：用户新增需求**——\"所有都做完之后加入一个抗锯齿的滤镜，现在锯齿很严重\"。\n\n**主理人实测的现状（已确认成因）**：\n```\nrenderer.js:5   EffectComposer + RenderPass + UnrealBloomPass + OutputPass\nrenderer.js:217 antialias: config.RENDERER.antialias        ← 上下文标志\nrenderer.js:297 new EffectComposer(renderer)                ← 渲染目标 samples 默认 0\n```\n⇒ **`antialias:true` 只对直接渲染到画布生效；走 `EffectComposer`（渲染到 RenderTarget 再合成）后它不再生效** ⇒ 这就是锯齿严重的经典成因。\n\n**主理人裁定**：本卡**先诊断（架构证据 + 锯齿截图 + 可量化边缘指标基线）**，再在 **① MSAA（给 composer 渲染目标设 `samples`）** 与 **② 后处理 AA（SMAAPass / FXAA）** 之间**择一或组合并给实测理由**；接进既有 `QUALITY.tiers` 且 `?stats=1` 必须报告生效模式；**§12 可读性必须重新实测（阈值不放宽）**、**§8.2 门禁不变（调用/三角面不得因 AA 上升）**、**性能代价三档实测如实报告**（不可接受则给建议交回裁定）。**排期**：作为最后一项功能，但**必须早于 t14 发布落地**（我会把它接进 t14 依赖）。\n\n必做：\n1. 诊断（file:line 证据 + 锯齿截图 + 可量化边缘指标基线）。\n2. 实现（MSAA 或 SMA A/FXAA，给选择理由 + 前后对照截图与指标）。\n3. 质量档接入 + `?stats=1` 报告 AA 模式与 samples；默认档选择给实测理由。\n4. §12 代表性子集（≥6 格）+ 3 内景前后对照，证明仍达标；退化则量化交回。\n5. audit --enforce exit 0 且调用/三角面不升；浏览器内三档帧时间/帧率对照如实报告。\n6. 不破坏 `?mask=sky`/`skyMaskPng`、§11.3、`--allow-no-sky` 禁令、`?dpr` 语义；诊断覆盖须显式报告且不改被测语义。\n7. 回归四条 + 新增 core-antialias 测试；断言只增不减；只改 inScope。",
-      "status": "pending",
+      "status": "claimed",
       "assignee": "core-engineer",
-      "dependencies": [
-        "t122"
-      ],
-      "attempt": 0,
+      "dependencies": [],
+      "attempt": 2,
       "createdAt": 1790473374419,
-      "updatedAt": 1790473374419,
+      "updatedAt": 1790480801316,
       "kind": "repair",
       "objective": "按用户需求加入抗锯齿：先证实现状（antialias 上下文标志对 EffectComposer 渲染目标无效、samples=0 ⇒ 锯齿来源），再用 MSAA（composer 渲染目标 samples）或后处理 SMAA/FXAA（或组合）实现，接进 QUALITY.tiers 并在 ?stats=1 报告生效模式；§12 可读性重新实测不放宽、§8.2 门禁不变、性能代价三档实测如实报告。",
       "inScope": [
@@ -17166,7 +17066,9 @@
         "用户需求：加入抗锯齿（锯齿严重）",
         "计划 §8.2 渲染质量档与性能预算",
         "计划 §3.1 共同风格基线（画面质量）"
-      ]
+      ],
+      "reassigning": false,
+      "attemptId": "a61412d4-5514-4d5b-ae4a-d9624bee057f"
     },
     {
       "id": "t130",
