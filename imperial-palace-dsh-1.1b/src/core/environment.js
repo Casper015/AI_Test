@@ -608,6 +608,21 @@ export function createEnvironment({
     return sky;
   }
 
+  /**
+   * t40：烟柱 LOD 滞回带的**等效距离区间**（米，只读诊断）。
+   * `pointPx = size × (drawH/2) / dist` ⇒ `dist = size × (drawH/2) / pointPx`；
+   * 用与生产同一式反解两个门限（drawH 取当前档位的绘制缓冲高度）。
+   */
+  function describeSmokeBandMetres() {
+    const minPx = config.LIGHTING.atmosphere.smokeMinPointPx ?? 0;
+    const showPx = config.LIGHTING.atmosphere.smokeShowPointPx ?? null;
+    const size = smokeSystems[0]?.points?.material?.size ?? null;
+    if (!(minPx > 0) || size === null) return null;
+    const drawH = drawingBufferHeight();
+    const at = (px) => (px > 0 ? +(size * (drawH / 2) / px).toFixed(1) : null);
+    return { size, drawH, hideBeyondMetres: at(minPx), showWithinMetres: showPx !== null && showPx > minPx ? at(showPx) : null };
+  }
+
   function describeSceneBackground() {
     const preset = presetOf(currentPreset);
     const bg = scene.background;
@@ -1135,6 +1150,15 @@ export function createEnvironment({
        * 等效距离门限 = `1.1 × 450 / 1.0 ≈ 495 m`；近景 20 m 处点径 24.75 px ≫ 1.0 ⇒ 近景烟柱形态完全保留。
        */
       const smokeMinPx = config.LIGHTING.atmosphere.smokeMinPointPx ?? 0;
+      /**
+       * t40：**滞回上门限**（`smokeShowPointPx`，默认 1.25 px）。
+       * 只有单门限时，相机在门限附近运动 ⇒ `pointPx` 在 1.0 上下抖动 ⇒ 整柱 `visible` **逐帧跳变**
+       * （移动协议实测：绕门限往复行走 48 帧，单柱翻转最高 12 次）。滞回后：
+       *   `pointPx < min` ⇒ 隐藏；`pointPx ≥ show` ⇒ 显示；带内 ⇒ **保持上一帧状态**（粘滞）。
+       * `show` 未登记 / ≤ `min` ⇒ 退化为 t25 的单门限行为（配置缺失不制造新的不稳定）。
+       */
+      const smokeShowRaw = config.LIGHTING.atmosphere.smokeShowPointPx;
+      const smokeShowPx = Number.isFinite(smokeShowRaw) && smokeShowRaw > smokeMinPx ? smokeShowRaw : null;
       const drawH = smokeMinPx > 0 && cameraPosition ? drawingBufferHeight() : 0;
       for (const system of smokeSystems) {
         const { positions, seeds, budget, anchor } = system;
@@ -1144,7 +1168,11 @@ export function createEnvironment({
           } else {
             const dist = Math.hypot(anchor.x - cameraPosition.x, anchor.y - cameraPosition.y, anchor.z - cameraPosition.z);
             const pointPx = (system.points.material.size * (drawH / 2)) / Math.max(1e-6, dist);
-            system.points.visible = pointPx >= smokeMinPx;
+            system.smokePointPx = +pointPx.toFixed(4);
+            if (pointPx < smokeMinPx) system.points.visible = false;
+            else if (smokeShowPx === null) system.points.visible = pointPx >= smokeMinPx;
+            else if (pointPx >= smokeShowPx) system.points.visible = true;
+            // 带内：保持上一帧状态（`system.points.visible` 即上一帧判定结果，无需额外状态位）
           }
           if (!system.points.visible) continue; // 整柱不绘制（连位置更新也省掉：不可见即无需重建缓冲）
         }
@@ -1245,6 +1273,24 @@ export function createEnvironment({
       },
       /** 权威背景口径（t45）：供 ?stats=1 / __PALACE__.stats() / 截图工具消费 */
       background: describeSceneBackground(),
+      /**
+       * t40：**烟柱 LOD 权威读数**（滞回 + 逐柱状态）。
+       * 供移动协议探针（`scripts/probe-motion-edges.mjs`）、守卫（`tests/core-antialias.test.mjs` ⑤）
+       * 与 `?stats=1` 消费：`pointPx` 用**生产同一式**（`size × (drawingBufferHeight/2) / dist`），
+       * `visible` 就是生产帧真正写进 `points.visible` 的值（不是复算）。
+       */
+      smoke: {
+        enabled: config.LIGHTING.atmosphere.smokeEnabled,
+        minPointPx: config.LIGHTING.atmosphere.smokeMinPointPx ?? 0,
+        showPointPx: config.LIGHTING.atmosphere.smokeShowPointPx ?? null,
+        bandMetres: describeSmokeBandMetres(),
+        systems: smokeSystems.map((s, index) => ({
+          index,
+          anchor: { x: s.anchor.x, y: s.anchor.y, z: s.anchor.z },
+          visible: s.points.visible,
+          pointPx: s.smokePointPx ?? null,
+        })),
+      },
       interior: {
         volumes: interiorVolumes.map((v) => v.zone),
         volumeBounds: interiorVolumes.map((v) => ({ zone: v.zone, minX: v.minX, maxX: v.maxX, minY: v.minY, maxY: v.maxY, minZ: v.minZ, maxZ: v.maxZ })),

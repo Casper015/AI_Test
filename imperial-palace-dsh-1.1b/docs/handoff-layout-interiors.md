@@ -795,3 +795,113 @@ grep 证据（历史快照标注）：`grep -c 历史快照 docs/CONTRACTS.md` �
   （`整足迹阻挡者应为 24 条…实际 22`，t33 已 A/B 证明与本系列改动无关且 out of scope）；浏览器侧探针、`verify-*` 套件。
 - **未触碰**：`src/core/**`、`src/interaction/**`、`src/ui/**`、`src/zones/**`、`src/kit/geometry.js`、`src/kit/interiors.js`、`src/kit/index.js`、
   `tests/interaction.test.mjs`、`tests/walk-reachability.test.mjs`、`tests/core.test.mjs`、`scripts/**`、`docs/CONTRACTS.md`、阈值 0.5/0.6、§8.2 门禁。
+
+---
+
+## 16. t38：中轴体量分级**口径落地**（eaveAbs + T1>T2 严格序 + 无倒挂；**不改体量**并量化交回）
+
+> **只增不改**：本节为追加回执，上文（含 §10 t117 具名例外、§13 t13 闭合）**一字未改**。
+
+### 16.1 来源与目标
+用户原话：「现在在中轴的宫殿设计和内饰太单一了 **主要建筑的大小和高度**」。
+t14 交付的是 `axis-tiers` **分析**（`work/t14/data/axis-tiers.mjs`，`work/` 不进发布包）；XR 实测指出：
+体量分级不是「不够明显」，而是**用错口径就会读成坏的** —— `SLOTS[].totalHeight` 含 `onWall` 的宫墙高（+12m），
+把「坐在宫墙上的城门/角楼」与「坐在地上的殿」放进同一个绝对高度榜。本卡把**口径与规则**落成生产数据 + 常驻判据。
+
+### 16.2 只读取证（改前实测；探针 `work/probe-t38-axis.mjs`，只读）
+**中轴台账**（`axisTolerance = min|离轴 x|/2 = 29m` ⇒ 中轴 12 栋；`台基` = 台基层数、`檐` = 檐数）：
+
+| id | zone/kind | gr | roof | 面宽×进深 | 占地 | 台基 | 檐 | eaveAbs | eaveRel | totalHeight |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| F-gate-south | F gateHall | 3 | doubleEaveHip | 76×26 | 1976 | 1 | 2 | 18.61 | **6.61** | **24.64** |
+| B-gate-front | B gateHall | 2 | hip | 72×24 | 1728 | 1 | 1 | 5.05 | 5.05 | 8.89 |
+| **B-hall-main** | B hall | 3 | doubleEaveHip | 84×48 | **4032** | **3** | **2** | **10.71** | **10.71** | **20.48** |
+| B-hall-mid | B hall | 2 | hip | 52×28 | 1456 | 1 | 1 | 6.60 | 6.60 | 11.08 |
+| B-hall-rear | B hall | 2 | hip | 60×30 | 1800 | 1 | 1 | 6.40 | 6.40 | 11.20 |
+| C-gate-inner | C gateHall | 2 | hip | 56×24 | 1344 | 1 | 1 | 5.50 | 5.50 | 9.34 |
+| C-hall-bed-main | C hall | 3 | doubleEaveHip | 64×38 | 2432 | 1 | 2 | 7.71 | 7.71 | 15.78 |
+| C-hall-bed-rear | C hall | 2 | hip | 52×30 | 1560 | 1 | 1 | 5.80 | 5.80 | 10.60 |
+| C-pavilion-rear | C pavilion | 1 | pyramidal | 16×16 | 256 | 1 | 1 | 4.19 | 4.19 | 8.19 |
+| F-garden-pavilion-main | F pavilion | 2 | pyramidal | 28×28 | 784 | 1 | 1 | 5.20 | 5.20 | 12.20 |
+| F-garden-hall-north | F hall | 2 | hip | 44×22 | 968 | 1 | 1 | 5.40 | 5.40 | 8.92 |
+| F-gate-north | F gateHall | 3 | doubleEaveHip | 76×26 | 1976 | 1 | 2 | 18.61 | **6.61** | **24.64** |
+
+**倒挂普查（复现卡内两条读数）**：
+- **`F-gate-west/east`（grade 2）`totalHeight 21.68` > 主殿 `20.48`（Δ+1.20）** —— 与卡内数字**逐值复现**；
+  另有 `F-gate-south/north 24.64`（Δ+4.16）与 4 座角楼 `21.28`（Δ+0.80）；
+  ⇒ raw `totalHeight` 高于主殿者共 **8 栋，全部 `onWall=true`**（4 城门 + 4 角楼），**地上建筑 0 栋**。
+- **「4 处硬倒挂」**：本卡只读拿到**两组各 4 栋**的读数 —— ①4 座城门（south/north 24.64、west/east 21.68）；
+  ②4 座角楼（21.28）；两者**都**是 `onWall` 系统。除此之外，口径 B（自身基准面）下**倒挂 0 条**。
+  （XR 原报告未进本仓 ⇒ 若其「4 处」指别的清单，请以本条普查为准并回执；本卡未据猜测改任何体量。）
+- **朴素口径反例**（口径必要性）：`全部中轴槽位 × raw totalHeight` ⇒ `R3-面积严格序 T1.areaMin=1976 vs T2.areaMax=1800`
+  = **1.0978 < 1.10**（另：t14 快照下 `R4-relTotal` 也破，当前树该比已 1.2934 ≥ 1.05，故只命中 R3）。
+
+### 16.3 落地内容（`LAYOUT 1.1.25 → 1.1.26`）
+`src/shared/layout.js` 新增第十四节（**口径唯一权威源**，全部数据推导）：
+- `AXIS_TIER_SPEC`（冻结）：`ladderKinds ['hall','gateHall']` · `areaMargin 1.10` · `eaveMargin 1.05` · `minAbsEave 0.05` · `principalRatio 1.20`；
+- `slotVolumeCaliber(slot)`（逐栋 {area, terraceTiers, eaves, eaveAbs, eaveFromGround, totalHeight, totalFromBase, inLadder}）·
+  `volumeCaliberRows()` · `deriveAxisTolerance()` · `tierKeyOf()` · `axisTierRows()` · `axisTierStats()` ·
+  `axisTierLadder()`（R3/R4）· `axisPrincipal()`（R5）· `axisNoInversion()`（R6a/b/c）· `axisTierReport()`（口径 A/B 并列）；
+- 冻结摘要 `AXIS_TIER_SUMMARY` + 可观测副本 `LAYOUT_STATS.axisTiers`；`default` 导出同步。
+**口径定义**：`eaveAbs` = 檐口高**自该建筑自身基准面** = `eaveHeight − (onWall ? CITY_WALL.height : 0)`；
+`eaveFromGround` = 记录值（含墙高）**并列保留** ⇒ 「城门高过主殿」这一读数的来源（`wallOffset`）被显式登记、不得被静默抹平。
+
+### 16.4 采用口径读数（改后实测）
+- 档位：**T1(grade 3) = 2 栋** `B-hall-main` / `C-hall-bed-main`；**T2(grade 2) = 6 栋**；入序 8/12（排除 2 城门 onWall + 2 亭 non-ladder kind）。
+- **T1 > T2**：面积比 `2432/1800 = 1.3511 ≥ 1.10` · 檐高比 `7.71/6.60 = 1.1682 ≥ 1.05`（Δ **1.11m ≥ 0.05**）·主位比 `4032/2432 = **1.6579** ≥ 1.20`。
+- **无倒挂**：R6a（任意档对）0 条 · R6b（全城非 onWall 建筑不得超过主殿 eaveAbs 10.71）0 条 · R6c（raw 高于主殿者必须全部 onWall）通过且**非恒真**（清单 8 栋非空）。
+- **同级不重复**：每档内部 面积/eaveAbs 两列两两互异；`檐数` 最高档 min 2 > 次档 max 1（重檐 = 最高档形制特征）；`台基层数` 最大值**唯一**归主位（3 层），与 `TERRACES` 登记交叉一致。
+- **白名单**：79 栋全部 `grade↔roofType` 合法，入序集 grade 3 均为 `doubleEaveHip`（**未为高度比改任何屋顶等级**，t22 教训）。
+
+### 16.5 为何**不改体量**（量化交回，不得放宽容差）
+三条可调路径都被硬约束堵死（逐条量化）：
+1. **降城门到主殿以下**：south/north 需 **−4.16m**、west/east 需 **−1.20m**；二者 `terraceH` 已是 `0.4`（不可为负），
+   降 `grade` 不足以达标（grade 2 仍 **21.42** > 20.48）且违反「屋顶等级不得为高度比而改」⇒ **不可行**。
+2. **降角楼**：需 **−0.80m**，`terraceH` 已是 `0` ⇒ 只能缩跨度（26 → ≤21），动的是**城墙系统**体量（F 区视觉 + 区外判据）⇒ 不属本卡「中轴」目标。
+3. **升主殿**：需 **+4.16m** ⇒ `terraceH 4.5 → ≈8.7`（三层台基模型 + `TERRACES`/`WK-B-terrace-*`/丹陛链 + 内景 `sillY` 不变式）
+   或 `d 48 → ≥72.5`（内景/台基/广场几何）⇒ 一律外溢到**内景与 out-of-scope 判据**（`tests/interaction.test.mjs`、`tests/core.test.mjs`、`scripts/**`）。
+⇒ 结论：**绝对高度「城门高过主殿」是墙制 + 口径的必然，不是体量序缺陷**；本卡按卡内授权
+「若某栋受空间/形制约束无法达标 ⇒ **量化交回裁定，不得放宽容差**」交回，并把「**非 onWall 建筑不得超过主殿**」钉成常驻判据。
+
+### 16.6 判据落地（只增不减）
+- `tests/layout.test.mjs` 新增 **t38 块 18 项**：规格冻结与裕量 pin（1.10/1.05/0.05/1.20，**不得下调**）· R1 容差由数据推导 + 独立重算 ·
+  R2 档位/计数独立重算 + 两级形状 + 冻结摘要不漂移 · R3/R4 逐对自行重算 · R4 口径（onWall 必须扣墙高）逐栋 ·
+  R5 主位唯一与独立重算 · **R6a/b/c** 三条无倒挂（含「普查非恒真」）· 口径自洽（`eaveAbs+wallOffset===eaveHeight`）·
+  同级不重复 · 檐数/台基层数（与 `TERRACES` 交叉）· 台账自证（用 config 令牌复算 eave/total 与记录逐值相等）· 白名单 ·
+  **反例①** 朴素口径必须为红（口径必要性）· **反例②** 突变对照（把次档最小面积者过度定级 ⇒ 必红；恢复 ⇒ 必绿）· `LAYOUT_STATS` 副本一致。
+  ⇒ 实测 `node tests/layout.test.mjs` = **exit 0 · `全部通过 ✓`（失败 0）**；t38 块内 **32 条** `eq/check` 判据。
+  **判据活性证明**（防「断言没被执行」这类假绿）：把副本里 t38 的规格 pin 故意改成 `[9.9,9.9,9.9,9.9]` ⇒ 该文件 **exit 1** 并打印
+  `✗ t38 规格：areaMargin / eaveMargin / minAbsEave / principalRatio 逐值 pin …`（副本 `work/t38-mutant-layout.test.mjs`，已删）。
+  口径注记：该文件自带的行内计数（`layout.test.mjs：通过 N 项`）是**汇总小节处的子计数**（在文件中部打印，不含其后各块），
+  **不得**当作全文件判据总数引用；权威判据是 **退出码 + `全部通过 ✓`**。
+- `tests/zone-forecourt.test.mjs` 新增 **§3b 4 项（几何侧同轮）**：实测 `worldBounds.maxY` **序** = 登记 `totalHeight` 序 ·
+  实测檐口高 = 登记 `eaveAbs`（±6mm）· B 区实测最高者**唯一**且 ≥ 次高 × `eaveMargin`（实测 25.635/16.074 = **1.5948**）·
+  主殿为 B 区**唯一**三层台基 + **唯一**重檐（与区域实测台基段数 3、`TERRACES` 3 段交叉）· B 区无「非 onWall 却实测高于主殿登记总高」者。
+  ⇒ 实测 `node tests/zone-forecourt.test.mjs` = **通过 43 / 43**（该文件由 harness runner 在末尾汇总，故 43 为其全量判据数；§3b 贡献 4 项）。
+
+### 16.7 预算与「零几何改动」证据
+- `node scripts/audit.mjs --enforce` = **exit 0**：主场景 **342 / 350**、B 62/70 · C 56/60 · D 49/56 · E 49/56 · **F 80 / 80**、可见三角面 425317 / 1.5M。
+- 本卡**零几何改动**（只新增口径/规则与派生出口）⇒ 逐值对照：`work/probe-t38-ab.mjs` 对几何登记（SLOTS/TERRACES/WALKABLE/WALLS/OBSTACLES/ROADS/VIEWPOINTS/内景）取 **sha256 指纹**，
+  把 t38 全部出口跑一遍后复取 ⇒ **逐字节相同** `092b92f6…3103`（证明 t38 代码路径**不可能**改几何/预算）；
+  冻结计数与 t13 回执逐值一致：`SLOTS 79 · WALKABLE 175 · WALLS 60 · OBSTACLES 93 · TERRACES 4 · ROADS 97 · VIEWPOINTS 61 · FP_ROUTE 50 · 内景 43 · visitable 43`。
+  ⇒ 「体量调整须并入既有合批桶/无冻结计数路径」这一条以**零改动**满足（无新增网格、无新增批次）。
+- **并发窗口登记**：本卡执行期间 `CONFIG_VERSION` 由 **1.0.9 → 1.0.10**（他人卡）——本卡判据**全部读运行期值**（规格 pin 只 pin `AXIS_TIER_SPEC` 自己的裕量，不 pin config 版本），
+  实测读数**未变**：`T1=2 / T2=6` · 面积比 **1.3511** · 檐高比 **1.1682**（Δ1.11m）· 主位比 **1.6579** · 倒挂 0 · `SLOTS 79 / WALKABLE 175 / OBSTACLES 93 / ROADS 97` 不变。
+
+### 16.8 护栏 / 可达性 / 内景 / §12
+- **四层护栏**（`layout.test.mjs` 全绿）：`t126` 遮蔽 0 命中 · `t131` 通路 43 处内景缺链 0 · `t134` 格级 43 处门中心/门带一致 · `t159` F3 双向 55 带 / 660 对**失败 0**。
+- `node tests/walk-reachability.test.mjs`：**t140 全部通过**（细口径 `cellSize:1` 不可达 = **0**；`LAYOUT 1.1.26`）。
+- **43 栋内景不回退**：`verify-experience` A3 ✓（`interior 43` / `fp-spawn 5` / `zone 7` / 共 61）、B4 ✓（63/63，0 具名例外）。
+- **§12 可读性**：本卡零几何/零材质改动 ⇒ 画面不可能变化；24 张（8 视角 × 3 时辰）矩阵已按 F1 指定命令重建（见 §16.9 读数）。
+
+### 16.9 未运行项 / 并发窗口（如实登记，不得当成通过）
+- `tests/run.mjs`（全量）：本轮**未跑全量**（时间预算）；已单独跑 `layout` / `zone-forecourt` / `walk-reachability` / `core.test` / `core-collision` / `kit` / `verify-experience` / `audit --enforce`。
+- **`tests/core.test.mjs` 1 项红（非本卡）**：`第一人称：最近 fp-spawn 出生…出生点应为 fp-spawn，实际 null`。
+  证据：该断言读 **`src/core/camera.js`** 的出生点选择，而 `src/core/camera.js` 当前有 **395 行未提交改动**（他人 in-flight 卡）；
+  本卡 diff **不含** `VIEWPOINTS`/`FP_ROUTE`/`camera.js`（`layout.test` 的 A3 pin 与探针指纹均未变）⇒ 判定为**并发在制品**，归 camera 责任方。
+- **`docs/shots/**` 24 张矩阵（§12 读数）**：本卡为**回填**（t13 轮曾以 `--view=focus` 单张重建把 manifest 覆盖成 1 条）——
+  已按 F1 指定命令 `node scripts/shot.mjs --view=all --preset=all --keep-invalid` 重跑：**17 / 24 出图并 §12 PASS**，
+  其中**原先为红的 `fp/{golden,dusk,night}` 与 `orbit/{dusk,night}` 本轮 PASS**；**7 / 24 不可得**（`interior/{golden,dusk,night}`、`zone/{golden,dusk}`、`focus/night` 等）
+  原因是**并发负载下页面装配超时**（`data-palace-loaded=false` / 「无图可统计」），属**环境**而非判据回归 —— 本卡零几何/零材质/零相机改动，
+  画面不可能因此变化（见 §16.7 指纹证明）。`docs/shots/manifest.json` 是**多卡并发写入的生成物**（本轮读出 35 条，含并发叠加的重复项），非本卡交付物。
+- 浏览器内第一人称实走、塔楼接线、`verify-completeness` 全量（含 headless Chrome）本轮未测（本卡零几何，风险面为 0）。

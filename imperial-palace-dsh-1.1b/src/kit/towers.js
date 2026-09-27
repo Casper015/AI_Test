@@ -365,7 +365,10 @@ export function makeTower(env, raw = {}) {
     y0: s.y0,
     y1: s.y1,
     blocks: 'all',
-    sourceType: 'tower',
+    /* 与 layout.CLIMB_TOWER_OBSTACLES 同值：`building` 在 core 契约白名单内（context.js:408）；
+       `buildingKind: 'towerShaft'` 保留"塔身"语义，避免新增枚举牵动 out-of-scope 的 core/interaction。 */
+    sourceType: 'building',
+    buildingKind: 'towerShaft',
     sourceId: s.id,
   }));
   /* t37（P0 ②）：塔顶机位由 `mode:'interior'` 改为 **`mode:'focus-extra'`** ——

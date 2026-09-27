@@ -1,0 +1,1140 @@
+{
+ "url": "http://127.0.0.1:60684/index.html?view=fp&quality=medium",
+ "frames": 60,
+ "phases": [
+  {
+   "id": "read",
+   "viewMode": "fp",
+   "fpActive": true,
+   "mode": "fp",
+   "position": {
+    "x": -30,
+    "y": 1.65,
+    "z": -360
+   },
+   "yawDeg": 26.565,
+   "axes": {
+    "right": {
+     "x": -0.8944271909999155,
+     "y": 0,
+     "z": 0.44721359549995854
+    },
+    "up": {
+     "x": 0,
+     "y": 1,
+     "z": 0
+    },
+    "forward": {
+     "x": 0.44721359549995804,
+     "y": 0,
+     "z": 0.8944271909999161
+    }
+   },
+   "tourActive": false,
+   "selectedBuildingId": null,
+   "stuck": {
+    "seconds": 0,
+    "stuck": false,
+    "intent": false,
+    "movedValue": 0,
+    "intentSource": "explicit"
+   },
+   "stuckHudVisible": false,
+   "fpStats": {
+    "transitions": 0,
+    "settled": 1,
+    "fpEntries": 1,
+    "fpExits": 0,
+    "blockedMoves": 0,
+    "inputEvents": 0,
+    "fpJumps": 0
+   },
+   "fpJump": {
+    "enabled": true,
+    "maxHeight": 0.9,
+    "active": false,
+    "vy": 0,
+    "peak": 0,
+    "starts": 0,
+    "landings": 0,
+    "reverts": 0,
+    "refused": 0,
+    "lastReason": null,
+    "lastLanding": null,
+    "cooldown": 0
+   },
+   "airborne": false,
+   "entry": {
+    "already": true
+   },
+   "surfaceY": 0,
+   "fpEyeHeight": 1.65,
+   "expectedY": 1.65
+  },
+  {
+   "id": "ad",
+   "D": {
+    "code": "KeyD",
+    "frames": 60,
+    "from": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "to": {
+     "x": -34.65102139319948,
+     "y": 1.65,
+     "z": -357.67448930339924
+    },
+    "delta": {
+     "x": -4.651021393199478,
+     "y": 0,
+     "z": 2.325510696600759
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": -0.8944,
+     "z": 0.4472
+    },
+    "dotRight": 5.2,
+    "dotForward": 0,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   },
+   "A": {
+    "code": "KeyA",
+    "frames": 60,
+    "from": {
+     "x": -34.65102139319948,
+     "y": 1.65,
+     "z": -357.67448930339924
+    },
+    "to": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "delta": {
+     "x": 4.651021393199478,
+     "y": 0,
+     "z": -2.325510696600759
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": 0.8944,
+     "z": -0.4472
+    },
+    "dotRight": -5.2,
+    "dotForward": 0,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   },
+   "W": {
+    "code": "KeyW",
+    "frames": 60,
+    "from": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "to": {
+     "x": -27.674489303400307,
+     "y": 1.65,
+     "z": -355.3489786068019
+    },
+    "delta": {
+     "x": 2.325510696599693,
+     "y": 0,
+     "z": 4.651021393198107
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": 0.4472,
+     "z": 0.8944
+    },
+    "dotRight": 0,
+    "dotForward": 5.2,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   },
+   "S": {
+    "code": "KeyS",
+    "frames": 60,
+    "from": {
+     "x": -27.674489303400307,
+     "y": 1.65,
+     "z": -355.3489786068019
+    },
+    "to": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "delta": {
+     "x": -2.325510696599693,
+     "y": 0,
+     "z": -4.651021393198107
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": -0.4472,
+     "z": -0.8944
+    },
+    "dotRight": 0,
+    "dotForward": -5.2,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   }
+  },
+  {
+   "id": "space",
+   "tourBefore": false,
+   "tourAfter": false,
+   "viewModeAfterSpace": "fp",
+   "y0": 1.65,
+   "yMax": 2.5026299364909255,
+   "yMin": 1.65,
+   "apex": 0.8526,
+   "dive": 0,
+   "surfaceY": 0,
+   "fpEyeHeight": 1.65,
+   "jumpEnabled": true,
+   "jumpMaxHeight": 0.9,
+   "jumpVia": {
+    "via": "rig.jump"
+   }
+  },
+  {
+   "id": "jump",
+   "jumpVia": {
+    "via": "rig.jump"
+   },
+   "jumpStarts": 1,
+   "jumpLandings": 1,
+   "jumpReverts": 0,
+   "jumpStartsTotal": 2,
+   "jumpLandingsTotal": 2,
+   "landingKind": "ground",
+   "landingReason": null,
+   "takeoff": {
+    "x": -30,
+    "y": 1.65,
+    "z": -360
+   },
+   "y0": 1.65,
+   "yMax": 2.5026299364909255,
+   "apex": 0.8526,
+   "landingY": 1.65,
+   "landingSurfaceY": 0,
+   "landingExpectedY": 1.65,
+   "landingDelta": 0,
+   "returnToTakeoff": 0,
+   "airborneFrames": 36,
+   "withinLimit": true,
+   "insideObstacleFrames": 0,
+   "jumpState": null
+  },
+  {
+   "id": "jumpwall",
+   "rounds": 6,
+   "framesPerRound": 40,
+   "insideObstacleFrames": 0,
+   "jumpStarts": 3,
+   "jumpLandings": 3,
+   "jumpReverts": 0,
+   "end": {
+    "viewMode": "fp",
+    "fpActive": true,
+    "mode": "fp",
+    "position": {
+     "x": -23.02346791020092,
+     "y": 1.65,
+     "z": -346.0469358204057
+    },
+    "yawDeg": 26.565,
+    "axes": {
+     "right": {
+      "x": -0.8944271909999155,
+      "y": 0,
+      "z": 0.44721359549995854
+     },
+     "up": {
+      "x": 0,
+      "y": 1,
+      "z": 0
+     },
+     "forward": {
+      "x": 0.44721359549995804,
+      "y": 0,
+      "z": 0.8944271909999161
+     }
+    },
+    "tourActive": false,
+    "selectedBuildingId": null,
+    "stuck": {
+     "seconds": 0,
+     "stuck": false,
+     "intent": true,
+     "movedValue": 0.0867,
+     "intentSource": "explicit"
+    },
+    "stuckHudVisible": false,
+    "fpStats": {
+     "transitions": 0,
+     "settled": 1,
+     "fpEntries": 1,
+     "fpExits": 0,
+     "blockedMoves": 60,
+     "inputEvents": 0,
+     "fpJumps": 5
+    },
+    "fpJump": {
+     "enabled": true,
+     "maxHeight": 0.9,
+     "active": false,
+     "vy": 0,
+     "peak": 0.85263,
+     "starts": 5,
+     "landings": 5,
+     "reverts": 0,
+     "refused": 3,
+     "lastReason": "cooldown",
+     "lastLanding": {
+      "kind": "ground",
+      "x": -24.6900839094307,
+      "z": -349.3801678188643,
+      "surfaceY": 0,
+      "y": 1.65,
+      "drop": 0,
+      "peak": 0.85263
+     },
+     "cooldown": 0
+    },
+    "airborne": false
+   }
+  },
+  {
+   "id": "jumpstuck",
+   "rounds": 8,
+   "frames": 240,
+   "seconds": 4,
+   "hudVisibleFrames": 0,
+   "stuckSecondsMax": 0,
+   "stuckFlag": false,
+   "stuckHudVisible": false,
+   "jumpStarts": 8
+  },
+  {
+   "id": "f",
+   "withSelection": false,
+   "before": {
+    "viewMode": "fp",
+    "fpActive": true,
+    "selected": null
+   },
+   "after": {
+    "viewMode": "oblique",
+    "fpActive": false
+   },
+   "restoredMode": "oblique"
+  },
+  {
+   "id": "fsel",
+   "withSelection": true,
+   "before": {
+    "viewMode": "fp",
+    "fpActive": true,
+    "selected": "B-hall-main"
+   },
+   "after": {
+    "viewMode": "oblique",
+    "fpActive": false
+   },
+   "restoredMode": "oblique"
+  },
+  {
+   "id": "B-hall-main",
+   "anchor": {
+    "id": "B-hall-main",
+    "name": "金銮殿",
+    "enterable": true,
+    "doorless": false,
+    "facade": {
+     "x": 0,
+     "y": 4.5,
+     "z": -146
+    },
+    "entrance": {
+     "x": 0,
+     "y": 4.5,
+     "z": -140
+    },
+    "center": {
+     "x": 0,
+     "z": -116
+    }
+   },
+   "legacy": {
+    "spawn": {
+     "id": "VP-B-fp-spawn",
+     "position": {
+      "x": -30,
+      "y": 1.65,
+      "z": -360
+     }
+    },
+    "entry": {
+     "ok": true,
+     "fp": true,
+     "subscribed": true,
+     "entered": {
+      "position": {
+       "x": -30,
+       "y": 1.65,
+       "z": -360
+      },
+      "spawnId": "VP-B-fp-spawn",
+      "source": "ui",
+      "selectionLanding": null
+     },
+     "enteredCount": 1
+    },
+    "position": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "landing": {
+     "buildingId": null,
+     "fallback": false,
+     "ok": false,
+     "kind": null,
+     "tier": null,
+     "x": null,
+     "y": null,
+     "z": null,
+     "surfaceY": null,
+     "surfaceId": null,
+     "blockedBy": null,
+     "reasons": [],
+     "candidates": 0,
+     "slotName": null
+    },
+    "sameAsSpawn": true,
+    "spawnIdMatched": true,
+    "selectionLanding": null
+   },
+   "entry": {
+    "selection": {
+     "ok": true,
+     "selected": "B-hall-main"
+    },
+    "planBefore": {
+     "ok": true,
+     "buildingId": "B-hall-main",
+     "kind": "facade",
+     "tier": 1,
+     "x": 0,
+     "y": 6.15,
+     "z": -146,
+     "surfaceY": 4.5,
+     "surfaceId": "WK-B-terrace-tier3",
+     "reasons": [],
+     "candidateCount": 1,
+     "failedCount": 0,
+     "firstFail": null
+    },
+    "entry": {
+     "ok": true,
+     "fp": true,
+     "subscribed": true,
+     "entered": {
+      "position": {
+       "x": 0,
+       "y": 6.15,
+       "z": -146
+      },
+      "spawnId": null,
+      "source": "ui",
+      "selectionLanding": {
+       "buildingId": "B-hall-main",
+       "kind": "facade",
+       "tier": 1
+      }
+     },
+     "enteredCount": 1
+    },
+    "position": {
+     "x": 0,
+     "y": 6.15,
+     "z": -146
+    },
+    "landing": {
+     "buildingId": "B-hall-main",
+     "fallback": false,
+     "ok": true,
+     "kind": "facade",
+     "tier": 1,
+     "x": 0,
+     "y": 6.15,
+     "z": -146,
+     "surfaceY": 4.5,
+     "surfaceId": "WK-B-terrace-tier3",
+     "blockedBy": null,
+     "reasons": [],
+     "candidates": 1,
+     "slotName": "金銮殿"
+    },
+    "judge": {
+     "ok": true,
+     "surface": 4.5,
+     "inBounds": true,
+     "eyeOk": true,
+     "walkable": [
+      {
+       "id": "WK-B-terrace-tier3",
+       "zone": "B",
+       "kind": "terrace",
+       "name": "主殿台基三层顶",
+       "bounds": {
+        "minX": -56,
+        "maxX": 56,
+        "minZ": -148,
+        "maxZ": -84
+       },
+       "y": 4.5,
+       "enterable": true,
+       "centerY": 4.5,
+       "area": 7168
+      },
+      {
+       "id": "WK-B-hall-main-door-passage",
+       "zone": "B",
+       "kind": "passage",
+       "name": "金銮殿门洞通道",
+       "bounds": {
+        "minX": -13,
+        "maxX": 13,
+        "minZ": -146,
+        "maxZ": -133.4
+       },
+       "y": 4.5,
+       "enterable": true,
+       "centerY": 4.5,
+       "area": 327.6
+      },
+      {
+       "id": "WK-B-terrace-tier2-south",
+       "zone": "B",
+       "kind": "terrace",
+       "name": "主殿台基二层顶（南段，t126 开槽后）",
+       "bounds": {
+        "minX": -72,
+        "maxX": 72,
+        "minZ": -158,
+        "maxZ": -129
+       },
+       "y": 3,
+       "enterable": true,
+       "centerY": 3,
+       "area": 4176
+      },
+      {
+       "id": "WK-B-terrace-tier1",
+       "zone": "B",
+       "kind": "terrace",
+       "name": "主殿台基一层顶",
+       "bounds": {
+        "minX": -88,
+        "maxX": 88,
+        "minZ": -168,
+        "maxZ": -64
+       },
+       "y": 1.5,
+       "enterable": true,
+       "centerY": 1.5,
+       "area": 18304
+      }
+     ],
+     "x": 0,
+     "y": 6.15,
+     "z": -146
+    },
+    "distToFacade": 0,
+    "matchesPlan": true,
+    "before": {
+     "mode": "oblique",
+     "projection": "perspective",
+     "position": {
+      "x": 0,
+      "y": 520,
+      "z": -1180
+     },
+     "target": {
+      "x": 0,
+      "y": 30,
+      "z": -60
+     },
+     "fov": 45,
+     "zoom": 1,
+     "axisIndex": 1,
+     "fpActive": false,
+     "viewDirection": {
+      "x": 0,
+      "y": -0.40081883401970775,
+      "z": 0.9161573349021892
+     }
+    },
+    "eventPayload": {
+     "position": {
+      "x": 0,
+      "y": 6.15,
+      "z": -146
+     },
+     "spawnId": null,
+     "source": "ui",
+     "selectionLanding": {
+      "buildingId": "B-hall-main",
+      "kind": "facade",
+      "tier": 1
+     }
+    }
+   },
+   "determinism": {
+    "pure1": {
+     "ok": true,
+     "buildingId": "B-hall-main",
+     "kind": "facade",
+     "tier": 1,
+     "x": 0,
+     "y": 6.15,
+     "z": -146,
+     "surfaceY": 4.5,
+     "surfaceId": "WK-B-terrace-tier3",
+     "reasons": [],
+     "candidateCount": 1,
+     "failedCount": 0,
+     "firstFail": null
+    },
+    "pure2": {
+     "ok": true,
+     "buildingId": "B-hall-main",
+     "kind": "facade",
+     "tier": 1,
+     "x": 0,
+     "y": 6.15,
+     "z": -146,
+     "surfaceY": 4.5,
+     "surfaceId": "WK-B-terrace-tier3",
+     "reasons": [],
+     "candidateCount": 1,
+     "failedCount": 0,
+     "firstFail": null
+    },
+    "pos2": {
+     "x": 0,
+     "y": 6.15,
+     "z": -146
+    },
+    "landing2": {
+     "buildingId": "B-hall-main",
+     "fallback": false,
+     "ok": true,
+     "kind": "facade",
+     "tier": 1,
+     "x": 0,
+     "y": 6.15,
+     "z": -146,
+     "surfaceY": 4.5,
+     "surfaceId": "WK-B-terrace-tier3",
+     "blockedBy": null,
+     "reasons": [],
+     "candidates": 1,
+     "slotName": "金銮殿"
+    },
+    "stub": {
+     "stubbedId": "VP-C-fp-spawn",
+     "realId": "VP-B-fp-spawn",
+     "pool": 5
+    },
+    "samePos": true,
+    "sameLanding": true,
+    "samePure": true,
+    "entry2": {
+     "ok": true,
+     "fp": true,
+     "subscribed": true,
+     "entered": {
+      "position": {
+       "x": 0,
+       "y": 6.15,
+       "z": -146
+      },
+      "spawnId": null,
+      "source": "ui",
+      "selectionLanding": {
+       "buildingId": "B-hall-main",
+       "kind": "facade",
+       "tier": 1
+      }
+     },
+     "enteredCount": 1
+    }
+   },
+   "purity": {
+    "beforePure": {
+     "mode": "oblique",
+     "projection": "perspective",
+     "position": {
+      "x": 0,
+      "y": 520,
+      "z": -1180
+     },
+     "target": {
+      "x": 0,
+      "y": 30,
+      "z": -60
+     },
+     "fov": 45,
+     "zoom": 1,
+     "axisIndex": 1,
+     "fpActive": false,
+     "viewDirection": {
+      "x": 0,
+      "y": -0.40081883401970775,
+      "z": 0.9161573349021892
+     }
+    },
+    "afterPure": {
+     "mode": "oblique",
+     "projection": "perspective",
+     "position": {
+      "x": 0,
+      "y": 520,
+      "z": -1180
+     },
+     "target": {
+      "x": 0,
+      "y": 30,
+      "z": -60
+     },
+     "fov": 45,
+     "zoom": 1,
+     "axisIndex": 1,
+     "fpActive": false,
+     "viewDirection": {
+      "x": 0,
+      "y": -0.40081883401970775,
+      "z": 0.9161573349021892
+     }
+    },
+    "pure3": {
+     "ok": true,
+     "buildingId": "B-hall-main",
+     "kind": "facade",
+     "tier": 1,
+     "x": 0,
+     "y": 6.15,
+     "z": -146,
+     "surfaceY": 4.5,
+     "surfaceId": "WK-B-terrace-tier3",
+     "reasons": [],
+     "candidateCount": 1,
+     "failedCount": 0,
+     "firstFail": null
+    }
+   },
+   "failure": {
+    "cage": {
+     "radius": 12,
+     "bounds": {
+      "minX": -54,
+      "maxX": 54,
+      "minZ": -152,
+      "maxZ": -80
+     }
+    },
+    "failPlan": {
+     "ok": false,
+     "buildingId": "B-hall-main",
+     "kind": null,
+     "tier": null,
+     "x": null,
+     "y": null,
+     "z": null,
+     "surfaceY": null,
+     "surfaceId": null,
+     "reasons": [
+      "noStandablePointNearSelection"
+     ],
+     "candidateCount": 22,
+     "failedCount": 22,
+     "firstFail": {
+      "x": 0,
+      "z": -146,
+      "tier": 1,
+      "kind": "facade",
+      "ok": false,
+      "reasons": [
+       "PROBE-t15-cage"
+      ]
+     }
+    },
+    "strict": {
+     "value": null,
+     "entered": null,
+     "enteredCount": 0,
+     "err": null
+    },
+    "afterStrict": {
+     "mode": "oblique",
+     "projection": "perspective",
+     "position": {
+      "x": 0,
+      "y": 520,
+      "z": -1180
+     },
+     "target": {
+      "x": 0,
+      "y": 30,
+      "z": -60
+     },
+     "fov": 45,
+     "zoom": 1,
+     "axisIndex": 1,
+     "fpActive": false,
+     "viewDirection": {
+      "x": 0,
+      "y": -0.40081883401970775,
+      "z": 0.9161573349021892
+     }
+    },
+    "preFallbackSpawn": {
+     "id": "VP-B-fp-spawn",
+     "position": {
+      "x": -30,
+      "y": 1.65,
+      "z": -360
+     }
+    },
+    "fallbackRaw": {
+     "value": {
+      "spawnId": "VP-B-fp-spawn",
+      "position": {
+       "x": -30,
+       "y": 1.65,
+       "z": -360
+      },
+      "selectionLanding": null,
+      "selectionFallback": true
+     },
+     "entered": {
+      "position": {
+       "x": -30,
+       "y": 1.65,
+       "z": -360
+      },
+      "spawnId": "VP-B-fp-spawn",
+      "source": "probe",
+      "selectionLanding": null
+     },
+     "enteredCount": 1,
+     "err": null
+    },
+    "fallback": {
+     "spawnId": "VP-B-fp-spawn",
+     "position": {
+      "x": -30,
+      "y": 1.65,
+      "z": -360
+     },
+     "selectionLanding": null,
+     "selectionFallback": true
+    },
+    "fallbackEntered": {
+     "position": {
+      "x": -30,
+      "y": 1.65,
+      "z": -360
+     },
+     "spawnId": "VP-B-fp-spawn",
+     "source": "probe",
+     "selectionLanding": null
+    },
+    "fbPos": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "fbLanding": {
+     "buildingId": "B-hall-main",
+     "fallback": true,
+     "ok": false,
+     "kind": null,
+     "tier": null,
+     "x": null,
+     "y": null,
+     "z": null,
+     "surfaceY": null,
+     "surfaceId": null,
+     "blockedBy": null,
+     "reasons": [
+      "noStandablePointNearSelection"
+     ],
+     "candidates": 22,
+     "slotName": "金銮殿"
+    },
+    "fbJudge": {
+     "ok": true,
+     "surface": 0,
+     "inBounds": true,
+     "eyeOk": true,
+     "walkable": [
+      {
+       "id": "WK-B-plaza",
+       "zone": "B",
+       "kind": "ground",
+       "name": "礼仪广场",
+       "bounds": {
+        "minX": -100,
+        "maxX": 100,
+        "minZ": -400,
+        "maxZ": -168
+       },
+       "y": 0,
+       "enterable": true,
+       "centerY": 0,
+       "area": 46400
+      }
+     ],
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    }
+   },
+   "recovery": {
+    "recPlan": {
+     "ok": true,
+     "buildingId": "B-hall-main",
+     "kind": "facade",
+     "tier": 1,
+     "x": 0,
+     "y": 6.15,
+     "z": -146,
+     "surfaceY": 4.5,
+     "surfaceId": "WK-B-terrace-tier3",
+     "reasons": [],
+     "candidateCount": 1,
+     "failedCount": 0,
+     "firstFail": null
+    }
+   },
+   "conflict": {
+    "beforeEntry2": {
+     "mode": "oblique",
+     "projection": "perspective",
+     "position": {
+      "x": 0,
+      "y": 520,
+      "z": -1180
+     },
+     "target": {
+      "x": 0,
+      "y": 30,
+      "z": -60
+     },
+     "fov": 45,
+     "zoom": 1,
+     "axisIndex": 1,
+     "fpActive": false,
+     "viewDirection": {
+      "x": 0,
+      "y": -0.40081883401970775,
+      "z": 0.9161573349021892
+     }
+    },
+    "landed2": {
+     "x": 0,
+     "y": 6.15,
+     "z": -146
+    },
+    "escState": {
+     "mode": "fp",
+     "projection": "perspective",
+     "position": {
+      "x": 0,
+      "y": 6.15,
+      "z": -146
+     },
+     "target": {
+      "x": 0,
+      "y": 6.15,
+      "z": -136
+     },
+     "fov": 70,
+     "zoom": 1,
+     "axisIndex": 1,
+     "fpActive": true,
+     "viewDirection": {
+      "x": 0,
+      "y": 0,
+      "z": 1
+     }
+    },
+    "preG": {
+     "x": 0,
+     "y": 6.15,
+     "z": -146
+    },
+    "preGSpawn": {
+     "id": "VP-B-fp-spawn",
+     "position": {
+      "x": -30,
+      "y": 1.65,
+      "z": -360
+     }
+    },
+    "gPos": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "gState": {
+     "mode": "fp",
+     "projection": "perspective",
+     "position": {
+      "x": -30,
+      "y": 1.65,
+      "z": -360
+     },
+     "target": {
+      "x": -28.779680928916324,
+      "y": 1.65,
+      "z": -350.07473822185284
+     },
+     "fov": 70,
+     "zoom": 1,
+     "axisIndex": 1,
+     "fpActive": true,
+     "viewDirection": {
+      "x": 0.12203190710836746,
+      "y": 0,
+      "z": 0.992526177814719
+     }
+    },
+    "gEscape": {
+     "ok": true,
+     "safe": true,
+     "changed": true,
+     "spawnId": "VP-B-fp-spawn",
+     "spawnDistance": 216.09257275528927,
+     "moved": 216.09,
+     "region": "main",
+     "reasons": [],
+     "before": {
+      "x": 0,
+      "y": 6.15,
+      "z": -146
+     },
+     "after": {
+      "x": -30,
+      "y": 1.65,
+      "z": -360
+     },
+     "feetY": 0,
+     "inBounds": true,
+     "eyeOk": true,
+     "matchesSpawn": true,
+     "source": "key:G"
+    },
+    "distG": 216.0926,
+    "afterF": {
+     "mode": "oblique",
+     "projection": "perspective",
+     "position": {
+      "x": 0,
+      "y": 520,
+      "z": -1180
+     },
+     "target": {
+      "x": 0,
+      "y": 30,
+      "z": -60
+     },
+     "fov": 45,
+     "zoom": 1,
+     "axisIndex": 1,
+     "fpActive": false,
+     "viewDirection": {
+      "x": 0,
+      "y": -0.40081883401970775,
+      "z": 0.9161573349021892
+     }
+    }
+   }
+  }
+ ],
+ "selectInfo": {
+  "pick": "B-hall-main"
+ },
+ "metrics": {
+  "entryYawDeg": 26.565,
+  "rightX": -0.8944,
+  "rightZ": 0.4472,
+  "adD": 5.2,
+  "adA": -5.2,
+  "adW": 5.2,
+  "adS": -5.2,
+  "adDdist": 5.2,
+  "adAdist": 5.2,
+  "adDdistinctY": 1,
+  "adDinside": 0,
+  "adAinside": 0,
+  "spaceTourAfter": 0,
+  "spaceApex": 0.8526,
+  "spaceDive": 0,
+  "apex": 0.8526,
+  "landingDelta": 0,
+  "jumpInside": 0,
+  "jumpStarts": 1,
+  "jumpLandings": 1,
+  "jumpReverts": 0,
+  "landingIsGround": 1,
+  "jumpWallInside": 0,
+  "jumpWallStarts": 3,
+  "jumpWallLandings": 3,
+  "jumpWallReverts": 0,
+  "stuckHudFrames": 0,
+  "fExit": 1,
+  "fNotInterior": 1,
+  "fModeAfter": "oblique",
+  "fSelExit": 1,
+  "fSelNotInterior": 1,
+  "fSelModeAfter": "oblique",
+  "tpLegacyNoLanding": 1,
+  "tpIsFp": 1,
+  "tpDistFacade": 0,
+  "tpOk": 1,
+  "tpEyeExact": 1,
+  "tpDeterministic": 1,
+  "tpPureNoMutation": 1,
+  "tpFailReason": 1,
+  "tpFailNoMutation": 1,
+  "tpStrictNull": 1,
+  "tpStrictSilent": 1,
+  "tpStrictNoMutation": 1,
+  "tpFallback": 1,
+  "tpRecover": 1,
+  "tpEscKeep": 1,
+  "tpGNotHijacked": 1,
+  "tpFExitRestore": 1
+ }
+}

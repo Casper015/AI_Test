@@ -10,7 +10,7 @@
  *   4. 对象全部深冻结：下游只能读，不能就地改写。
  */
 
-export const CONFIG_VERSION = '1.0.9'; // t25：新增 LIGHTING.atmosphere.smokeMinPointPx = 1.0（烟柱 LOD 门限，落地 t1 交回的最小修复：亚像素点精灵整柱不绘制，修"红色边缘持续闪烁"；粒子数/预算/材质规格逐值未动）；上一版 1.0.8 = t2：INTERACTION.jump 启用（enabled true + maxHeight/cooldownSeconds）；再上版 1.0.7 = t84 §8.2 分区配额重分配
+export const CONFIG_VERSION = '1.0.10'; // t40：新增 LIGHTING.atmosphere.smokeShowPointPx = 1.25（烟柱 LOD **滞回上门限**：单门限时点径在 1.0 附近抖动 ⇒ 整柱 visible 逐帧跳变，移动协议实测最高 12 次翻转/48 帧，滞回后 0–1 次；只改可见性、**零新增绘制调用**，粒子数/预算/材质规格逐值未动）；上一版 1.0.9 = t25：新增 LIGHTING.atmosphere.smokeMinPointPx = 1.0（烟柱 LOD 门限，落地 t1 交回的最小修复：亚像素点精灵整柱不绘制，修"红色边缘持续闪烁"；粒子数/预算/材质规格逐值未动）；上一版 1.0.8 = t2：INTERACTION.jump 启用（enabled true + maxHeight/cooldownSeconds）；再上版 1.0.7 = t84 §8.2 分区配额重分配
 export const STYLE_BASELINE = 'v1.0.0';
 
 /** 统一场景种子：每个区域用 deriveSeed(zone) 派生固定随机序列，保证复现与截图可比对（§3.1 随机性）。 */
@@ -488,6 +488,19 @@ export const LIGHTING = Object.freeze({
      * **粒子数/预算/材质规格（size 1.1 / opacity 0.16 / span 6 / 48 颗）逐值未动**（§8.2 与守卫②均断言）。
      */
     smokeMinPointPx: 1.0,
+    /**
+     * t40：**烟柱 LOD 的滞回上门限**（单位 = 屏幕像素）。
+     *
+     * 背景（t40 移动协议实测，`docs/report-motion-edges.md` §3）：t25 的 LOD 只有一个门限 ⇒ 相机在
+     * 门限附近运动时（行走/旋转都会）`pointPx` 在 1.0 上下抖动，整柱 `points.visible` **逐帧跳变**
+     * （实测：绕门限往复行走 48 帧，单柱 visible 翻转最高 **12** 次）⇒ 移动中的"烟柱爆闪"。
+     *
+     * 修法（滞回，**零新增绘制调用**）：只改可见性判定 ——
+     *   `pointPx < smokeMinPointPx`(1.0) ⇒ 隐藏；`pointPx ≥ smokeShowPointPx`(1.25) ⇒ 显示；
+     *   落在两者之间保持上一帧状态（粘滞）。滞回带 1.0–1.25 px ⇔ 距离带 ≈ **495 m … 396 m**。
+     * 两个门限都只作用于**可见性**：粒子数/预算/材质规格/相位公式逐值未动。
+     */
+    smokeShowPointPx: 1.25,
     dustEnabled: true,
     dustParticleBudget: 220,
     bloomEnabled: true,

@@ -1057,6 +1057,39 @@ export function mergeManifestRows(oldList = [], newList = [], { preferComplete =
   return [...map.values()];
 }
 
+/**
+ * t36：**同键 `judge` 与 `imageStats` 必须同源**（纯函数，可单测）。
+ * 同一次统计应同时喂给两侧；同键两侧数值不一致、或一侧缺失而另一侧有值 ⇒ 判为"写图/统计/落盘不同步"。
+ * 返回不一致清单（空数组 = 同源）。仅一侧存在（另一侧根本不产条目）**不算**不一致——
+ * 那属于"渲染失败/未统计"分支，交由清单完整性规则处理。
+ */
+export function findSourceMismatches(judgeResults = [], imageStats = []) {
+  const statByName = new Map(imageStats.map((s) => [String(s.name).replace(/\(invalid\)$/, ''), s]));
+  const judgeByName = new Map(judgeResults.map((j) => [String(j.name), j]));
+  const names = [...new Set([...judgeByName.keys(), ...statByName.keys()])];
+  const out = [];
+  for (const name of names) {
+    const judged = judgeByName.get(name);
+    const stat = statByName.get(name);
+    if (!judged || !stat) continue;
+    const judgeDark = judged.contentDark;
+    const statDark = stat.content?.darkRatio;
+    const jFinite = Number.isFinite(judgeDark);
+    const sFinite = Number.isFinite(statDark);
+    /* 两侧都"有值且一致" ⇒ 同源；两侧都为空 ⇒ 一致的空（历史条目常见），不算不同源。
+       真正危险的**只有非对称**：一侧有值而另一侧为空，或两侧有值但不相等。 */
+    if (!jFinite && !sFinite) continue;
+    if (jFinite !== sFinite) {
+      out.push({ name, judgeDark: judgeDark ?? null, statDark: statDark ?? null, reason: '非对称（一侧缺失）' });
+      continue;
+    }
+    if (Math.abs(judgeDark - statDark) > 1e-9) {
+      out.push({ name, judgeDark, statDark, reason: '数值不一致' });
+    }
+  }
+  return out;
+}
+
 export function judgeShot({ view, stats }) {
   if (!stats) return { ok: false, reasons: ['无亮度统计'] };
   const reasons = [];
@@ -1683,23 +1716,9 @@ async function main() {
 
   /* t36 护栏缝③（其三）：**judge 与 imageStats 必须同源** —— 同一次统计同时喂给两侧，
      任一侧为空而另一侧有值即为"写图/统计/落盘不同步"，必须在落盘前显式报错（而不是留下不一致清单）。 */
-  const statByName = new Map(imageStats.map((s) => [String(s.name).replace(/\(invalid\)$/, ''), s]));
-  const judgeByName = new Map(judgeResults.map((j) => [String(j.name), j]));
-  const sourcePairs = [...new Set([...judgeByName.keys(), ...statByName.keys()])];
-  const mismatched = sourcePairs.filter((name) => {
-    const judged = judgeByName.get(name);
-    const stat = statByName.get(name);
-    if (!judged || !stat) return false; // 仅一侧有：属"失败/未统计"分支，交由下方完整性检查处理
-    const jd = judged.contentDark;
-    const sd = stat.content?.darkRatio;
-    if (!Number.isFinite(jd) || !Number.isFinite(sd)) return true; // 一侧缺失 = 不同步
-    return Math.abs(jd - sd) > 1e-9;
-  });
+  const mismatched = findSourceMismatches(judgeResults, imageStats);
   if (mismatched.length > 0) {
-    console.error(`shot: ✗ manifest 同键 judge 与 imageStats 不同源（t36 缝③）：${mismatched.map((n) => {
-      const j = judgeByName.get(n), s = statByName.get(n);
-      return `${n} judge.contentDark=${j?.contentDark} stat.content.darkRatio=${s?.content?.darkRatio}`;
-    }).join('；')}`);
+    console.error(`shot: ✗ manifest 同键 judge 与 imageStats 不同源（t36 缝③）：${mismatched.map((m) => `${m.name} judge.contentDark=${m.judgeDark} stat.content.darkRatio=${m.statDark}`).join('；')}`);
     process.exit(4);
   }
 

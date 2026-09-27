@@ -613,8 +613,13 @@ const SLICE_A_WALL_T = 0.6;
 /* ── 以下为**有意 pin（冻结契约计数）**：升级/加面/加栋时必须**人工同步**（t22 升 1.1.24 时版本行漏同步即由本类触发）。
    t32 处理方式：本类**保留**（它们是"契约冻结值"的唯一书面载体），并另在 `LAYOUT_STATS` 块新增**跨注册表一致性**判据
    （摘要 vs 实际数组，数据推导、不随升版失效）；括号里的历史数字（如 171→175）均为**历史快照，不参与判定**。 ── */
-eq('WALKABLE = 175（171 + t13：两座水中亭各 2 级汀步 = 4 面）', L.WALKABLE.length, 175);
-eq('VIEWPOINTS = 61（20 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿）', L.VIEWPOINTS.length, 61);
+/* t39：+72 = 可登塔楼（CLIMB_TOWERS 派生：入口 2 + 每层环带/踏步 + 顶层观景台）；判据用**数据推导**，不写 247。 */
+const CLIMB_WK = L.WALKABLE.filter((w) => w.towerId);
+eq(`WALKABLE = 175 + t39 塔楼面 ${CLIMB_WK.length}（= ${175 + L.CLIMB_TOWER_FACES.length}）`, L.WALKABLE.length, 175 + L.CLIMB_TOWER_FACES.length);
+eq('t39 塔楼面数 = CLIMB_TOWER_FACES 派生数（72：入口 2 + 环带 15 + 踏步 54 + 观景台 1）', CLIMB_WK.length, L.CLIMB_TOWER_FACES.length);
+eq('t39 塔楼面 kind 全部取既有白名单值 terrace', [...new Set(CLIMB_WK.map((w) => w.kind))].join(','), 'terrace');
+eq(`VIEWPOINTS = 61 + t39 塔顶 ${L.CLIMB_TOWER_VIEWPOINTS.length}（= ${61 + L.CLIMB_TOWER_VIEWPOINTS.length}）`, L.VIEWPOINTS.length, 61 + L.CLIMB_TOWER_VIEWPOINTS.length);
+eq('t39 塔顶机位 mode = focus-extra（不属 43 栋内景冻结集）', [...new Set(L.CLIMB_TOWER_VIEWPOINTS.map((v) => v.mode))].join(','), 'focus-extra');
 eq('FP_ROUTE = 50（9 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿）', L.FP_ROUTE.length, 50);
 eq('visitable = 43（2 殿 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿；4 角楼按 Q3 排除）', L.SLOTS.filter((s) => s.visitable).length, 43);
 eq('冻结计数不动：SLOTS/WALLS/CONNECTORS/院落/导览', [L.SLOTS.length, L.WALLS.length, L.CONNECTORS.length, L.COURTYARDS.length, L.TOUR_POINTS.length].join('/'), '79/60/32/14/10');
@@ -649,9 +654,9 @@ check('t9 批量装饰：与既有槽位（含彼此）重叠 0', (() => {
   }
   return hits === 0;
 })(), '存在重叠');
-check('t9 批量装饰：不进内景/机位/走查（visitable 43 / INTERIOR 43 / VP 61 / FP 50 不变）',
+check(`t9 批量装饰：不进内景/机位/走查（visitable 43 / INTERIOR 43 / VP ${61 + L.CLIMB_TOWER_VIEWPOINTS.length} / FP 50 不变）`,
   L.SLOTS.filter((s) => s.visitable).length === 43 && Object.keys(L.INTERIOR_BY_SLOT).length === 43
-    && L.VIEWPOINTS.length === 61 && L.FP_ROUTE.length === 50
+    && L.VIEWPOINTS.length === 61 + L.CLIMB_TOWER_VIEWPOINTS.length && L.FP_ROUTE.length === 50
     && BULK.every((s) => !L.INTERIOR_BY_SLOT[s.id] && !L.VIEWPOINTS.some((v) => v.slotId === s.id) && !L.FP_ROUTE.some((f) => f.slotId === s.id)),
   `visitable ${L.SLOTS.filter((s) => s.visitable).length} / 内景 ${Object.keys(L.INTERIOR_BY_SLOT).length} / VP ${L.VIEWPOINTS.length} / FP ${L.FP_ROUTE.length}`);
 check('t9 批量装饰：障碍按 SLOTS 统一派生为 blocks:\'all\'（登记与几何同轮）',
@@ -660,8 +665,8 @@ check('t9 批量装饰：障碍按 SLOTS 统一派生为 blocks:\'all\'（登记
 /* t13 口径同步（**判据只增不减**）：t9 的"w 批量装饰不新增可行走面"由"总数仍 171"改为
    "总数 = 171 + t13 汀步面数（=4）且其中无 F-bulk 面" —— 原意（批量装饰零新增面）一字未变，
    变的只是同卡相邻的 t13 增量被显式计入，避免把两卡增量混为一谈。 */
-check('t9 批量装饰：不新增任何可行走面（无 F-bulk 面；总数 = 171 + t13 汀步 4 面 = 175）',
-  L.WALKABLE.length === 171 + STONE_STEP_SURFACE_IDS.length && !L.WALKABLE.some((w) => /F-bulk/.test(w.id)),
+check(`t9 批量装饰：不新增任何可行走面（无 F-bulk 面；总数 = 171 + t13 汀步 ${STONE_STEP_SURFACE_IDS.length} + t39 塔楼 ${L.CLIMB_TOWER_FACES.length}）`,
+  L.WALKABLE.length === 171 + STONE_STEP_SURFACE_IDS.length + L.CLIMB_TOWER_FACES.length && !L.WALKABLE.some((w) => /F-bulk/.test(w.id)),
   `${L.WALKABLE.length}`);
 check('t9 批量装饰：落点在宫墙内包络且 |x| ≥ 250（远离中轴必经路径）',
   BULK.every((s) => Math.abs(s.x) >= 250 && L.insideEnvelope(s.x, s.z) && L.zoneAt(s.x, s.z) !== null),
@@ -797,7 +802,7 @@ check('legacy 走查口径不受影响：WP-fp-02 处 floorYAt = 0.4', Math.abs(
   const ser = interiors.map((w) => `${w.id}:${w.bounds.minX},${w.bounds.minZ},${w.bounds.maxX},${w.bounds.maxZ},${w.y}`).join('|');
   let h = 0; for (const c of ser) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   check('内景包围盒只取 kind:interior（43 条，冻结哈希 0xf5814450 = t10 起；t10 前为 0x51d2348e —— 差异仅来自 E 两栋内景地面 1.4→1.3）', interiors.length === 43 && h.toString(16) === 'f5814450', `${interiors.length}/${h.toString(16)}`);
-  check('通道面不新增机位/走查点（VIEWPOINTS 61 · FP_ROUTE 50 不变）', L.VIEWPOINTS.length === 61 && L.FP_ROUTE.length === 50, `${L.VIEWPOINTS.length}/${L.FP_ROUTE.length}`);
+  check(`通道面不新增机位/走查点（VIEWPOINTS ${61 + L.CLIMB_TOWER_VIEWPOINTS.length} · FP_ROUTE 50 不变）`, L.VIEWPOINTS.length === 61 + L.CLIMB_TOWER_VIEWPOINTS.length && L.FP_ROUTE.length === 50, `${L.VIEWPOINTS.length}/${L.FP_ROUTE.length}`);
 }
 
 
@@ -1543,6 +1548,90 @@ console.log(` - t85 连通性定位：**surfaces-only 启发式（不含 connect
 
 console.log(` - 连接 ${L.CONNECTORS.length}，道路 ${L.ROADS.length} 段，墙 ${L.WALLS.length} 段，可行走面 ${L.WALKABLE.length}，障碍 ${L.OBSTACLES.length}`);
 console.log(` - 视角 ${L.VIEWPOINTS.length}，导览点 ${L.TOUR_POINTS.length}，走查点 ${L.FP_ROUTE.length}，config ${CONFIG_VERSION}/${STYLE_BASELINE}`);
+
+
+/* ==========================================================================================
+ * t39 · 可登塔楼：登记（layout 派生）↔ 几何（kit.towerPlan）逐值同轮
+ * ------------------------------------------------------------------------------------------
+ * 口径：`CLIMB_TOWERS` 是唯一权威源；72 面 / 1 障碍 / 1 机位全部派生。
+ * 判据（只增不减）：①登记形状与数量 ②面序列逐跳 ≤ climbStepMax（0.42 < 0.45，禁 0.5 等值）、
+ *   反向同阈值、平面不叠压 ③中央内芯不吞盘道（每个面都在内芯之外或高于 y1）④**与 kit.towerPlan 逐值相等**
+ *   （登记与几何同轮）⑤突变对照（扰动一个面的 y ⇒ 漂移判定必须转红，证明判据非恒真）。
+ * ======================================================================================== */
+{
+  const KIT = await import(join(ROOT, 'src', 'kit', 'towers.js'));
+  const towers = L.CLIMB_TOWERS ?? [];
+  eq('t39 CLIMB_TOWERS 座数 = 1', towers.length, 1);
+  const t0 = towers[0];
+  eq('t39 选址 (226, 262.4)（t37 实测干净；F 区 80/80 零余量故放 E）', `${t0.x},${t0.z}`, '226,262.4');
+  eq('t39 区域 = E', t0.zone, 'E');
+  eq('t39 baseY = 区域地坪（TERRAIN.sideCourtY = groundYAt(226,262.4)）', t0.baseY, CONFIG_NS.CONFIG.TERRAIN.sideCourtY);
+  eq('t39 baseY 与 groundYAt 一致', t0.baseY, L.groundYAt(t0.x, t0.z));
+  check('t39 LAYOUT_VERSION 已递增（≥ 1.1.27）', Number(L.LAYOUT_VERSION.split('.')[2]) >= 27, L.LAYOUT_VERSION);
+
+  // ① 登记形状
+  eq('t39 塔楼面 72 个', L.CLIMB_TOWER_WALKABLE.length, 72);
+  eq('t39 面种类分布（ring 15 / step 54 / entry 2 / deck 1）', JSON.stringify(L.CLIMB_TOWER_SUMMARY.byKind), JSON.stringify({ ring: 15, step: 54, entry: 2, deck: 1 }));
+  check('t39 面 id 唯一且前缀 WK-<towerId>-', new Set(L.CLIMB_TOWER_WALKABLE.map((w) => w.id)).size === 72 && L.CLIMB_TOWER_WALKABLE.every((w) => w.id.startsWith(`WK-${t0.id}-`)));
+  check('t39 面 kind 全为 terrace（既有白名单；未新增 kind）', L.CLIMB_TOWER_WALKABLE.every((w) => w.kind === 'terrace'));
+  check('t39 面全部落在 E 区且在包络内', L.CLIMB_TOWER_WALKABLE.every((w) => w.zone === 'E' && L.insideEnvelope((w.bounds.minX + w.bounds.maxX) / 2, (w.bounds.minZ + w.bounds.maxZ) / 2)));
+  eq('t39 塔楼面已并入 WALKABLE（引用同一批 id）', L.WALKABLE.filter((w) => w.towerId === t0.id).length, 72);
+
+  // ② 障碍（中央内芯）
+  eq('t39 障碍 1 条', L.CLIMB_TOWER_OBSTACLES.length, 1);
+  const ob = L.CLIMB_TOWER_OBSTACLES[0];
+  eq('t39 障碍 id', ob.id, `OB-${t0.id}-shaft`);
+  eq('t39 障碍 sourceType 在 core 契约白名单内（building）', ob.sourceType, 'building');
+  eq('t39 障碍 blocks = all（实心内芯）', ob.blocks, 'all');
+  eq('t39 障碍无门洞（不得留隐形缺口）', ob.door, null);
+  eq('t39 障碍 y0 = baseY', ob.y0, t0.baseY);
+  eq('t39 障碍 y1 = topY − slab（= 9.214，观景台板底）', ob.y1, L.CLIMB_TOWER_PLANS[0].topY - L.CLIMB_TOWER_PLANS[0].tokens.slab);
+  const deck = L.CLIMB_TOWER_FACES.find((f) => f.kind === 'deck');
+  check('t39 观景台面高于内芯顶（含界判定也不拦）', deck.y > ob.y1 && ob.y1 < deck.y, `deck ${deck.y} vs y1 ${ob.y1}`);
+  const shaftInside = L.CLIMB_TOWER_FACES.filter((f) => {
+    const inXZ = Math.min(f.x + f.w / 2, ob.bounds.maxX) - Math.max(f.x - f.w / 2, ob.bounds.minX) > 1e-6
+      && Math.min(f.z + f.d / 2, ob.bounds.maxZ) - Math.max(f.z - f.d / 2, ob.bounds.minZ) > 1e-6;
+    return inXZ && f.y < ob.y1 - 1e-6;
+  });
+  eq('t39 无任何面落在内芯之内（盘道/观景台不被自身塔身吞掉）', shaftInside.length, 0);
+
+  // ③ 一层 12 条内芯 … 位置自洽（内芯半宽 = 最内层塔身；面最近处距内芯边缘 ≥ 玩家半径）
+  const halfShaft = (ob.bounds.maxX - ob.bounds.minX) / 2;
+  check('t39 内芯半宽 = 最内层塔身（< 首层半宽 ⇒ 不是满宽实心）', halfShaft < L.CLIMB_TOWER_PLANS[0].tokens.shaftHalf0 + L.CLIMB_TOWER_PLANS[0].tokens.ringW - 1e-6, `${halfShaft}`);
+
+  // ④ 机位
+  eq('t39 塔顶机位 1 个', L.CLIMB_TOWER_VIEWPOINTS.length, 1);
+  const vp = L.CLIMB_TOWER_VIEWPOINTS[0];
+  eq('t39 机位 mode = focus-extra（不得用 interior，避免破坏 43 栋内景冻结集）', vp.mode, 'focus-extra');
+  eq('t39 机位 id', vp.id, `VP-${t0.id}-top`);
+  eq('t39 机位高度 = topY + 1.65', vp.position.y, L.CLIMB_TOWER_PLANS[0].topY + 1.65);
+  eq('t39 机位已并入 VIEWPOINTS', L.VIEWPOINTS.filter((v) => v.towerId === t0.id).length, 1);
+  eq('t39 focus-extra 机位数 = 6 基础 + 1 塔顶', L.VIEWPOINTS.filter((v) => v.mode === 'focus-extra').length, 7);
+
+  // ⑤ 面序列自检（登记口径）
+  const rep = L.CLIMB_TOWER_SUMMARY.climb[0].report;
+  eq('t39 面序列逐跳自检 ok（上行 + 反向 + 无平面叠压）', rep.ok, true);
+  eq('t39 逐跳数 = 59（入口→环带→18 级踏步 ×3→观景台）', rep.hops, 59);
+  check('t39 实测最大单跳 ≤ climbStepMax(0.42) 且 < 0.45（禁 0.5 等值）', rep.maxHopMeasured <= rep.maxHop + 1e-6 && rep.maxHop <= 0.45, `${rep.maxHopMeasured}/${rep.maxHop}`);
+  eq('t39 反向同阈值（无单向陷阱）', rep.reverseOk, true);
+  eq('t39 平面叠压 = 0（不被更高面取高）', rep.overlapCount, 0);
+
+  // ⑥ **登记与几何同轮**：layout 派生 vs kit.towerPlan 逐值相等
+  const plan = KIT.towerPlan({ id: t0.id, spec: t0.spec, x: t0.x, z: t0.z, baseY: t0.baseY }, CONFIG_NS.CONFIG);
+  const faceKey = (f) => `${f.id}|${f.y}|${f.w}|${f.d}|${f.x}|${f.z}`;
+  const layoutKeys = L.CLIMB_TOWER_FACES.map(faceKey).sort();
+  const kitKeys = plan.faces.map(faceKey).sort();
+  const drift = layoutKeys.filter((k, i) => k !== kitKeys[i]);
+  eq(`t39 layout 派生的 ${layoutKeys.length} 个面与 kit.towerPlan 逐值相等（登记↔几何同轮）`, drift.length, 0);
+  eq('t39 障碍 y0/y1 与 kit 逐值相等', `${ob.y0}|${ob.y1}`, `${plan.shafts[0].y0}|${plan.shafts[0].y1}`);
+  eq('t39 机位与 kit 逐值相等', `${vp.position.y}|${vp.target.z}|${vp.fov}`, `${plan.viewpoint.position.y}|${plan.viewpoint.target.z}|${plan.viewpoint.fov}`);
+  eq('t39 topY / totalHeight 与 kit 逐值相等', `${L.CLIMB_TOWER_PLANS[0].topY}|${L.CLIMB_TOWER_PLANS[0].totalHeight}`, `${plan.topY}|${plan.totalHeight}`);
+  eq('t39 塔顶形制 pyramidal（grade 2 白名单内；grade 3 只允许 doubleEaveHip）', plan.roofType, 'pyramidal');
+  check('t39 grade 2 + pyramidal 在 config.GRADES 白名单内', CONFIG_NS.CONFIG.GRADES[plan.grade].roofTypes.includes('pyramidal'), JSON.stringify(CONFIG_NS.CONFIG.GRADES[plan.grade].roofTypes));
+  // 突变对照：扰动一个面的 y ⇒ 同一比较必须报漂移（证明判据非恒真）
+  const perturbed = plan.faces.map((f, i) => (i === 5 ? { ...f, y: f.y + 0.1 } : f)).map(faceKey).sort();
+  check('t39 突变对照：扰动一个面 y ⇒ 逐值比较必须报出漂移（判据非恒真）', perturbed.filter((k, i) => k !== kitKeys[i]).length === 1, `${perturbed.filter((k, i) => k !== kitKeys[i]).length}`);
+}
 
 if (failures.length > 0) {
   console.error('\n失败明细：');

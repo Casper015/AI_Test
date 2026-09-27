@@ -92,8 +92,31 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     return true;
   }
 
-  /** 最近可走格（把任意世界坐标吸附到图上）。 */
+  /**
+   * t26：**唯一取格口径**（同一世界坐标 ⇒ 同一格）。
+   *
+   * 缺陷（t26 只读取证）：`componentOf` / `connected` / `path` 三个 API 各自以**默认半径 6**
+   * 独立调用 `nearestCell`（4 个调用点），取格结果只靠"实现恰好一致"维系；一旦某个调用点
+   * 的半径/锚点/缓存键被改动，同一坐标就会吸附到**不同格**，而 F27 的"正向 `componentOf` /
+   * 反向 `connected`"正是拿同一坐标的两条路径对比 ⇒ 读数抖动（t13 交回的
+   * `WK-C-side-{west,east}-rear-transition-1` `fwd=false/bwd=true` 偶发红）。
+   * 另：`labelAll` 的单条缓存以**锚点格坐标**为键，若键不完整（只看 col 不看 row）则 flood
+   * 锚点会取到陈旧分量 ⇒ 读数依赖调用历史。
+   *
+   * 修法（最小、只增）：`nearestCell` 按 `(半径, x, z)` **记忆化**并返回**同一冻结对象**；
+   * 新增唯一入口 `snapPoint(point)`，四个调用点全部改走它 ⇒ 同一坐标恒得同一格对象，
+   * `labelAll` 的锚点也由同一入口给出（缓存键 = 锚点格坐标，完整两维）。
+   */
+  const snapCache = new Map();
+  let snapHits = 0;
+
+  /** 最近可走格（把任意世界坐标吸附到图上）；**同一 (半径,x,z) 恒返回同一冻结对象**。 */
   function nearestCell(x, z, radiusCells = 6) {
+    const key = `${radiusCells}|${x}|${z}`;
+    if (snapCache.has(key)) {
+      snapHits += 1;
+      return snapCache.get(key);
+    }
     const col = toCol(x);
     const row = toRow(z);
     let best = null;
@@ -111,7 +134,14 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
         }
       }
     }
-    return best ? { ...best, distance: bestDist } : null;
+    const out = best ? Object.freeze({ ...best, distance: bestDist }) : null;
+    snapCache.set(key, out);
+    return out;
+  }
+
+  /** t26：**唯一取格入口**（所有 API 必须走这里；`null` 输入 ⇒ `null`）。 */
+  function snapPoint(point, radiusCells = 6) {
+    return point ? nearestCell(point.x, point.z, radiusCells) : null;
   }
 
   /** 广度优先：从起点出发的可达集合（返回 Int32Array 父指针 + 访问顺序）。 */
@@ -148,8 +178,8 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
 
   /** 起点→终点的最短路径（世界坐标折线）。 */
   function path(from, to) {
-    const start = nearestCell(from.x, from.z);
-    const goal = nearestCell(to.x, to.z);
+    const start = snapPoint(from); // t26：唯一取格入口
+    const goal = snapPoint(to);
     if (!start || !goal) return { ok: false, reason: 'noCell', path: [] };
     const { parents, visited } = labelAll({ x: from.x, z: from.z }); // t156：复用按锚点缓存的标注（同一 flood ⇒ 与原来逐值相同）
     const goalIndex = index(goal.col, goal.row);
@@ -179,7 +209,7 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     //   判据强度不变：任一取不到格 / 不同分量 ⇒ `ok:false`。
     const list = Array.isArray(points) ? points : [];
     if (list.length === 0) return { ok: false, reason: '空点集', anchors: [], unreachable: [], visited: 0 };
-    const startCell = nearestCell(list[0].x, list[0].z);
+    const startCell = snapPoint(list[0]); // t26：唯一取格入口（与 componentOf/path 同一口径）
     if (!startCell) {
       return { ok: false, reason: '起点不在可行走栅格上', anchors: [null], unreachable: [{ index: 0, point: list[0], reason: 'noCell' }], visited: 0 };
     }
@@ -187,7 +217,7 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     const anchors = [];
     const unreachable = [];
     list.forEach((p, i) => {
-      const cell = nearestCell(p.x, p.z);
+      const cell = snapPoint(p); // t26：唯一取格入口
       anchors.push(cell);
       if (!cell) {
         unreachable.push({ index: i, point: p, reason: 'noCell' });
@@ -266,7 +296,8 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
    * 说明：`root/size` 来自**同一次 flood**，`path()` 的行为与耗时特征**不变**（未改其实现）。
    */
   function labelAll(from = null) {
-    const anchor = nearestCell(from?.x ?? 0, from?.z ?? -480);
+    // t26：锚点走**唯一取格入口**；默认锚点 (0,-480) 逐字未改（与既有行为一致）。
+    const anchor = from ? snapPoint(from) : nearestCell(0, -480);
     if (!anchor) return null;
     if (labelCache && labelCache.anchor.col === anchor.col && labelCache.anchor.row === anchor.row) return labelCache;
     const { parents, visited } = flood(anchor);
@@ -274,7 +305,7 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     return labelCache;
   }
   function componentOf(x, z, from = null) {
-    const cell = nearestCell(x, z);
+    const cell = snapPoint({ x, z }); // t26：唯一取格入口
     if (!cell) return { ok: false, cell: null, root: null, size: 0 };
     const cache = labelAll(from);
     if (!cache) return { ok: false, cell, root: null, size: 0 };
@@ -290,6 +321,10 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     sample,
     canStep,
     nearestCell,
+    /** t26：**唯一取格入口**（`componentOf`/`connected`/`path` 内部全部走它；供测试断言"同一坐标同一格"）。 */
+    snapPoint,
+    /** t26：取格口径诊断（同一坐标复用同一格对象的证据：命中数 / 缓存条目数）。 */
+    snapStats: () => ({ hits: snapHits, entries: snapCache.size }),
     componentOf, // t148：连通分量访问器（1 次 flood 标注 + O(1) 成员判定）
     flood,
     reverseFlood,

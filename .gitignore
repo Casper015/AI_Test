@@ -55,6 +55,7 @@ docs/shots*/*.dom.html
 docs/screenshots/*.png
 docs/screenshots/**/*.png
 docs/reports/**/*.png
+docs/report*/**/*.png
 **/docs/shots*/*.png
 **/docs/shots*/**/*.png
 **/docs/shots*/*.invalid.png
@@ -63,6 +64,7 @@ docs/reports/**/*.png
 **/docs/screenshots/*.png
 **/docs/screenshots/**/*.png
 **/docs/reports/**/*.png
+**/docs/report*/**/*.png
 
 # Retain Critical Documentation & Manifests
 !docs/shots/*.md

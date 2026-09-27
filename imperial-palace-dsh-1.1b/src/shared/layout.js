@@ -14,6 +14,7 @@
  */
 
 import {
+  INTERACTION,
   LAYOUT_CONSTRAINTS,
   MODULES,
   GRADES,
@@ -25,7 +26,7 @@ import {
   deepFreeze,
 } from './config.js';
 
-export const LAYOUT_VERSION = '1.1.26'; // t38：中轴体量分级**口径落地**（唯一权威源 `AXIS_TIER_SPEC` + `slotVolumeCaliber`/`axisTierRows`/`axisTierStats`/`axisTierLadder`/`axisPrincipal`/`axisNoInversion`/`axisTierReport` + 冻结摘要 `AXIS_TIER_SUMMARY`，并入 `LAYOUT_STATS.axisTiers`）。采用口径 = **eaveAbs**（檐口高自**自身基准面**，即扣掉 `onWall` 的墙高）：T1(2 栋) > T2(6 栋) 面积比 1.3511≥1.10 · 檐高比 1.1682≥1.05（Δ1.11m）· 主位比 1.6579≥1.20；**采用口径下 0 倒挂**。绝对高度台账（raw `totalHeight` 高于主殿 20.48 者 8 栋）**全部 `onWall=true`**（4 城门 + 4 角楼）⇒ 该读数被判定为**口径伪影**并钉成常驻判据（R6c：非 onWall 者 0 栋）；**本卡不改体量**（三条可调路径均被硬约束堵死，量化交回裁定，见 §14 与 `AXIS_TIER_SPEC` 注释）。**计数零变化**：SLOTS 79 / WALKABLE 175 / OBSTACLES 93 / 内景 43 / 机位 61 / 道路 97 / 墙 60 全部不变 // t31：御花园两座配殿**池上石栈道**（有界开槽 + 同轮可见石件）—— `OB-WB-F-pond-{west,east}` 改 `blocks:'exceptDoor'` + `door`（宽 14m = 门洞净宽、沿门轴 z、跨池全深、面积守恒：bounds/水位 0.05/池深 0.45 一字未改）+ 两条 `surface:'bridgeDeck'` 道路段（`RD-F-garden-hall-{west,east}-pond-walk`，唯一权威源 `F_POND_WALKWAYS`）⇒ 两栋正门不再依赖「从水面穿的幻影通道」。ROADS 95→97；**WALKABLE 175 / SLOTS 79 / OBSTACLES 93 / 内景 43 / 机位 61 全部不变**（求解器放行水面只认 `bridgeDeck` 路面，故不新增可行走面） // t22：门洞贯穿语义 —— 63 条建筑门补 `door.through`（26 座贯穿类 = gateHall 6 + courtyardGate 10 + 开敞亭 10；37 座 hall/sideHall = false）与镜像锚点 `door.back`（对侧外墙面向外 6.0m，与 facade 同源同精度）；**只登记数据、不新增可行走面**（WALKABLE/SLOTS/OBSTACLES/内景/VP 计数全部不变） // t13：两座水中亭（D 水池亭 / E 水榭）**可达** —— 每池落 2 级汀步（0.40→0.65→0.90，逐跳 0.25、双向 ≤0.45、禁 0.50 等值，§12.1.4.5）+ 同轮可见石件；`OB-WB-{D,E}-pond` 改 `blocks:'exceptDoor'` + **有界开槽**（通道 = 汀步走廊，宽 8m、沿门轴 z，面积守恒：水体不降水、不缩池；其余水面仍逐点阻挡）；删两亭 `doorBlockedBy`（passable 由 false→true、blockedBy null）。WALKABLE 171→175（每池 2 面 ⇒ +4） // t10：E 侧两栋台基 1.0→0.9（门外过渡逐跳 0.50 等值 → 0.45 留裕量；§12.1.4.5 禁止等值阈值）—— 修 verify-completeness 5.3 的 4 点不可达；WALKABLE 仍 171、SLOTS/OBSTACLES/内景数不变 // t9：GARDEN_BULK_ANNEX 批量装饰建筑 12 座（数据驱动；实心 blocks:'all'、非 visitable ⇒ 内景仍 43、WALKABLE 仍 171；SLOTS 67→79、OBSTACLES 81→93） // t158：float32 裕量级差（1.92/1.45 + 1.3/1.0）+ 过渡矩形规范化 // t151（t157 曾试 1.95/1.5 但会覆盖 transition-2 中心 ⇒ 已回退，配方见回执） // t151：C 两殿门外加法下坡带（未被覆盖窗口内 1.9/1.4） // t145：C 两殿台基接近走廊有界开槽（0.9↔1.3 恢复相邻） // t134：删除 4 片开槽残片，使门带不再被更高面取高（门洞节点高度回到 1.5/1.7） // t131：通路存在守卫 + 加法补 E-court3-hall 门外台阶 // t128：C 两栋遮蔽开槽（第二次授权减法）+ 遮蔽常驻守卫 + C 侧分级台阶 // t126：tier2 有界开槽（两条坡道走廊，主理人授权的减法例外）+ 遮蔽普查 // t121：过渡台阶足印进深 ≥1.05m（cellSize:1 网格可见），18 栋门外分级过渡 // t119：ZONES.drawCallBudget 对齐唯一权威源 config.BUDGET.drawCalls.perZone（C60/D56/E56） // t117：门洞可通行性声明与实际一致（passable/blockedBy 具名登记） // t103：10 座开敞亭可通行化（hasDoor→exceptDoor）+ B 两座入口门槛 // t102：按 t100 权威 Δ 清单登记门外过渡台阶（仅登记几何，不宣称可达） // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
+export const LAYOUT_VERSION = '1.1.27'; // t39：**可登塔楼城市级接线**（唯一权威源 `CLIMB_TOWERS` + `climbTowerPlan()`/`climbTowerReport()`/`CLIMB_TOWER_SPECS` + 冻结摘要 `CLIMB_TOWER_SUMMARY`，并入 `LAYOUT_STATS.climbTowers`）—— E 区 (226, 262.4) 一座三层观景塔（`T-watchtower-3`，grade2 pyramidal，baseY = `TERRAIN.sideCourtY` 0.4）：**由紧凑规格派生** 72 个可行走面（kind 'terrace'：入口 2 + 环带 15 + 踏步 54 + 顶层观景台 1）+ 1 条中央内芯障碍（`OB-T-watchtower-3-shaft`，y∈[0.4, 9.214] = [baseY, topY−slab]）+ 1 个塔顶机位（`VP-T-watchtower-3-top`，mode `focus-extra`，不碰 43 栋内景冻结集）；面序列逐跳 ≤ `climbStepMax()` 0.42（< 0.45，禁 0.5 等值）、反向同阈值、平面不叠压（`climbTowerReport().ok`）；**几何由 `kit.makeTower` 从同一套公式生成**（`tests/layout.test.mjs` t39 块逐值交叉核对 `layout` 派生 vs `kit.towerPlan`）。**计数变化**：WALKABLE 175→247、OBSTACLES 93→94、VIEWPOINTS 61→62（focus-extra 6→7）；SLOTS 79 / 内景 43 / 道路 97 / 墙 60 **不变** // t38：中轴体量分级**口径落地**（唯一权威源 `AXIS_TIER_SPEC` + `slotVolumeCaliber`/`axisTierRows`/`axisTierStats`/`axisTierLadder`/`axisPrincipal`/`axisNoInversion`/`axisTierReport` + 冻结摘要 `AXIS_TIER_SUMMARY`，并入 `LAYOUT_STATS.axisTiers`）。采用口径 = **eaveAbs**（檐口高自**自身基准面**，即扣掉 `onWall` 的墙高）：T1(2 栋) > T2(6 栋) 面积比 1.3511≥1.10 · 檐高比 1.1682≥1.05（Δ1.11m）· 主位比 1.6579≥1.20；**采用口径下 0 倒挂**。绝对高度台账（raw `totalHeight` 高于主殿 20.48 者 8 栋）**全部 `onWall=true`**（4 城门 + 4 角楼）⇒ 该读数被判定为**口径伪影**并钉成常驻判据（R6c：非 onWall 者 0 栋）；**本卡不改体量**（三条可调路径均被硬约束堵死，量化交回裁定，见 §14 与 `AXIS_TIER_SPEC` 注释）。**计数零变化**：SLOTS 79 / WALKABLE 175 / OBSTACLES 93 / 内景 43 / 机位 61 / 道路 97 / 墙 60 全部不变 // t31：御花园两座配殿**池上石栈道**（有界开槽 + 同轮可见石件）—— `OB-WB-F-pond-{west,east}` 改 `blocks:'exceptDoor'` + `door`（宽 14m = 门洞净宽、沿门轴 z、跨池全深、面积守恒：bounds/水位 0.05/池深 0.45 一字未改）+ 两条 `surface:'bridgeDeck'` 道路段（`RD-F-garden-hall-{west,east}-pond-walk`，唯一权威源 `F_POND_WALKWAYS`）⇒ 两栋正门不再依赖「从水面穿的幻影通道」。ROADS 95→97；**WALKABLE 175 / SLOTS 79 / OBSTACLES 93 / 内景 43 / 机位 61 全部不变**（求解器放行水面只认 `bridgeDeck` 路面，故不新增可行走面） // t22：门洞贯穿语义 —— 63 条建筑门补 `door.through`（26 座贯穿类 = gateHall 6 + courtyardGate 10 + 开敞亭 10；37 座 hall/sideHall = false）与镜像锚点 `door.back`（对侧外墙面向外 6.0m，与 facade 同源同精度）；**只登记数据、不新增可行走面**（WALKABLE/SLOTS/OBSTACLES/内景/VP 计数全部不变） // t13：两座水中亭（D 水池亭 / E 水榭）**可达** —— 每池落 2 级汀步（0.40→0.65→0.90，逐跳 0.25、双向 ≤0.45、禁 0.50 等值，§12.1.4.5）+ 同轮可见石件；`OB-WB-{D,E}-pond` 改 `blocks:'exceptDoor'` + **有界开槽**（通道 = 汀步走廊，宽 8m、沿门轴 z，面积守恒：水体不降水、不缩池；其余水面仍逐点阻挡）；删两亭 `doorBlockedBy`（passable 由 false→true、blockedBy null）。WALKABLE 171→175（每池 2 面 ⇒ +4） // t10：E 侧两栋台基 1.0→0.9（门外过渡逐跳 0.50 等值 → 0.45 留裕量；§12.1.4.5 禁止等值阈值）—— 修 verify-completeness 5.3 的 4 点不可达；WALKABLE 仍 171、SLOTS/OBSTACLES/内景数不变 // t9：GARDEN_BULK_ANNEX 批量装饰建筑 12 座（数据驱动；实心 blocks:'all'、非 visitable ⇒ 内景仍 43、WALKABLE 仍 171；SLOTS 67→79、OBSTACLES 81→93） // t158：float32 裕量级差（1.92/1.45 + 1.3/1.0）+ 过渡矩形规范化 // t151（t157 曾试 1.95/1.5 但会覆盖 transition-2 中心 ⇒ 已回退，配方见回执） // t151：C 两殿门外加法下坡带（未被覆盖窗口内 1.9/1.4） // t145：C 两殿台基接近走廊有界开槽（0.9↔1.3 恢复相邻） // t134：删除 4 片开槽残片，使门带不再被更高面取高（门洞节点高度回到 1.5/1.7） // t131：通路存在守卫 + 加法补 E-court3-hall 门外台阶 // t128：C 两栋遮蔽开槽（第二次授权减法）+ 遮蔽常驻守卫 + C 侧分级台阶 // t126：tier2 有界开槽（两条坡道走廊，主理人授权的减法例外）+ 遮蔽普查 // t121：过渡台阶足印进深 ≥1.05m（cellSize:1 网格可见），18 栋门外分级过渡 // t119：ZONES.drawCallBudget 对齐唯一权威源 config.BUDGET.drawCalls.perZone（C60/D56/E56） // t117：门洞可通行性声明与实际一致（passable/blockedBy 具名登记） // t103：10 座开敞亭可通行化（hasDoor→exceptDoor）+ B 两座入口门槛 // t102：按 t100 权威 Δ 清单登记门外过渡台阶（仅登记几何，不宣称可达） // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
 
 /* =============================================================================
  * 一、包络、区域边界与外墙（§2.3）
@@ -912,6 +913,291 @@ export const TERRACES = deepFreeze([
 ]);
 
 /* =============================================================================
+ * 七·A-3（t39）：**可登塔楼**（CLIMB_TOWERS）—— 紧凑规格 + 同轮派生登记
+ * -----------------------------------------------------------------------------
+ * 产品需求（t184/t37/t39）：加入"可以上去的塔楼"，且**登记与几何同轮**（不得造空气楼梯）。
+ * 唯一权威源 = 本节的 `CLIMB_TOWERS` + `climbTowerPlan()`（纯数据、无 THREE）；几何由
+ * `src/kit/towers.js::makeTower()` 从**同一套公式**生成（`tests/layout.test.mjs` 的 t39 块
+ * 逐值交叉核对 `layout` 派生 vs `kit.towerPlan`，口径漂移即红）。
+ *
+ * 口径三要素：
+ *   · 来源 = `CLIMB_TOWERS`（每座塔一行：id/spec/x/z/baseY/zone）—— 72 面/1 障碍/1 机位全部**派生**，
+ *     不手写 72 行；
+ *   · 判据 = ①面序列（入口 2 → 每层环带 + 18 级踏步 → 顶层观景台）逐跳 |Δy| ≤ `climbStepMax()`（0.42 < 0.45）
+ *            且**反向同阈值** ②面之间平面互不相交（不被更高面取高）③中央内芯障碍 y∈[baseY, topY−slab]
+ *            不含观景台面、且各面都在内芯之外（玩家半径 0.35 < 0.9 余量）；
+ *   · 反例 = 少/多一个面、改 `baseY` 使逐跳 > 0.45、把内芯取满宽（吞掉盘道）、把塔顶机位登记成 `interior`
+ *            （破坏 43 栋内景冻结集）都会命中。
+ *
+ * 形制白名单：塔顶一律 `pyramidal` ⇒ 仅 `grade ≤ 2`（`grade 3` 只允许 `doubleEaveHip`，见 config.GRADES）。
+ * ========================================================================== */
+
+const round = (v) => Math.round(v * 1000) / 1000;
+
+/** 单跳上限（米）：与 `src/kit/towers.js::climbStepMax` 同一公式（0.42 < 0.45）。 */
+export const CLIMB_STEP_SAFETY = 0.84;
+export function climbStepMax(config = { INTERACTION }) {
+  return round((config.INTERACTION ?? INTERACTION).step.maxStepHeight * CLIMB_STEP_SAFETY);
+}
+
+/** 塔型表（与 `src/kit/towers.js::TOWER_SPECS` 同值；本表只读数，不建几何）。 */
+export const CLIMB_TOWER_SPECS = deepFreeze([
+  { id: 'watchtower-3', label: '三层观景塔', levels: 3, bays: 3, roofType: 'pyramidal', grade: 2 },
+  { id: 'watchtower-5', label: '五层瞭望塔', levels: 5, bays: 3, roofType: 'pyramidal', grade: 2 },
+  { id: 'bell-tower-4', label: '四层钟楼', levels: 4, bays: 4, roofType: 'pyramidal', grade: 2 },
+]);
+
+/**
+ * **塔楼登记规格**（唯一权威源；区域按 id 消费，不自行扩张）。
+ * 选址 (226, 262.4)：E 区（东宫苑）东后南侧空地 —— t37 实测干净（远离 40m 内所有槽位）、
+ * E 区绘制调用有余量（F 区 80/80 零余量 ⇒ 不放 F）。`baseY` 取 `TERRAIN.sideCourtY`（= `groundYAt(226,262.4)` = 0.4）。
+ */
+export const CLIMB_TOWERS = deepFreeze([
+  {
+    id: 'T-watchtower-3',
+    spec: 'watchtower-3',
+    label: '三层观景塔',
+    zone: 'E',
+    x: 226,
+    z: 262.4,
+    baseY: TERRAIN.sideCourtY,
+    rotationYDeg: 0,
+  },
+]);
+
+/** 由 `CLIMB_TOWERS` 派生的建造数值（与 kit 同公式；返回纯数据）。 */
+export function climbTowerPlan(tower) {
+  const spec = CLIMB_TOWER_SPECS.find((s) => s.id === tower.spec) ?? CLIMB_TOWER_SPECS[0];
+  const baseY = round(tower.baseY ?? 0);
+  const x = round(tower.x ?? 0);
+  const z = round(tower.z ?? 0);
+  const id = tower.id;
+  const stepRise = round(MODULES.stairsStepHeight);
+  const stepDepth = round(MODULES.stairsStepDepth);
+  const risePerLevel = round(MODULES.terraceTierHeight * 1.8);
+  const shaftHalf0 = round((MODULES.bayPitch * spec.bays) / 2);
+  const ringW = round(MODULES.plinthHeightMin * 4);
+  const slab = round(MODULES.roofThickness * 0.3);
+  const entryRise = climbStepMax();
+  const baseH = round(entryRise * 2);
+  const roofRise = round(MODULES.roofRisePerBay * spec.bays * 5);
+  const stepsPerLevel = Math.max(2, Math.round(risePerLevel / stepRise));
+  const risePerStep = round(risePerLevel / stepsPerLevel);
+  const flightLen = round(stepDepth * stepsPerLevel);
+  const levels = spec.levels;
+  const towerHalf = (k) => round(shaftHalf0 + ringW - k * ringW);
+  const levelY = (k) => round(baseY + baseH + k * risePerLevel);
+  const topY = levelY(levels);
+  const faces = [];
+  for (let k = 0; k < levels; k += 1) {
+    const y = levelY(k);
+    const h = towerHalf(k);
+    const hNext = towerHalf(k + 1);
+    const laneCenter = round((h + hNext) / 2);
+    const laneW = round(h - hNext);
+    const spanInner = round(2 * hNext);
+    const flightZ0 = round(z - h + stepDepth / 2 + ringW * 0.2);
+    const flightZ1 = round(flightZ0 + (stepsPerLevel - 1) * stepDepth + stepDepth);
+    const eNorthD = round(flightZ0 - stepDepth / 2 - (z - h));
+    const eSouthD = round((z + h) - (flightZ1 + stepDepth / 2));
+    faces.push(
+      { id: `${id}-L${k + 1}-ringN`, kind: 'ring', level: k + 1, y, w: spanInner, d: laneW, x, z: round(z - laneCenter) },
+      { id: `${id}-L${k + 1}-ringS`, kind: 'ring', level: k + 1, y, w: spanInner, d: laneW, x, z: round(z + laneCenter) },
+      { id: `${id}-L${k + 1}-ringW`, kind: 'ring', level: k + 1, y, w: laneW, d: round(2 * h), x: round(x - laneCenter), z },
+    );
+    if (eNorthD > 0.05) faces.push({ id: `${id}-L${k + 1}-ringEn`, kind: 'ring', level: k + 1, y, w: laneW, d: eNorthD, x: round(x + laneCenter), z: round(z - h + eNorthD / 2) });
+    if (eSouthD > 0.05) faces.push({ id: `${id}-L${k + 1}-ringEs`, kind: 'ring', level: k + 1, y, w: laneW, d: eSouthD, x: round(x + laneCenter), z: round(flightZ1 + stepDepth / 2 + eSouthD / 2) });
+    const fx0 = round(x + laneCenter);
+    for (let i = 0; i < stepsPerLevel; i += 1) {
+      faces.push({
+        id: `${id}-L${k + 1}-step-${String(i + 1).padStart(2, '0')}`,
+        kind: 'step',
+        level: k + 1,
+        y: round(y + (i + 1) * risePerStep),
+        w: laneW,
+        d: stepDepth,
+        x: fx0,
+        z: round(flightZ0 + i * stepDepth),
+      });
+    }
+    const side = round(2 * towerHalf(k));
+    if (side < flightLen + stepDepth) {
+      throw new Error(`layout.CLIMB_TOWERS(${id}): 第 ${k + 1} 层边长 ${side}m < 梯段 ${flightLen}m + 余量 —— 请增大 bays 或减少 levels`);
+    }
+  }
+  const entryW = round(MODULES.bayPitch * spec.bays * 0.4);
+  for (let i = 0; i < 2; i += 1) {
+    faces.push({
+      id: `${id}-entry-${i + 1}`,
+      kind: 'entry',
+      level: 0,
+      y: round(baseY + entryRise * (i + 1)),
+      w: entryW,
+      d: round(stepDepth * 3),
+      x,
+      z: round(z + towerHalf(0) + (2 - i) * round(stepDepth * 3 + 0.05)),
+    });
+  }
+  const deck = { id: `${id}-deck`, kind: 'deck', level: levels + 1, y: round(topY), w: round(2 * towerHalf(levels)), d: round(2 * towerHalf(levels)), x, z };
+  faces.push(deck);
+  const pathIds = [`${id}-entry-1`, `${id}-entry-2`];
+  for (let k = 0; k < levels; k += 1) {
+    pathIds.push(`${id}-L${k + 1}-ringN`);
+    for (let i = 0; i < stepsPerLevel; i += 1) pathIds.push(`${id}-L${k + 1}-step-${String(i + 1).padStart(2, '0')}`);
+  }
+  pathIds.push(deck.id);
+  return {
+    id,
+    label: spec.label,
+    zone: tower.zone ?? null,
+    spec,
+    grade: spec.grade,
+    roofType: spec.roofType,
+    x,
+    z,
+    baseY,
+    rotationYDeg: tower.rotationYDeg ?? 0,
+    tokens: { stepRise, stepDepth, risePerLevel, stepsPerLevel, risePerStep, flightLen, shaftHalf0, ringW, slab, baseH, roofRise, entryRise, levels, topHalf: towerHalf(levels) },
+    topY,
+    totalHeight: round(topY - baseY + roofRise),
+    faces,
+    pathIds,
+    deckFaceId: deck.id,
+    shafts: [{
+      id: `${id}-shaft`,
+      x, z,
+      w: round(2 * towerHalf(levels)),
+      d: round(2 * towerHalf(levels)),
+      y0: round(baseY),
+      y1: round(topY - slab),
+      roofType: spec.roofType,
+    }],
+    viewpoint: { id: `VP-${id}-top`, position: { x, y: round(topY + 1.65), z }, target: { x, y: round(topY + 1.1), z: round(z + 60) }, fov: 62 },
+  };
+}
+
+/* 逐座派生（紧凑规格 → 面/障碍/机位；`tests/layout.test.mjs` 的 t39 块与 `kit.towerPlan` 逐值核对）。 */
+export const CLIMB_TOWER_PLANS = deepFreeze(CLIMB_TOWERS.map((t) => climbTowerPlan(t)));
+export const CLIMB_TOWER_FACES = deepFreeze(CLIMB_TOWER_PLANS.flatMap((p) => p.faces.map((f) => ({
+  ...f,
+  zone: p.zone,
+  towerId: p.id,
+  walkableId: `WK-${p.id}-${f.id.replace(`${p.id}-`, '')}`,
+  name: `${p.label}·${f.kind === 'step' ? `第${f.level}层踏步` : f.kind === 'ring' ? `第${f.level}层盘道` : f.kind === 'entry' ? '入口踏步' : '顶层观景台'}`,
+  bounds: b(round(f.x - f.w / 2), round(f.x + f.w / 2), round(f.z - f.d / 2), round(f.z + f.d / 2)),
+}))));
+export const CLIMB_TOWER_SHAFTS = deepFreeze(CLIMB_TOWER_PLANS.flatMap((p) => p.shafts.map((s) => ({
+  ...s,
+  zone: p.zone,
+  towerId: p.id,
+  obstacleId: `OB-${p.id}-shaft`,
+  bounds: b(round(s.x - s.w / 2), round(s.x + s.w / 2), round(s.z - s.d / 2), round(s.z + s.d / 2)),
+}))));
+export const CLIMB_TOWER_VIEWPOINTS = deepFreeze(CLIMB_TOWER_PLANS.map((p) => ({
+  id: p.viewpoint.id,
+  zone: p.zone,
+  mode: 'focus-extra',
+  name: `${p.label}顶层观景台`,
+  position: { ...p.viewpoint.position },
+  target: { ...p.viewpoint.target },
+  fov: p.viewpoint.fov,
+  towerId: p.id,
+})));
+
+/** 面序列逐跳自检（与 `kit.climbSequenceReport` 同口径：上行 + 反向 + 平面不叠压）。 */
+export function climbTowerReport(plan = CLIMB_TOWER_PLANS[0]) {
+  const byId = new Map(plan.faces.map((f) => [f.id, f]));
+  const ups = plan.pathIds.map((fid) => byId.get(fid)).filter(Boolean);
+  const maxHop = climbStepMax();
+  const hops = [];
+  for (let i = 1; i < ups.length; i += 1) hops.push({ from: ups[i - 1].id, to: ups[i].id, dy: round(ups[i].y - ups[i - 1].y) });
+  const over = hops.filter((h) => h.dy > maxHop + 1e-6);
+  const reverseOver = hops.filter((h) => -h.dy > maxHop + 1e-6);
+  const overlaps = [];
+  for (let i = 0; i < plan.faces.length; i += 1) {
+    for (let j = i + 1; j < plan.faces.length; j += 1) {
+      const a = plan.faces[i]; const c = plan.faces[j];
+      if (Math.abs(a.y - c.y) < 1e-6) continue;
+      const ox = Math.min(a.x + a.w / 2, c.x + c.w / 2) - Math.max(a.x - a.w / 2, c.x - c.w / 2);
+      const oz = Math.min(a.z + a.d / 2, c.z + c.d / 2) - Math.max(a.z - a.d / 2, c.z - c.d / 2);
+      if (ox > 1e-6 && oz > 1e-6) overlaps.push({ a: a.id, b: c.id });
+    }
+  }
+  const top = ups[ups.length - 1] ?? null;
+  return {
+    ok: over.length === 0 && reverseOver.length === 0 && overlaps.length === 0,
+    maxHop,
+    hops: hops.length,
+    maxHopMeasured: hops.reduce((m, h) => Math.max(m, h.dy), -Infinity),
+    overHops: over.slice(0, 8),
+    reverseOk: reverseOver.length === 0,
+    overlapCount: overlaps.length,
+    topFaceId: top?.id ?? null,
+    topFaceY: top?.y ?? null,
+    faceCount: plan.faces.length,
+  };
+}
+
+/** 登记形态适配：可行走面（`WK` 形状 + level/sourceId）/ 障碍 / 机位（`VP` 形状）。 */
+export const CLIMB_TOWER_WALKABLE = deepFreeze(CLIMB_TOWER_FACES.map((f) => ({
+  id: f.walkableId,
+  zone: f.zone,
+  kind: 'terrace',
+  name: f.name,
+  bounds: { ...f.bounds },
+  y: f.y,
+  enterable: true,
+  centerY: f.y,
+  area: +((f.bounds.maxX - f.bounds.minX) * (f.bounds.maxZ - f.bounds.minZ)).toFixed(1),
+  level: f.level,
+  sourceId: f.id,
+  towerId: f.towerId,
+})));
+
+export const CLIMB_TOWER_OBSTACLES = deepFreeze(CLIMB_TOWER_SHAFTS.map((s) => ({
+  id: s.obstacleId,
+  /* `sourceType` 取 core 契约白名单内的既有值 `building`（`src/core/context.js:408` 只允许
+     building|wall|water|rockery）——塔身是"建筑体块"语义；`buildingKind: 'towerShaft'` 保留塔身类型，
+     供提示文案/后续消费方区分（避免新增枚举值牵动 core/interaction 两个 out-of-scope 文件）。 */
+  sourceType: 'building',
+  buildingKind: 'towerShaft',
+  zone: s.zone,
+  buildingId: s.towerId,
+  bounds: { ...s.bounds },
+  y0: s.y0,
+  y1: s.y1,
+  blocks: 'all',
+  door: null,
+  note: `${(CLIMB_TOWERS.find((t) => t.id === s.towerId) ?? {}).label ?? '塔楼'}塔身：整块实心（中央内芯），不可穿行`,
+})));
+
+export const CLIMB_TOWER_VP_ENTRIES = deepFreeze(CLIMB_TOWER_VIEWPOINTS.map((v) => ({
+  id: v.id,
+  name: v.name,
+  mode: v.mode,
+  area: v.zone,
+  position: { ...v.position },
+  target: { ...v.target },
+  fov: v.fov,
+  cameraMode: 'focus',
+  owner: 't39',
+  note: '塔楼顶层观景台（t39：可登塔楼，登记与几何同轮）',
+  towerId: v.towerId,
+})));
+
+/** 冻结摘要（口径 + 计数 + 自检读数；并入 `LAYOUT_STATS.climbTowers`）。 */
+export const CLIMB_TOWER_SUMMARY = deepFreeze({
+  safety: CLIMB_STEP_SAFETY,
+  maxHop: climbStepMax({ INTERACTION: { step: { maxStepHeight: 0.5 } } }),
+  towers: CLIMB_TOWERS.map((t) => t.id),
+  faceCount: CLIMB_TOWER_FACES.length,
+  shaftCount: CLIMB_TOWER_SHAFTS.length,
+  viewpointCount: CLIMB_TOWER_VIEWPOINTS.length,
+  byKind: CLIMB_TOWER_FACES.reduce((acc, f) => { acc[f.kind] = (acc[f.kind] ?? 0) + 1; return acc; }, {}),
+  climb: CLIMB_TOWER_PLANS.map((p) => ({ towerId: p.id, report: climbTowerReport(p) })),
+});
+
+/* =============================================================================
  * 八、WALKABLE：可行走面（世界坐标范围 + 地面高度；重叠时取最高面，ramp 定义过渡）
  * ========================================================================== */
 
@@ -1353,6 +1639,8 @@ export const WALKABLE = deepFreeze([
      汀步正是"跨水面的有界石桥面"，与四座入城桥同一机制，无需放宽任何阈值、也不新增 kind。 */
   ...STONE_STEP_SURFACES.map((s) => WK(s.id, s.lane.zone, 'bridgeDeck', s.name, s.bounds.minX, s.bounds.maxX, s.bounds.minZ, s.bounds.maxZ, s.y)),
   ...INTERIOR_SLICE_A.walkables,
+  /* t39：可登塔楼的 72 个面（入口 2 + 每层环带/踏步 + 顶层观景台；kind 'terrace'，由 CLIMB_TOWERS 派生） */
+  ...CLIMB_TOWER_WALKABLE,
 ]);
 
 /** 可行走面索引（重叠时按 y 降序，供 floorYAt / 碰撞使用）。 */
@@ -1559,6 +1847,8 @@ export const OBSTACLES = deepFreeze([
     door: null,
     note: '御花园东假山：不可穿越',
   },
+  /* t39：可登塔楼的**中央内芯**（1 条；与 `kit.makeTower` 的 shafts 逐值同源，y∈[baseY, topY−slab]） */
+  ...CLIMB_TOWER_OBSTACLES,
 ]);
 
 /** 水体登记（渲染与反射用）。 */
@@ -1743,6 +2033,8 @@ export const VIEWPOINTS = deepFreeze([
   VP('VP-F-south-gate', '南城门近景', 'focus-extra', 'F', [0, 60, -640], [0, 14, -454], { fov: 40, owner: 't8', cameraMode: 'focus' }),
   VP('VP-F-north-gate', '北城门近景', 'focus-extra', 'F', [0, 60, 660], [0, 14, 454], { fov: 40, owner: 't8', cameraMode: 'focus' }),
   ...INTERIOR_SLICE_A.viewpoints,
+  /* t39：可登塔楼塔顶观景台机位（mode 'focus-extra'；不属 43 栋内景冻结集） */
+  ...CLIMB_TOWER_VP_ENTRIES,
 ]);
 
 export const VIEWPOINT_BY_ID = deepFreeze(
@@ -2222,6 +2514,18 @@ export const LAYOUT_STATS = deepFreeze({
   tourPointCount: TOUR_POINTS.length,
   fpRouteCount: FP_ROUTE.length,
   lanternCount: LIGHT_ANCHORS.length,
+  /* t39：可登塔楼摘要（口径 + 计数 + 逐跳自检；数据推导，判据在 tests/layout.test.mjs） */
+  climbTowers: {
+    spec: CLIMB_TOWERS,
+    maxHop: CLIMB_TOWER_SUMMARY.maxHop,
+    safety: CLIMB_TOWER_SUMMARY.safety,
+    towers: CLIMB_TOWER_SUMMARY.towers,
+    faceCount: CLIMB_TOWER_SUMMARY.faceCount,
+    shaftCount: CLIMB_TOWER_SUMMARY.shaftCount,
+    viewpointCount: CLIMB_TOWER_SUMMARY.viewpointCount,
+    byKind: CLIMB_TOWER_SUMMARY.byKind,
+    climb: CLIMB_TOWER_SUMMARY.climb.map((c) => ({ towerId: c.towerId, ok: c.report.ok, hops: c.report.hops, maxHopMeasured: c.report.maxHopMeasured, reverseOk: c.report.reverseOk, overlapCount: c.report.overlapCount })),
+  },
   /* t38：中轴体量分级摘要（口径 + 严格序读数，全部数据推导；判据在 tests/layout.test.mjs） */
   axisTiers: {
     spec: AXIS_TIER_SPEC,

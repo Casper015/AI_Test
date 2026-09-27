@@ -402,3 +402,205 @@ $ §12 可读性 A/B（`--view=focus --focus=C-hall-bed-main --preset=golden`，
 3. 角楼（4 座）同属重檐并按同一规则获得 `lowerRidge`；其 `roofType` 登记为 `gableHip`，但 `isTower`
    使其建成重檐 ⇒ §23.1 用**几何**而非 `roofType` 判定重檐集合（避免漏判）。
 4. `metrics.parts` 在近景档会多一个 `lowerRidge` 键（下游若按 `parts` 穷举需知悉）；中/远档不变。
+
+---
+
+## 附：t46 修复记录 —— 红墙 × 白石墙基端面共面（走动时"红墙边缘闪缩"/Z-fighting），2026-09-26
+
+> 任务：`t46`（`kit-engineer`）· inScope：`src/kit/buildings.js`、`tests/kit.test.mjs`、`docs/handoff-kit.md`
+> 来源：外部代码审查（Codex）实测定位 **`src/kit/buildings.js:679-680`**（修前行号）：
+> `wallBody`（红墙）与 `wallBase`（白石墙基）**同长度、同中心、同底部高度**，墙基只加厚 6%
+> ⇒ 面向门洞的**红色端面与白色端面重叠共面** ⇒ 视角变化交替覆盖 ⇒ 走动时闪缩。
+> 本卡**未**用提高 MSAA / 改绘制顺序 / 关闭深度检测掩盖（判据亦不接受这三类"修复"）。
+
+### 1. 几何证据（先证后改）
+
+**逐栋解析式盘点**（`work/probe-wall-inventory.mjs`，按修前两行公式复算，全表 `work/t46-wall-inventory.txt`）：
+
+```text
+修前：layout.WALLS 60 段 —— 有端面共面的墙 60/60 · 共面对数 424 · 共面面积 581.12 m² · 体块套叠 28742.08 m³
+（每段：红墙端面 x ∈ {a,b} 与墙基端面 x ∈ {a,b} 完全相同 ⇒ 共面距离 0.000m < 1mm 判据；
+  每段套叠体积 = 段长 × baseH × thickness，baseH = min(0.8, bodyH×0.2) = 0.8）
+WALL-CITY-south  608×8×12   baseH 0.8  段数 2  端面共面对数 8  共面面积 51.2 m²  套叠 3724.8 m³
+WALL-CITY-west   916×8×12   baseH 0.8  段数 2  端面共面对数 8  共面面积 51.2 m²  套叠 5696.0 m³
+CY-B-plaza-wall-* / CY-*（院墙，58 段）… 共面对数 4/段 …（全表见 work/t46-wall-inventory.txt）
+```
+
+**实测（built geometry，`work/probe-wall-coplanar.mjs`，修前 `work/t46-probe-before.txt`）**：
+
+| 样本 | 部位 | 中心 | 尺寸 (x×y×z) | y 范围 | 端面 x | 结论 |
+| --- | --- | --- | --- | --- | --- | --- |
+| WALL-CITY-south（含 26m 门洞） | 红墙 `wallBody` | (0, 5.45, −454) | 608 × 10.9 × 8 | [0, 10.9] | ±304、±13 | 与墙基端面**共面距离 0.000m** |
+| ↑ | 墙基 `wallBase` | (0, 0.4, −454) | 608 × 0.8 × 8.48 | [0, 0.8] | ±304、±13 | 4 处共面 × 6.4 m²（门洞两侧 + 墙两端） |
+| ↑ | 套叠 | — | — | — | — | x 608 × y 0.8 × z 8 = 3891 m³ 整段套叠 |
+| 院墙（无门洞） | 红墙 / 墙基 | — | 1.2 × 4.2 × 140 | [0,4.2] / [0,0.8] | z=−180、−40 | 2 处共面 × 0.96 m² + 套叠 134 m³ |
+| 合成 cityWall（两门洞） | 红墙 / 墙基 | — | 120 × 10.9 × 8 | [0,10.9] / [0,0.8] | ±60、±25、±15 | 6 处共面 × 6.4 m² + 套叠 725 m³ |
+
+**机制**：两块在重叠区（y ∈ [baseY, baseY+baseH]）的端面 x 坐标完全相同、法线同向且面内重叠面积 > 0
+⇒ 该区域内两三角面的**深度值相等** ⇒ 逐像素交替通过深度测试 ⇒ 移动视角时交替覆盖（"闪缩"）。
+
+### 2. 修复（几何修复，非掩盖）
+
+`src/kit/buildings.js:686-691`（现行行号；修前为 679-680）：
+
+```js
+const baseH = Math.min(0.8, bodyH * 0.2);            // 墙基高度（= 审查建议）
+parts.add('wallBody', 'plasterRed', box(T, { w, h: bodyH - baseH, d: thickness,      x: (a+b)/2, y: baseY + baseH, ... }));
+parts.add('wallBase', 'wallBase',   box(T, { w, h: baseH,          d: thickness*1.06, x: (a+b)/2, y: baseY,        ... }));
+```
+
+**配对守卫（逐值不变，A/B 实测）**：
+
+| 指标 | 修前 | 修后 | 判据 |
+| --- | --- | --- | --- |
+| 红墙 y 范围（cityWall 南墙） | [0, 10.9] | **[0.8, 10.9]** | 红墙从墙基顶面开始 |
+| 墙基 y 范围 | [0, 0.8] | [0, 0.8] | 不变（仍落地） |
+| **装配总高**（最高面 y） | 12.0 | **12.0** | 逐值不变（baseH + (bodyH−baseH) = bodyH） |
+| **门洞净宽**（两侧门垛端面实测） | 26.0 | **26.0** | 逐值不变（端面 x 坐标未动，只改竖向） |
+| 其它部位 y 范围（门额/压顶/垛口/脊） | — | **逐值不变** | 见 `work/t46-probe-{before,after}.txt` |
+| 可见侧共面（3 样本合计） | 18 处 | **0 处** | Z-fighting 本体消失 |
+| 题干对体块套叠 | 是 | **否**（只 y=baseY+baseH 接触） | 法线相反 ⇒ 不闪 |
+| 三角面（3 样本） | 1932 / 48 / 516 | **1932 / 48 / 516** | 不增 |
+
+### 3. 同类普查（同一生成路径：勒脚/压顶/贴面/门额）
+
+| 对 | 修前 | 处置 |
+| --- | --- | --- |
+| `wallBase × wallBody`（勒脚 × 红墙） | 可见侧共面 18 处 + 套叠 | **已修**（§2） |
+| `wallBody × wallCoping`（院墙：红墙 × 瓦顶） | 可见侧共面 **8 处**（含**侧面** 2×25.2 m²：压顶与墙身同宽 1.2m 且竖向重叠 0.3cap） | **已修**：压顶略出挑 `1.06×墙厚`（与宫墙压顶 `1.15×` 同族做法）+ 两端各收进 4cm；`beam→box` 后**竖向跨度与中心高度逐值不变**（[4.02,4.62] 前后一致），三角面同为 12 |
+| `wallCoping × wallCopingRidge`（瓦顶 × 脊） | 可见侧共面 2 处 × 0.018 m²（端面重合） | **已修**：脊再收进 8cm（落在压顶内部） |
+| `wallBody × wallLintel`（红墙 × 门额） | 套叠（门额比墙宽 1.05×/厚 1.02×，包裹式） | **保留**：无同向共面 ⇒ 不闪；属贴面构造（已登记进 `ALLOWED_NESTING`） |
+| `wallCoping × merlon`（压顶 × 垛口） | 套叠 + 仅**朝地(−y)** 的共面（可见半球外） | **保留**：无可见侧共面；仅登记（未改形制） |
+
+**明确未做**：未提高 MSAA、未改绘制顺序、未关闭深度检测、未给所有墙统一加偏移；
+只对**贴面装饰层**（院墙压顶/脊）做了 4–12cm 的小幅几何偏移（卡片允许）。
+
+### 4. 新增常驻断言（`tests/kit.test.mjs` §24，+28 条）
+
+```text
+24.1 逐样本 × 逐部位对：**可见侧同向共面重叠 = 0**（法线同向、平面差 <1mm、面内重叠面积 >0；−y 朝地面排除）
+     —— 失败打印双方与坐标（轴/平面/法线/面内区间/面积）
+24.2 题干对（wallBase × wallBody）：体块**不套叠** + y 范围 = [baseY, baseY+baseH] / [baseY+baseH, baseY+bodyH]
+24.3 配对守卫：装配底面 = baseY；**装配总高 = 修前公式值**；**门洞净宽（门垛端面实测）= 登记 width**
+24.4 未登记的体块套叠 = 0（只允许 ALLOWED_NESTING 的四个"包裹式嵌套"对；新对出现即红）
+24.5 三角面逐样本 = 修前值（1932/48/516）；部位名集合不变（合批桶不变）
+```
+
+### 5. verify（真实输出）
+
+```text
+$ node tests/kit.test.mjs
+ · t46 体块守卫：3 个墙体样本 × 逐部位对 = 可见侧共面 0 处；题干对（红墙×白石墙基）体块不套叠、
+   y 范围 = [baseY, baseY+baseH] / [baseY+baseH, baseY+bodyH]；门洞净宽与装配总高逐值不变；三角面与部位名不变
+ 通过 1765 / 1765，失败 0        （改前 1737 ⇒ 本卡 +28 条，全部新增）
+
+$ node scripts/audit.mjs --enforce
+ 主场景绘制调用 : 342 / 上限 350  ✓     B 62/70 · C 56/60 · D 49/56 · E 49/56 · F 80/80 ✓
+ 可见三角面     : 425317 / 上限 1500000  ✓     结论：预算与契约检查全部通过      exit 0
+
+$ node work/probe-wall-coplanar.mjs      # 只读探针（人读 work/t46-probe-{before,after}.txt）
+ 修前 → 修后：cityWall 可见侧共面 4→0 · 院墙 8→0 · 合成双门洞 6→0；三角面 1932/48/516 前后一致
+```
+
+### 6. 未运行 / 需人工目视的项
+
+1. **浏览器侧"同位置走动对照"未自动完成**：本卡尝试 `--view=fp --preset=golden` 的 A/B 截图，
+   该次 headless 运行超过 600s 未返回（本机浏览器资源被并发任务占用）⇒ 已中止（`job_kill`）并
+   按 **sha256 校验**从备份恢复 `buildings.js`（恢复后哈希与修复版逐值一致：`44fe2255…`，
+   见 `work/t46-hash.txt`）。**未伪造任何画面证据。**
+   **人工目视步骤（建议 V3/用户执行）**：① 打开 `?view=fp&preset=golden&ui=0`，出生点在南桥北端；
+   ② 沿中轴向北走进**南城门门洞**，贴着门垛（红墙/白石交界）左右微动视角；③ 观察门垛竖向交界处
+   是否仍有细线闪缩（修前：红色端面与白色端面交替覆盖；修后：下段为白石墙基、上段为红墙，
+   交界处无共面）; ④ 对照"修前"可通过反向补丁复现（把 §2 两行改回 `h: bodyH … y: baseY` 与
+   `h: Math.min(0.8, bodyH*0.2) … y: baseY`，以及院墙压顶换回 `beam`）。
+2. **§12 可读性**：本卡只改体块高度划分与院墙压顶的 4–12cm 贴面偏移，**未改材质/光照/后处理**；
+   可见三角面与绘制调用逐值不变（§5），故 §12 判据的输入未变。未重跑八视角×三时辰矩阵（属 V3 全量复核）。
+3. **交回（不在本卡 inScope，未改一行）**：`tests/zone-garden.test.mjs:901-909` 的
+   `墙体网格底面未落地` 断言只取 `plasterRed` 的 `wallBody` 网格并断言 `box.min.y ≤ cityGroundY + 0.01`；
+   修后红墙从墙基顶面开始（实测 `wallBody.min.y = baseY + 0.8`、`wallBase.min.y = baseY` = 落地）
+   ⇒ 该断言需由 zone 归属方**配对更新**（推荐：把 `wallBase` 材质一并纳入并集，
+   即 `wallMats.add(kit.materials.get('wallBase').uuid)` 且接受 `part ∈ {wallBody, wallBase}`，
+   语义从"红墙落地"改为"墙体装配落地"；或改为 `≤ cityGroundY + baseH + 0.01`）。
+
+---
+
+## 附：t39 交付记录 —— 可登塔楼的城市级接线（导出 API + E 区建造 + layout 派生登记 + pins），2026-09-26
+
+> 任务：`t39`（`kit-engineer`）· inScope：`src/kit/index.js`、`src/kit/towers.js`、`src/zones/east-courts.js`、
+> `src/shared/layout.js`、`tests/layout.test.mjs`、`docs/CONTRACTS.md`、`docs/handoff-kit.md`
+> 来源：t37 的 blocker（塔楼几何需在 kit 导出 + 在 zones 调用，两者均不在 t37 inScope）。
+> 本卡完成 **导出 API → E 区建造 → layout 派生登记 → pins → 真实文件口径实测** 全链，**登记与几何同轮**。
+
+### 1. file:line 登记（跨域授权的三处）
+
+| 文件 | 位置 | 改动 |
+| --- | --- | --- |
+| `src/kit/index.js` | `KIT_VERSION`（1.0.1→**1.0.2** + 版本历史）、`TOWER_FACTORY_NAMES`、import `./towers.js`、`kit.makeTower/towerPlan/disposeTower`、`stats().factories.towers`、底部导出 | 导出塔楼 API（`makeTower`/`towerPlan`/`disposeTower` + `climbStepMax`/`climbSequenceReport`/`faceOverlaps`/`TOWER_SPECS`/`CLIMB_SAFETY`） |
+| `src/shared/layout.js` | 第七·A-3 节（`CLIMB_STEP_SAFETY`/`climbStepMax`/`CLIMB_TOWER_SPECS`/`CLIMB_TOWERS`/`climbTowerPlan`/`CLIMB_TOWER_PLANS`/`CLIMB_TOWER_FACES`/`CLIMB_TOWER_SHAFTS`/`CLIMB_TOWER_VIEWPOINTS`/`climbTowerReport`/`CLIMB_TOWER_SUMMARY`/`CLIMB_TOWER_WALKABLE`/`CLIMB_TOWER_OBSTACLES`/`CLIMB_TOWER_VP_ENTRIES`）；`WALKABLE`/`OBSTACLES`/`VIEWPOINTS` 三处 `...spread` 并入；`LAYOUT_VERSION` 1.1.26→**1.1.27**；`LAYOUT_STATS.climbTowers` | 紧凑规格 + 派生 72 面/1 障碍/1 机位（**不手写 72 行**） |
+| `src/zones/east-courts.js` | 导入 `CLIMB_TOWERS`；8b 节（`stats.bronzes` 之后、整区合批之前）建造 + 逐值核对守卫；`stats.towers/towerFaces/towerTriangles/towerFacts` | E 区 (226, 262.4) 建 `T-watchtower-3` 并把登记/几何逐值核对 |
+
+### 2. 计数与 A/B（真实文件口径，`work/probe-t39-tower.mjs`）
+
+```text
+登记：WALKABLE 175 → 247（+72：入口 2 + 环带 15 + 踏步 54 + 观景台 1，kind 'terrace'）
+      OBSTACLES 93 → 94（OB-T-watchtower-3-shaft，y∈[0.4, 9.214] = [baseY, topY−slab]，blocks:'all'）
+      VIEWPOINTS 61 → 62（VP-T-watchtower-3-top，mode 'focus-extra'）；focus-extra 6 → 7
+      SLOTS 79 / 内景 43 / 道路 97 / 墙 60 不变；LAYOUT 1.1.26 → 1.1.27；KIT_VERSION 1.0.1 → 1.0.2
+E 区 A/B（同一探针：A = 真 kit；B = 置空 kit.makeTower 走"只登记不建几何"分支）：
+      绘制调用 52 → 54（+2，预算 56）· 可见三角面 53628 → 54564（+936，单栋 tower 936）
+主场景：342 → 344 / 350（+2）· 可见三角面 425317 → 426253（+936）· B/C/D/F 逐值不变（F 80/80）
+```
+
+### 3. 可登性实测（真实文件口径；内存 clone 无效）
+
+```text
+面序列（layout 派生）：ok=true · hops=59 · 实测最大单跳 0.42 ≤ climbStepMax 0.42 (<0.45) · 反向 ok · 平面叠压 0
+生产求解器：72/72 个登记面中心 solver.probe().ok = true（中央内芯不吞盘道）· 顶层观景台 probe.ok = true
+生产口径逐跳（面中心 probe.surfaceY，含反向）：59/59 通过
+登记↔几何：layout 派生 72 面 vs kit.towerPlan 逐值漂移 = 0（id/y/w/d/x/z 全等；障碍 y0/y1、机位、topY/totalHeight 亦逐值相等）
+```
+
+**网格诊断（如实登记，t39-F3）**：`createWalkGraph(cellSize 1/0.5)` 的 flood 会把螺旋"看断"（观景台与入口不同分量）——
+根因是**踏面进深 0.34m < 格距**，某些踏面上没有格心 ⇒ 网格口径**不能**作为塔楼可登的判据（生产移动是连续的
+`solver.step1` + `probe`，每级 0.15m ≪ 0.5m 阈值）。任何用网格做塔楼可达性断言的卡片请改用
+"面中心 `probe` 逐跳"或把窗口网格细到 ≤0.1m。
+
+### 4. 判据（`tests/layout.test.mjs` t39 块，+26 条，只增不减）
+
+```text
+t39.1 规格：1 座塔、选址 (226,262.4)、zone E、baseY = TERRAIN.sideCourtY = groundYAt(226,262.4)、LAYOUT_VERSION ≥ 1.1.27
+t39.2 面：72 个 · 分布 ring15/step54/entry2/deck1 · id 唯一且 WK-<towerId>- 前缀 · kind 全 'terrace'（未新增 kind）· 全在 E 区/包络内 · 已并入 WALKABLE
+t39.3 障碍：1 条 · sourceType ∈ core 白名单（building）· blocks 'all' · door null · y0=baseY · y1=topY−slab(9.214)
+      · 观景台面高于内芯顶 · **无任何面落在内芯之内**
+t39.4 机位：1 个 · mode 'focus-extra'（不得 interior，保 43 栋冻结集）· y = topY+1.65 · focus-extra 总数 = 7
+t39.5 逐跳自检：ok · hops 59 · 最大跳 ≤ 0.42 且 < 0.45（禁 0.5 等值）· 反向 ok · 平面叠压 0
+t39.6 **登记↔几何同轮**：layout 72 面 vs kit.towerPlan 逐值相等（漂移 0）· 障碍/机位/topY/totalHeight 逐值相等 · 塔顶 pyramidal ∈ GRADES[2].roofTypes
+t39.7 突变对照：扰动一个面 y ⇒ 逐值比较必须报漂移（判据非恒真）
+（另同步 5 处旧 pin：WALKABLE 175→=175+CLIMB_TOWER_FACES、VIEWPOINTS 61→=61+CLIMB_TOWER_VIEWPOINTS、
+  t9 批量装饰的两条计数同口径改数据推导、通道面不新增机位一条 —— 原意一字未变，只是把 t39 增量显式计入。）
+```
+
+### 5. verify（真实输出）
+
+```text
+$ node tests/layout.test.mjs                      → 全部通过 ✓（LAYOUT 1.1.27；含 t39 块 26 条）
+$ node tests/walk-reachability.test.mjs           → exit 0 · t140 全部通过 ✓（细口径命中 0 / 粗口径已登记 7）
+$ node scripts/audit.mjs --enforce                → exit 0 · 主场景 344/350 · B62/C56/D49/E51(≤56)/F80 · 三角面 426253 ✓
+$ node tests/zone-east.test.mjs                   → 33 / 34（唯一红 = **t39-F1** 陈旧期望，见 §6；文件不在本卡 inScope）
+$ node tests/interaction.test.mjs                 → 80 / 81（唯一红 = **t39-F2** 推导缺一类别，见 §6；文件不在本卡 inScope）
+```
+
+### 6. 交回（不在本卡 inScope，未改一行；两件都需**配对更新**才能全绿）
+
+| id | 位置 | 现象（实测） | 建议改法 |
+| --- | --- | --- | --- |
+| **t39-F1** | `tests/zone-east.test.mjs` §"可行走面 1 面回显 layout、坡道斜率 ≤ rampMaxSlope" | 该断言要求 E 区所有可行走面 `y == 东宫苑地坪 0.4`，塔楼面 `WK-T-watchtower-3-L1-ringN@1.24`（… 至观景台 9.34）命中 ⇒ 红 | 按 `w.towerId`（或 `/^WK-T-watchtower-/`）**排除塔楼面**，并**追加更强断言**：塔楼面 y 单调递增、逐跳 ≤ `climbStepMax()`、顶层观景台唯一最高（把"地坪例外"变成"塔楼链自证"） |
+| **t39-F2** | `tests/interaction.test.mjs` E13（`auditBlockers.derived` / `groupOf` / `residualIds`） | 该守卫用「实心槽位 ∪ 护城河 ∪ 假山 ∪ 未开槽水体」推导整足迹阻挡清单；塔身内芯 `OB-T-watchtower-3-shaft`（`sourceType:'building'`、`buildingKind:'towerShaft'`、`blocks:'all'`）不在推导式内 ⇒ `extra = 1` 红；`groupOf` 会把塔身归入"批量装饰"组而该组要求**集合等于** `GARDEN_BULK_SLOTS` | 在 `derived` 里加一类：`...list.filter((o) => o.buildingKind === 'towerShaft').map((o) => o.id)`；`groupOf` 加 `'塔楼'` 分支（`/^OB-T-watchtower-/`）并断言该组**集合等于** `layout.OBSTACLES.filter(o => o.buildingKind==='towerShaft').map(o=>o.id)`；如需更贴文案，`src/interaction/catalog.js` 的 `blockedHint` 加 `case 'towerShaft'`（当前走 default 分支给出"三层观景塔塔身 不可进入"，已是非兜底具名提示，故 catalog 非必需） |
+
+### 7. 未运行 / 已知限制（如实）
+
+1. **浏览器侧**未跑（本卡全部结论来自 Node 侧真实文件装配 + 生产求解器）；塔楼外观与登塔体感需 V3/人工目视
+   （建议 `?view=focus&focus=T-watchtower-3` 与 `VP-T-watchtower-3-top` 机位各出一张）。
+2. **网格可达性口径**见 §3（t39-F3）：不得用 `cellSize ≥ 0.5` 的 flood 判定塔楼可登。
+3. `t39-F1/F2` 未修（文件不在 inScope）⇒ 五套件里 `zone-east`/`interaction` 各 1 红；本卡 inScope 内三条（layout/walk-reachability/audit）全绿。
+4. 塔身内芯 `y1 = topY − slab`（9.214）刻意**低于观景台面**（9.34）：若取到 `topY`，`obstacleBlocksPoint` 的含界判定会把观景台拦住（t37 已记录，本卡沿用）。

@@ -49,6 +49,7 @@
 > - **v1.0.14（t97 / T1.34）**：新增 §5.2.2 —— `door.sillY` = **门外门槛面标高**（`sillY = zoneGroundY(zone) + 本地台基`）；修复 24 栋 C/D/E 漏加区域地坪；`WK-*-interior.y` / `WK-*-door-passage.y` / `INTERIOR_BY_SLOT.groundY` 三者逐栋相等（43/43）；例外表 `DOOR_SILL_EXCEPTIONS` 3 类 6 条（F 四城门双标高 + `C-hall-bed-main` + `C-gate-inner` 绝对标高 wart）。LAYOUT 1.1.8。
 > - **v1.0.15（t103 / T1.38）**：新增 §4.1.1（`door.center` 为建筑中心 / **`door.facade` 为门外锚点**，`y` 与 `sillY` 同源；贴门取地面一律用 `facade`）；§5.2.1 与 §6.4 的 `WALKABLE` 由 **112 → 157**（+43 门外过渡台阶 t102 + 2 亭入口门槛 t103）；**10 座开敞亭可通行化**（`hasDoor:true` ⇒ `OBSTACLES.blocks='exceptDoor'`，与院门同类）。
 > - **v1.0.16（t118 / T1.42）**：新增 **§5.2.3** —— 登记 `door.passable`（门洞实际可通行性声明）与 `door.blockedBy`（具名阻挡者 id，默认 `null`），并写明核心约束「**门洞可通行性声明必须与实际一致**；登记几何门洞 ≠ 可通行；被具名障碍阻断必须记 `blockedBy`；消费方一律读该字段、不得自行推断；不可通行不得退化为静默整足迹阻挡」。附 t117 实例（`D-court3/E-court3-pavilion`：`width=8m` 但 `passable=false`、`blockedBy=WB-{D,E}-pond`）。**历史只追加**。
+> - **v1.0.19（t39 / kit-engineer）**：**可登塔楼城市级接线**（`KIT_VERSION 1.0.1 → 1.0.2`，`LAYOUT 1.1.27`）。新增唯一权威源 `layout.CLIMB_TOWERS`（紧凑规格：每座塔一行）+ `climbTowerPlan()/climbTowerReport()/CLIMB_TOWER_SPECS` + 冻结摘要 `CLIMB_TOWER_SUMMARY`（并入 `LAYOUT_STATS.climbTowers`）：**由规格派生** 72 面（kind `terrace`）+ 1 条中央内芯障碍（`OB-T-watchtower-3-shaft`，`y∈[0.4, 9.214] = [baseY, topY−slab]`，`blocks:'all'`、`sourceType:'building'`（core 契约白名单内）、`buildingKind:'towerShaft'`）+ 1 个塔顶机位（`VP-T-watchtower-3-top`，mode **`focus-extra`**，**不属 43 栋内景冻结集**）。几何由 `kit.makeTower()` 从**同一套公式**生成（E 区 `east-courts.js` 调用并把 `walkable/obstacles/viewpoints` 与 layout 登记逐值核对，漂移即抛错 ⇒ 禁止空气楼梯/幽灵面）。**计数**：`WALKABLE 175 → 247`、`OBSTACLES 93 → 94`、`VIEWPOINTS 61 → 62`（focus-extra 6 → 7）；`SLOTS 79 / 内景 43 / 道路 97 / 墙 60` **不变**。逐跳口径：`climbStepMax = maxStepHeight × 0.84 = 0.42 < 0.45`（禁 0.5 等值），上行/反向同阈值、面间平面不叠压、观景台面高于内芯顶（含界判定不拦）。E 区实测增量：可见三角面 `53628 → 54564（+936）`、绘制调用 `52 → 54（+2，预算 56）`。
 > - **v1.0.17（t128 / T1.48）**：新增 **§4.1.2**（`probeDoorClearance` / `probeDoorClearanceReport` 的公开签名、口径、语义与“必须用基线派生水体”的坑）；`§5.2.1` / `§6.4` 的 `WALKABLE` 由 **157 → 169**（t126 tier2 有界开槽净 +4、t128 C-bed-terrace 有界开槽净 +4 + C 侧 4 级台阶）；新增**遮蔽常驻守卫**口径（任何可行走面被更高面完全内含 ⇒ 红，全城期望 **0** 条）。历史只追加。
 > - **v1.0.18（t133 / T2.34）**：并入两端已备妥文案 —— **§12.1.2 可行走面成对不变式**（① 任何可行走面不得被更高可行走面完全内含（平面投影）；② 每处内景门洞的「门外接近面 → 通道面 → 室内面」链必须存在且相邻可跨；承载断言 `tests/layout.test.mjs:839`（t128）与 `:905`（t131，标题原文见该节），并写明为**改几何的护栏**）与 **§12.5 诊断通道纪律与过曝排查顺序**（`?env=` 只改显式键 + A/B 自检同向 + 过曝先量 Bloom 的四步顺序；与 §12.1.1 自洽）。**未改任何阈值、判据或断言**；历史只追加。
 > - **v1.0.19（t135 / T1.51）**：新增 **§12.1.3「格级取高」守卫**（不变式：门洞通道面/室内面的图节点高度必须等于其自身 `y`；与 §12.1.2 的遮蔽/通路两条并列为**三条「改几何的护栏」**），并登记其**承载断言实际坐标** `tests/layout.test.mjs:930`（`t134`）与精度口径（逐栋、精确、失败打印清单），附 `t132` 探针口径来源与复跑命令；同时**更正 §12.1.2 的坐标引用**（`:688`→`:839`、`:882`→`:905`，仅坐标、语义未改）。历史只追加。
@@ -81,7 +82,7 @@
 >   而表内数值早已逐版更新（WALKABLE 175 / SLOTS 79 / OBSTACLES 93）⇒ 改为「实际值对照（…建立；数值逐版更新，当前 = `LAYOUT 1.1.24`）」；
 >   ② §11.3 第 1 点的「当前状态：`src/ui/**` 与 `src/interaction/**` 尚未交付（空目录）」为 `CONTRACTS v1.0.2` 时点观测，
 >   现已交付（`src/interaction/**` 11 模块 / `src/ui/**` 6 文件）⇒ **原文保留 + 追加 t33 历史快照标注**（不代判 V2 结论）。
->   **核对结果**：§6.4「当前 175 面」✓、§5.2.1 各行数值 ✓、§6.3.1「15/78（共 93）」✓、§5.2.2「43/43」✓。
+>   **核对结果**：§6.4「当前 175 面」✓、§5.2.1 各行数值 ✓、§6.3.1「15/77（共 94，t39 +1 塔身内芯）」✓、§5.2.2「43/43」✓。
 >   **另修两处 §8.2 配额的陈旧引用**（只改文档文字，**`config.BUDGET` 数值与门禁逐字未动**）：§3.5 第 1 条与 §9 表的
 >   「B70/C50/D40/E40/F80 + 保留 70」是**计划原文**，与 `config.BUDGET`（t84 重分配：B70/C60/D56/E56/F80 + 保留 28 = 350）不符
 >   ⇒ 已对齐为现值，并把计划原文标注为**历史快照，不参与判定**（`tests/layout.test.mjs` 对 B70/C60/D56/E56/F80、reserve 28、350 仍有常驻 pin）。
@@ -541,7 +542,7 @@ probeDoorClearanceReport(slotId, { step = 0.1, feetY = null })      // → { rea
 | --- | --- | --- | --- |
 | `interior` 机位 | B/C 各 1（共 2） | **43**（每栋可进入建筑 1 个） | §5.2 已改，旧口径降为历史真值 |
 | `WALKABLE` 条数 | 28 | **175**（112 + 43 门外过渡台阶 t102 + 2 亭入口门槛 t103 + t126 tier2 开槽净 +4 + t128 C-bed-terrace 开槽净 +4 + C 侧 4 级台阶 + t151 C 两殿门外加法下坡带 4 级 + **t13 两座水中亭各 2 级汀步 = 4 面**） | t13 按当前树实测更新（112 / 157 / 169 / 171 为历史真值） |
-| `VIEWPOINTS` | 20 | **61**（zone 7 / fp-spawn 5 / interior 43 / focus-extra 6） | 取代旧普查值 |
+| `VIEWPOINTS` | 20 | **62**（zone 7 / fp-spawn 5 / interior 43 / focus-extra **7** = 6 + **t39 塔顶 1**） | 取代旧普查值 |
 | `FP_ROUTE` | 9 | **50**（9 基础 + 41 门内走查点 + …由派生统一给出） | 取代旧普查值 |
 | `CONNECTORS` | 32 | **32**（未变；**建筑自身的门不是 connector**） | 不变 |
 | `WALLS` | 60 | **60** | 不变 |
@@ -691,7 +692,7 @@ probeDoorClearanceReport(slotId, { step = 0.1, feetY = null })      // → { rea
   实测：真机 30 帧协议下顶点 0.86m、落地逐值差 0、飞行 160 帧进入障碍 0 帧、连续起跳 4s 不触发卡死 HUD（见 `docs/handoff-t2-fp-controls.md`）。
 - 第一人称/相机：`camera.near` 不是碰撞替代品。
 
-### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，当前 **175 面**：ground/terrace/interior 43/bridgeDeck（4 入城桥面 + **t13 汀步 4 面**）/gardenGround/outerTerrain/**passage 43**/**过渡台阶 47（t102 43 + t128 4）**/**亭门槛 2（t103）**/**t151 C 两殿门外下坡带 4 级**；t126/t128 两次**有界开槽**使 tier 类由 1→5 段 ×2（净 +8）。t9 新增 12 座批量装饰建筑**不新增任何可行走面**；t13 新增 4 面汀步，故本计数 +4。**t13 汀步面为何用 kind `bridgeDeck`**：求解器对 `sourceType=='water'` 的障碍只放行“登记桥面”之上的点（`walk-solver.js::blocks`），汀步正是“跨水面的有界石桥面”，与四座入城桥同一机制 ⇒ 无需放宽阈值、也不新增 kind）
+### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，当前 **247 面**：ground/terrace/interior 43/bridgeDeck（4 入城桥面 + **t13 汀步 4 面**）/gardenGround/outerTerrain/**passage 43**/**过渡台阶 47（t102 43 + t128 4）**/**亭门槛 2（t103）**/**t151 C 两殿门外下坡带 4 级**；t126/t128 两次**有界开槽**使 tier 类由 1→5 段 ×2（净 +8）。t9 新增 12 座批量装饰建筑**不新增任何可行走面**；t13 新增 4 面汀步，故本计数 +4。**t39（`LAYOUT 1.1.27`）新增 72 面** = 可登塔楼 `T-watchtower-3`（E 区 (226, 262.4)）由 `layout.CLIMB_TOWERS` 紧凑规格派生的「入口 2 + 每层环带 15 + 踏步 54 + 顶层观景台 1」，kind 一律取既有白名单值 **`terrace`**（每块面都有一块实体板，`kit.makeTower` 同源同轮）。**t13 汀步面为何用 kind `bridgeDeck`**：求解器对 `sourceType=='water'` 的障碍只放行“登记桥面”之上的点（`walk-solver.js::blocks`），汀步正是“跨水面的有界石桥面”，与四座入城桥同一机制 ⇒ 无需放宽阈值、也不新增 kind）
 
 外侧地形 4 段 + 墙外岸台 4 段 + 四桥桥面 + 南/北门内侧带 + 御花园地坪 + B 广场/主殿侧地面/三层台基顶/金銮殿内景地面/主殿北地面 + C 后宫地面/寝殿台基顶/寝殿内景地面 + D/E 侧院地坪。
 

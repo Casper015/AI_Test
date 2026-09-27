@@ -10,6 +10,7 @@
  *   kit.mergeZone(root, { config });           // 需要用调用方的 config 覆盖阴影策略时必须显式传入（见下）
  *
  * 契约（CONTRACTS §3.4，名称冻结）：
+ *   kit.makeTower({ id, spec, x, z, baseY, zone, detail })   // 可登塔楼（t39；返回 {group, walkable, obstacles, viewpoints, plan, metrics}）
  *   kit.materials[role]  kit.hall/gateHall/sideHall/pavilion/cornerTower/wall/courtyardGate/
  *   kit.corridor/terrace/stairs/bridge  kit.tree/rockery/lantern/railing/bronze  kit.instance(mesh,count)  kit.lod(levels)
  * 额外提供（不冲突）：screenWall / water / paving 摆件工厂，以及合批、去内部面、统计、诊断、disposeObject。
@@ -35,6 +36,10 @@ import {
 } from './tokens.js';
 import { makeRng } from './props.js';
 import { interiorSet as buildInteriorSet, INTERIOR_KINDS, INTERIOR_MATERIALS } from './interiors.js';
+import {
+  makeTower as buildTower, towerPlan as buildTowerPlan, disposeTower as disposeTowers,
+  climbStepMax, climbSequenceReport, faceOverlaps, TOWER_SPECS, CLIMB_SAFETY,
+} from './towers.js';
 
 /**
  * 构件库版本。递增规则：任何**几何/材质/合批行为**变化都必须递增本版本号，
@@ -42,6 +47,12 @@ import { interiorSet as buildInteriorSet, INTERIOR_KINDS, INTERIOR_MATERIALS } f
  *
  * 版本历史
  * ---------
+ * - **1.0.2**（2026-09-26，t39 塔楼城市级接线；**几何零改动**，只新增导出与工厂名）：
+ *   导出 `makeTower` / `towerPlan` / `disposeTower`（+ `climbStepMax` / `climbSequenceReport` / `faceOverlaps` /
+ *   `TOWER_SPECS` / `CLIMB_SAFETY`），并把 `kit.makeTower(params)`（绑定 `env`）与
+ *   `stats().factories.towers` 接到既有构件库面；**不新增材质令牌、不新增合批桶**
+ *   （`makeTower` 只用 `terrace/terraceCap/stairs/wallBody/roof/finial` 六个既有部位 × 既有材质）。
+ *   理由：t37 的 blocker —— 塔楼几何需在 `src/kit/index.js` 导出并在 E 区调用；导出属 kit 域。
  * - **1.0.1**（2026-09-26，t22 + t25 的构件行为修正，本版为行为版本；几何与材质本身零变化：
  *   `KIT_VERSION` 由 1.0.0 → 1.0.1 **不改变任何三角面/metrics/worldBounds**，见 docs/handoff-t3-version.md）
  *   1. 合批阴影标志策略（t25）：`mergeZone`/`mergeByMaterial` 的合批网格现在**继承来源构件的
@@ -61,7 +72,7 @@ import { interiorSet as buildInteriorSet, INTERIOR_KINDS, INTERIOR_MATERIALS } f
  *      并回显 `metrics.arch = { radius, rise, crownY, springY, clearance, referenceY, tube }`。
  * - **1.0.0**（t3 首次交付）：参数化构件工厂 + config 令牌材质 + LOD/合批 + 资源登记。
  */
-export const KIT_VERSION = '1.0.1';
+export const KIT_VERSION = '1.0.2';
 
 const BUILDING_FACTORY_NAMES = Object.freeze([
   'hall', 'gateHall', 'sideHall', 'pavilion', 'cornerTower', 'wall', 'courtyardGate', 'corridor', 'terrace', 'stairs', 'bridge',
@@ -69,6 +80,8 @@ const BUILDING_FACTORY_NAMES = Object.freeze([
 const PROP_FACTORY_NAMES = Object.freeze(['tree', 'rockery', 'lantern', 'railing', 'bronze', 'screenWall', 'water', 'paving']);
 /** 室内陈设套件（t61）：一套工厂按 kind 分层覆盖殿/配殿/门殿/角楼。 */
 const INTERIOR_FACTORY_NAMES = Object.freeze(['interiorSet']);
+/** 可登塔楼工厂（t39）：`makeTower` 与 `towerPlan` 同源同轮（面/障碍/机位由同一 plan 派生）。 */
+const TOWER_FACTORY_NAMES = Object.freeze(['makeTower', 'towerPlan', 'disposeTower']);
 
 /**
  * 创建构件库。
@@ -162,6 +175,11 @@ export function createKit(ctx = {}) {
     // —— 室内陈设套件（t61）：kit.interiorSet({ kind, grade, bounds, groundY, ceilingY, entrance, seed, lod })
     interiorSet: (params = {}) => buildInteriorSet(env, params),
 
+    // —— 可登塔楼（t39）：几何与登记（walkable/obstacles/viewpoints）由**同一 plan** 派生
+    makeTower: (params = {}) => buildTower(env, params),
+    towerPlan: (params = {}) => buildTowerPlan(params, config),
+    disposeTower: (towers = []) => disposeTowers(towers),
+
     // —— 组合 / 批处理
     merge: (geometries, options) => mergeGeometries(THREE_NS, geometries, options),
     /**
@@ -233,7 +251,12 @@ export function createKit(ctx = {}) {
         materials: materials.stats(),
         assets: assets.stats(),
         diagnostics: diagnostics.map((d) => ({ code: d.code, kind: d.kind, id: d.id })),
-        factories: { buildings: BUILDING_FACTORY_NAMES, props: PROP_FACTORY_NAMES, interiors: INTERIOR_FACTORY_NAMES },
+        factories: {
+          buildings: BUILDING_FACTORY_NAMES,
+          props: PROP_FACTORY_NAMES,
+          interiors: INTERIOR_FACTORY_NAMES,
+          towers: TOWER_FACTORY_NAMES,
+        },
       };
       if (root) {
         base.scene = {
@@ -275,6 +298,15 @@ export {
   FALLBACK_THREE as THREE,
   INTERIOR_KINDS,
   INTERIOR_MATERIALS,
+  /* t39：塔楼工厂与面序列工具（`makeTower` 与 `towerPlan` 同源同轮） */
+  buildTower as makeTower,
+  buildTowerPlan as towerPlan,
+  disposeTowers as disposeTower,
+  climbStepMax,
+  climbSequenceReport,
+  faceOverlaps,
+  TOWER_SPECS,
+  CLIMB_SAFETY,
   buildInteriorSet as interiorSet,
   sharedDeriveSeed as deriveSeed,
   THREE_RESOLUTION,

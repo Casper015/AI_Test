@@ -673,11 +673,22 @@ export function makeWall(env, raw = {}) {
   }
   if (cursor < length / 2) intervals.push([cursor, length / 2]);
   const bodyH = height - battlementH;
+  /* t46：**白石墙基与红墙的体块划分**（修"红墙边缘闪缩"/Z-fighting）。
+   * 修前：`wallBody` 与 `wallBase` 同长度、同中心、**同底部高度**（都 y=baseY），墙基只加厚 6%
+   *   ⇒ 两块的**端面完全共面**（门洞两侧的红色端面 vs 白色端面，实测每处 0.8m×8m=6.4m²）且体块整段套叠
+   *   ⇒ 视角变化时深度值相等、交替覆盖 ⇒ 走动时闪缩。
+   * 修后：**红墙从墙基顶面开始**（baseH = min(0.8, bodyH×0.2)）：
+   *   · 墙基 y ∈ [baseY, baseY+baseH]、红墙 y ∈ [baseY+baseH, baseY+bodyH] ⇒ 两块只在 y=baseY+baseH 处**接触**（法线相反，不闪）；
+   *   · 墙体总高 = baseH + (bodyH − baseH) = bodyH **逐值不变**；门洞净宽只由 x 向区间决定 ⇒ **逐值不变**；
+   *   · 端面不再共面：门洞两侧的下段由**白石墙基**承担（本来就是白石墙基的形制），上段为红墙。
+   * 这是几何修复（体块不再套叠/端面不再共面），不是掩盖（未改 MSAA、未改绘制顺序、未关深度检测）。
+   */
+  const baseH = Math.min(0.8, bodyH * 0.2);
   for (const [a, b] of intervals) {
     const w = b - a;
     if (w <= 0.01) continue;
-    parts.add('wallBody', 'plasterRed', box(T, { w, h: bodyH, d: thickness, x: (a + b) / 2, y: baseY, tile: tile.wall }));
-    parts.add('wallBase', 'wallBase', box(T, { w, h: Math.min(0.8, bodyH * 0.2), d: thickness * 1.06, x: (a + b) / 2, y: baseY, tile: tile.stone }));
+    parts.add('wallBody', 'plasterRed', box(T, { w, h: bodyH - baseH, d: thickness, x: (a + b) / 2, y: baseY + baseH, tile: tile.wall }));
+    parts.add('wallBase', 'wallBase', box(T, { w, h: baseH, d: thickness * 1.06, x: (a + b) / 2, y: baseY, tile: tile.stone }));
   }
   for (const op of openings) {
     const w = op.width ?? 0;
@@ -701,11 +712,20 @@ export function makeWall(env, raw = {}) {
       }
     }
   } else {
-    // 院墙：青灰瓦顶（硬山式压顶）
+    /* 院墙：青灰瓦顶（硬山式压顶）。
+     * t46 同类普查（探针实测，同一生成路径）：压顶与墙身**同宽**（1.2m）且竖向重叠 0.3cap
+     *   ⇒ 两者**侧面同面共面**（140m × 0.18m ≈ 25.2m² 的 Z-fighting 带），端面也与墙端共面（0.216m²）。
+     * 修法（**只动贴面装饰层的小幅几何偏移**，不新增加载/桶）：压顶略出挑（1.06×墙厚，与宫墙压顶 1.15× 同族做法）
+     *   + 两端各收进 4cm（端面不再与墙端共面）。原 `beam(thickness: cap)` 的截面为
+     *   `cap`（竖向）× `cap*2`（横向，与墙同宽）⇒ 换成显式 `box` 后竖向跨度与中心高度**逐值不变**
+     *   （y = baseY+height+cap*0.2−cap*0.5，h = cap），三角面同为 12 ⇒ 可见三角面与绘制调用不变。
+     */
     const cap = Math.max(0.3, thickness * 0.5);
-    parts.add('wallCoping', 'courtyardWallTop', beam(T, { from: { x: -length / 2, y: baseY + height + cap * 0.2, z: 0 }, to: { x: length / 2, y: baseY + height + cap * 0.2, z: 0 }, thickness: cap, tile: tile.paving }));
+    const capInset = 0.04; // 压顶端部收进（4cm 量级的贴面偏移，肉眼不可辨）
+    const ridgeInset = capInset + 0.08; // 脊再收进 8cm ⇒ 其端面落在压顶**内部**（两块端面不再共面）
+    parts.add('wallCoping', 'courtyardWallTop', box(T, { w: length - capInset * 2, h: cap, d: thickness * 1.06, y: baseY + height + cap * 0.2 - cap * 0.5, tile: tile.paving }));
     if (detail !== 'far') {
-      parts.add('wallCopingRidge', 'courtyardWallTop', box(T, { w: length, h: cap * 0.35, d: cap * 0.5, y: baseY + height + cap * 0.6, tile: tile.paving }));
+      parts.add('wallCopingRidge', 'courtyardWallTop', box(T, { w: length - ridgeInset * 2, h: cap * 0.35, d: cap * 0.5, y: baseY + height + cap * 0.6, tile: tile.paving }));
     }
   }
 

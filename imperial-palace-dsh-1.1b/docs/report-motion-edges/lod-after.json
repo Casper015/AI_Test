@@ -1,0 +1,977 @@
+{
+ "protocol": {
+  "frames": 96,
+  "size": [
+   960,
+   540
+  ],
+  "url": "http://127.0.0.1:63386/index.html?view=fp&quality=medium&ui=0",
+  "quality": "medium",
+  "drive": "rAF 冻结 + __MOTION__.stepFrame(1/60)（逐字复刻 main.js frameStep）",
+  "input": "真实 KeyboardEvent（window.dispatchEvent）→ interaction 键盘层 → core 相机装置 keys → updateFp()",
+  "metric": "相邻帧逐像素差（阈值 0）；分类：梯度 ≥60 = 边缘型，≤12 = 平坦型；双命中深度差 <0.02m = 共面"
+ },
+ "boot": "ok",
+ "background": {
+  "background": "#c7cfd5",
+  "fog": {
+   "color": "#d9d5ca",
+   "near": 1400,
+   "far": 3200
+  },
+  "canvas": {
+   "w": 960,
+   "h": 540,
+   "cssW": 960,
+   "cssH": 540
+  }
+ },
+ "arms": [
+  {
+   "id": "lod-live",
+   "label": "逼近烟柱 LOD 门限 + 环境照常（逐帧 visible 翻转）",
+   "frames": 96,
+   "stats": {
+    "frames": 19,
+    "drawCalls": null,
+    "triangles": null,
+    "aa": {
+     "mode": "msaa",
+     "samples": 2,
+     "reason": "tier",
+     "contextFlagEffective": false
+    },
+    "raw": {
+     "calls": 604,
+     "tris": 833574
+    }
+   },
+   "near": null,
+   "far": null,
+   "cameraMove": 1.993,
+   "unstablePixels": 309347,
+   "changedTotal": 6862026,
+   "changedPerPair": [
+    75844,
+    71884,
+    77772,
+    70644,
+    82908,
+    78706,
+    65726,
+    74076,
+    76371,
+    67951,
+    74725,
+    76488,
+    78374,
+    65066,
+    72996,
+    76711,
+    64252,
+    72125,
+    75082,
+    72690,
+    57494,
+    71597,
+    75962,
+    72479,
+    73344,
+    58089,
+    72877,
+    74842,
+    70657,
+    62744,
+    75519,
+    71737,
+    63941,
+    77887,
+    76452,
+    79925,
+    80736,
+    66623,
+    74061,
+    77345,
+    63651,
+    71531,
+    75545,
+    72979,
+    57328,
+    72105,
+    70358,
+    70949,
+    72895,
+    58041,
+    75038,
+    77708,
+    74193,
+    67466,
+    80271,
+    76223,
+    68419,
+    81255,
+    79046,
+    79015,
+    81275,
+    68404,
+    75935,
+    78339,
+    64473,
+    72202,
+    76344,
+    74676,
+    59137,
+    74295,
+    72933,
+    70718,
+    71900,
+    56859,
+    72508,
+    74458,
+    70487,
+    63500,
+    77247,
+    75343,
+    68137,
+    81480,
+    79873,
+    76408,
+    78301,
+    63938,
+    73143,
+    77020,
+    64528,
+    71918,
+    74952,
+    72879,
+    56954,
+    71795,
+    70949
+   ],
+   "edgePixels": 488280,
+   "midPixels": 495491,
+   "flatPixels": 5878255,
+   "flatFlipPixels": 7505,
+   "flatFlipList": [
+    {
+     "x": 56,
+     "y": 202,
+     "d": 78,
+     "g": 11
+    },
+    {
+     "x": 43,
+     "y": 248,
+     "d": 73,
+     "g": 8
+    },
+    {
+     "x": 466,
+     "y": 248,
+     "d": 46,
+     "g": 11
+    },
+    {
+     "x": 474,
+     "y": 248,
+     "d": 86,
+     "g": 4
+    },
+    {
+     "x": 484,
+     "y": 248,
+     "d": 85,
+     "g": 4
+    },
+    {
+     "x": 485,
+     "y": 248,
+     "d": 85,
+     "g": 3
+    },
+    {
+     "x": 493,
+     "y": 248,
+     "d": 44,
+     "g": 10
+    },
+    {
+     "x": 912,
+     "y": 248,
+     "d": 68,
+     "g": 5
+    },
+    {
+     "x": 913,
+     "y": 248,
+     "d": 72,
+     "g": 7
+    },
+    {
+     "x": 914,
+     "y": 248,
+     "d": 69,
+     "g": 5
+    },
+    {
+     "x": 915,
+     "y": 248,
+     "d": 71,
+     "g": 2
+    },
+    {
+     "x": 916,
+     "y": 248,
+     "d": 62,
+     "g": 6
+    }
+   ],
+   "flipFlopPixels": 14220,
+   "flipFlopList": [
+    {
+     "x": 107,
+     "y": 222,
+     "d": 35,
+     "back": 4,
+     "g": 47
+    },
+    {
+     "x": 43,
+     "y": 249,
+     "d": 44,
+     "back": 0,
+     "g": 59
+    },
+    {
+     "x": 889,
+     "y": 249,
+     "d": 47,
+     "back": 1,
+     "g": 8
+    },
+    {
+     "x": 898,
+     "y": 249,
+     "d": 71,
+     "back": 0,
+     "g": 143
+    },
+    {
+     "x": 911,
+     "y": 249,
+     "d": 64,
+     "back": 2,
+     "g": 25
+    },
+    {
+     "x": 944,
+     "y": 249,
+     "d": 88,
+     "back": 1,
+     "g": 15
+    },
+    {
+     "x": 505,
+     "y": 250,
+     "d": 163,
+     "back": 0,
+     "g": 32
+    },
+    {
+     "x": 877,
+     "y": 250,
+     "d": 82,
+     "back": 3,
+     "g": 157
+    },
+    {
+     "x": 899,
+     "y": 251,
+     "d": 104,
+     "back": 2,
+     "g": 165
+    },
+    {
+     "x": 8,
+     "y": 252,
+     "d": 56,
+     "back": 2,
+     "g": 27
+    },
+    {
+     "x": 876,
+     "y": 252,
+     "d": 103,
+     "back": 4,
+     "g": 172
+    },
+    {
+     "x": 115,
+     "y": 253,
+     "d": 76,
+     "back": 0,
+     "g": 83
+    }
+   ],
+   "overGradientPixels": 9344,
+   "edgeChanged": 488280,
+   "edgeStepRatio": 0.0191,
+   "coincidentPairs": [],
+   "bgHoles": 0,
+   "bgHoleSample": [],
+   "nearestMin": null,
+   "nearestSeries": [],
+   "smokeFlips": [
+    {
+     "index": 0,
+     "flips": 0,
+     "minPx": 9.277,
+     "maxPx": 9.6207,
+     "visibleStart": true,
+     "visibleEnd": true
+    },
+    {
+     "index": 1,
+     "flips": 0,
+     "minPx": 2.3961,
+     "maxPx": 2.4184,
+     "visibleStart": true,
+     "visibleEnd": true
+    },
+    {
+     "index": 2,
+     "flips": 0,
+     "minPx": 1.1551,
+     "maxPx": 1.1602,
+     "visibleStart": true,
+     "visibleEnd": true
+    },
+    {
+     "index": 3,
+     "flips": 0,
+     "minPx": 0.9989,
+     "maxPx": 1.0027,
+     "visibleStart": false,
+     "visibleEnd": false
+    }
+   ],
+   "smokeFlipsTotal": 0,
+   "smokeSeriesLast": [
+    {
+     "visible": true,
+     "pointPx": 9.277,
+     "dist": null
+    },
+    {
+     "visible": true,
+     "pointPx": 2.4184,
+     "dist": null
+    },
+    {
+     "visible": true,
+     "pointPx": 1.1602,
+     "dist": null
+    },
+    {
+     "visible": false,
+     "pointPx": 1.0027,
+     "dist": null
+    }
+   ],
+   "bandStats": {
+    "far": {
+     "pixels": 56146,
+     "changes": 1408163,
+     "max": 529
+    },
+    "mid": {
+     "pixels": 28201,
+     "changes": 767288,
+     "max": 428
+    },
+    "near": {
+     "pixels": 225000,
+     "changes": 4686575,
+     "max": 76
+    }
+   },
+   "depthSample": {
+    "far": 294,
+    "mid": 32,
+    "near": 250,
+    "sky": 0
+   },
+   "bandObjs": [
+    "environment-sky",
+    "Points",
+    "Mesh",
+    "greybox:B:wall",
+    "D-trees:canopy-leafx26",
+    "greybox:B:ground",
+    "greybox:B:road"
+   ],
+   "grid": {
+    "3x0": 21600,
+    "3x1": 21600,
+    "3x2": 21600,
+    "3x3": 21600,
+    "3x4": 21600,
+    "3x5": 21600,
+    "2x0": 21543,
+    "2x4": 21536
+   },
+   "unstableTop": [
+    {
+     "x": 957,
+     "y": 211,
+     "n": 95,
+     "max": 155
+    },
+    {
+     "x": 958,
+     "y": 213,
+     "n": 95,
+     "max": 6
+    },
+    {
+     "x": 956,
+     "y": 215,
+     "n": 95,
+     "max": 6
+    },
+    {
+     "x": 958,
+     "y": 216,
+     "n": 95,
+     "max": 7
+    },
+    {
+     "x": 959,
+     "y": 217,
+     "n": 95,
+     "max": 10
+    },
+    {
+     "x": 946,
+     "y": 218,
+     "n": 95,
+     "max": 11
+    },
+    {
+     "x": 955,
+     "y": 218,
+     "n": 95,
+     "max": 8
+    },
+    {
+     "x": 943,
+     "y": 219,
+     "n": 95,
+     "max": 10
+    },
+    {
+     "x": 945,
+     "y": 219,
+     "n": 95,
+     "max": 9
+    },
+    {
+     "x": 951,
+     "y": 219,
+     "n": 95,
+     "max": 6
+    },
+    {
+     "x": 941,
+     "y": 220,
+     "n": 95,
+     "max": 7
+    },
+    {
+     "x": 959,
+     "y": 220,
+     "n": 95,
+     "max": 15
+    }
+   ],
+   "identify": [
+    {
+     "px": [
+      957,
+      211
+     ],
+     "hits": [
+      {
+       "dist": 97.7055,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 4377.4015,
+       "chain": [
+        "environment-sky",
+        "environment-root",
+        "palace-scene"
+       ],
+       "obj": "environment-sky"
+      }
+     ],
+     "gap": 4279.696
+    },
+    {
+     "px": [
+      958,
+      213
+     ],
+     "hits": [
+      {
+       "dist": 97.0962,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 97.526,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      }
+     ],
+     "gap": 0.4297
+    },
+    {
+     "px": [
+      956,
+      215
+     ],
+     "hits": [
+      {
+       "dist": 96.7879,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 4377.5096,
+       "chain": [
+        "environment-sky",
+        "environment-root",
+        "palace-scene"
+       ],
+       "obj": "environment-sky"
+      }
+     ],
+     "gap": 4280.7218
+    },
+    {
+     "px": [
+      958,
+      216
+     ],
+     "hits": [
+      {
+       "dist": 96.3103,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 97.096,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      }
+     ],
+     "gap": 0.7857
+    },
+    {
+     "px": [
+      959,
+      217
+     ],
+     "hits": [
+      {
+       "dist": 95.9433,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 96.9547,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      }
+     ],
+     "gap": 1.0115
+    },
+    {
+     "px": [
+      946,
+      218
+     ],
+     "hits": [
+      {
+       "dist": 97.084,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 4377.6237,
+       "chain": [
+        "environment-sky",
+        "environment-root",
+        "palace-scene"
+       ],
+       "obj": "environment-sky"
+      }
+     ],
+     "gap": 4280.5397
+    },
+    {
+     "px": [
+      955,
+      218
+     ],
+     "hits": [
+      {
+       "dist": 96.1141,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 4377.7028,
+       "chain": [
+        "environment-sky",
+        "environment-root",
+        "palace-scene"
+       ],
+       "obj": "environment-sky"
+      }
+     ],
+     "gap": 4281.5887
+    },
+    {
+     "px": [
+      943,
+      219
+     ],
+     "hits": [
+      {
+       "dist": 97.1505,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 4377.7742,
+       "chain": [
+        "environment-sky",
+        "environment-root",
+        "palace-scene"
+       ],
+       "obj": "environment-sky"
+      }
+     ],
+     "gap": 4280.6237
+    },
+    {
+     "px": [
+      945,
+      219
+     ],
+     "hits": [
+      {
+       "dist": 96.9295,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 4377.73,
+       "chain": [
+        "environment-sky",
+        "environment-root",
+        "palace-scene"
+       ],
+       "obj": "environment-sky"
+      }
+     ],
+     "gap": 4280.8006
+    },
+    {
+     "px": [
+      951,
+      219
+     ],
+     "hits": [
+      {
+       "dist": 96.2815,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 4377.7152,
+       "chain": [
+        "environment-sky",
+        "environment-root",
+        "palace-scene"
+       ],
+       "obj": "environment-sky"
+      }
+     ],
+     "gap": 4281.4337
+    },
+    {
+     "px": [
+      941,
+      220
+     ],
+     "hits": [
+      {
+       "dist": 97.1069,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 4377.9388,
+       "chain": [
+        "environment-sky",
+        "environment-root",
+        "palace-scene"
+       ],
+       "obj": "environment-sky"
+      }
+     ],
+     "gap": 4280.8319
+    },
+    {
+     "px": [
+      959,
+      220
+     ],
+     "hits": [
+      {
+       "dist": 95.1756,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      },
+      {
+       "dist": 96.7896,
+       "chain": [
+        "Mesh",
+        "B:batch:fixed",
+        "B:batch",
+        "zone-root:B",
+        "palace-city"
+       ],
+       "obj": "Mesh"
+      }
+     ],
+     "gap": 1.6139
+    }
+   ],
+   "approach": {
+    "idx": 3,
+    "drawH": 900,
+    "dir": "S",
+    "coarseK": 1500,
+    "fineK": 1187,
+    "startPx": 1.1024,
+    "pxAfterProbe": 1.1089,
+    "endPx": 0.9985,
+    "err": 0.0014999999999999458,
+    "systems": [
+     {
+      "i": 0,
+      "px": 9.6533,
+      "visible": true
+     },
+     {
+      "i": 1,
+      "px": 2.3941,
+      "visible": true
+     },
+     {
+      "i": 2,
+      "px": 1.1546,
+      "visible": true
+     },
+     {
+      "i": 3,
+      "px": 0.9985,
+      "visible": false
+     }
+    ]
+   },
+   "camera0": {
+    "x": 0,
+    "y": 1.65,
+    "z": -346.63533333335386
+   },
+   "cameraLast": {
+    "x": 0,
+    "y": 1.65,
+    "z": -344.642000000021
+   }
+  }
+ ],
+ "smokeBefore": {
+  "ok": true,
+  "drawH": 540,
+  "groupVisible": true,
+  "plumes": [
+   {
+    "index": 0,
+    "visible": true,
+    "pointPx": 6.179,
+    "anchorDistance": 48.07
+   },
+   {
+    "index": 1,
+    "visible": true,
+    "pointPx": 1.3393,
+    "anchorDistance": 221.75
+   },
+   {
+    "index": 2,
+    "visible": true,
+    "pointPx": 0.6709,
+    "anchorDistance": 442.72
+   },
+   {
+    "index": 3,
+    "visible": false,
+    "pointPx": 0.8221,
+    "anchorDistance": 361.25
+   }
+  ]
+ },
+ "smokeAfter": {
+  "ok": true,
+  "drawH": 540,
+  "groupVisible": true,
+  "plumes": [
+   {
+    "index": 0,
+    "visible": true,
+    "pointPx": 5.5938,
+    "anchorDistance": 53.09
+   },
+   {
+    "index": 1,
+    "visible": true,
+    "pointPx": 1.4529,
+    "anchorDistance": 204.42
+   },
+   {
+    "index": 2,
+    "visible": true,
+    "pointPx": 0.6966,
+    "anchorDistance": 426.35
+   },
+   {
+    "index": 3,
+    "visible": false,
+    "pointPx": 0.8618,
+    "anchorDistance": 344.65
+   }
+  ]
+ },
+ "stats": {
+  "frames": 115,
+  "drawCalls": null,
+  "triangles": null,
+  "aa": {
+   "mode": "msaa",
+   "samples": 2,
+   "reason": "tier",
+   "contextFlagEffective": false
+  },
+  "raw": {
+   "calls": 605,
+   "tris": 834006
+  }
+ }
+}

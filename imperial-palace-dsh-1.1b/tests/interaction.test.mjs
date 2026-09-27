@@ -3447,7 +3447,115 @@ await runner.test('F26 口径裁定（t146）：E18/E8/E11 用 cellSize=3；细�
 
 /* ==========================================================================
  *  t156 / T7.16：库级口径一致（connected ≡ path）+ 过渡带双向审计（F11/F12）
+ *  t26 / T7.17：**取格口径统一**（同一坐标 ⇒ 同一格）+ 粗口径"空真"标注（§12.1.4.4）
+ *              + 「F27 连跑 ≥10 轮逐轮一致」常驻断言（F28）
  * ======================================================================== */
+
+/** t26：过渡带双向审计的**唯一读数函数**（F27 / F28 共用；两处判据不得各写一份）。 */
+const T26_ANCHOR = { x: 0, z: -480 }; // 公共锚点（与 E8/E11/E18 同源）
+const T26_BANDS = LAYOUT.WALKABLE.filter((w) => /-transition-|-descent-|-threshold/.test(w.id));
+const t26Center = (b) => ({ cx: (b.bounds.minX + b.bounds.maxX) / 2, cz: (b.bounds.minZ + b.bounds.maxZ) / 2 });
+/**
+ * 逐带读数：正向 `componentOf`（从锚点 A 能否走到该带）＋反向 `connected`（从该带能否走回 A）。
+ * 一并带回**取到的格**（`componentOf().cell`）与**反向 flood 的锚点格**（`connected().anchors[0]`），
+ * 供"同一坐标取格口径统一"断言（t26：两者必须是**同一格对象**）。
+ */
+function t26BandRows(graph, order = 'fwd-first') {
+  const rows = [];
+  for (const b of T26_BANDS) {
+    const { cx, cz } = t26Center(b);
+    const point = { x: cx, z: cz };
+    let fwd;
+    let bwd;
+    if (order === 'bwd-first') {
+      bwd = graph.connected([point, T26_ANCHOR]);
+      fwd = graph.componentOf(cx, cz, T26_ANCHOR);
+    } else {
+      fwd = graph.componentOf(cx, cz, T26_ANCHOR);
+      bwd = graph.connected([point, T26_ANCHOR]);
+    }
+    rows.push({
+      id: b.id,
+      cell: fwd.cell ? `${fwd.cell.col},${fwd.cell.row}` : null,
+      anchor: bwd.anchors[0] ? `${bwd.anchors[0].col},${bwd.anchors[0].row}` : null,
+      sameSnap: fwd.cell !== null && fwd.cell === bwd.anchors[0],
+      fwd: fwd.ok,
+      bwd: bwd.ok,
+    });
+  }
+  return rows;
+}
+/** t26：格面高（走图侧唯一取样入口 ⇒ 与 `canStep` 同精度）。 */
+function t26Cell(graph, col, row) {
+  const s = graph.sample(col, row);
+  return { col, row, ok: s.ok === true, y: s.y };
+}
+/**
+ * t26：带邻域的**边分类**（空真标注用）——
+ *   `nominalOneWay`：用 `layout.floorYAt`（float64 双侧）按 `canStep` 的同一语义判"名义单向"；
+ *   `graphOneWay`  ：图侧（float32）实际单向；
+ *   `masked`       ：名义单向 **但** 图侧两向都拒 ⇒ 这条单向被**掩码**了（粗口径看不见它）。
+ */
+function t26EdgeClasses(graph) {
+  const stepCfg = CONFIG.INTERACTION.step;
+  const EPS = 1e-9;
+  const out = [];
+  for (const b of T26_BANDS) {
+    const { cx, cz } = t26Center(b);
+    const cell = graph.snapPoint({ x: cx, z: cz }); // t26：唯一取格入口
+    if (!cell) continue;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const a = t26Cell(graph, cell.col, cell.row);
+      const n = t26Cell(graph, cell.col + dc, cell.row + dr);
+      if (a.ok !== true || n.ok !== true) continue;
+      const xa = graph.bounds.minX + a.col * graph.cellSize;
+      const za = graph.bounds.minZ + a.row * graph.cellSize;
+      const xn = graph.bounds.minX + n.col * graph.cellSize;
+      const zn = graph.bounds.minZ + n.row * graph.cellSize;
+      const yA64 = LAYOUT.floorYAt(xa, za);
+      const yB64 = LAYOUT.floorYAt(xn, zn);
+      if (yA64 === null || yB64 === null) continue;
+      const d64 = yA64 - yB64;
+      const allowedAB = d64 <= stepCfg.snapDownDistance + EPS && -d64 <= stepCfg.maxStepHeight + EPS;
+      const allowedBA = -d64 <= stepCfg.snapDownDistance + EPS && d64 <= stepCfg.maxStepHeight + EPS;
+      const nominalOneWay = allowedAB !== allowedBA;
+      const graphFwd = graph.canStep(a.col, a.row, n.col, n.row);
+      const graphBwd = graph.canStep(n.col, n.row, a.col, a.row);
+      out.push({
+        bandId: b.id,
+        pair: `${a.col},${a.row}↔${n.col},${n.row}`,
+        nominalOneWay,
+        graphOneWay: graphFwd !== graphBwd,
+        masked: nominalOneWay && graphFwd === false && graphBwd === false,
+        d64,
+        d32: a.y - n.y,
+      });
+    }
+  }
+  return out;
+}
+/**
+ * t26：**已登记的粗口径伪影集合**（§12.1.4.4「粗口径只锁已知伪影集合」，**精确集合相等**）。
+ * 语义：这些过渡带在 `cellSize:3` 下"两侧均不可达"，但在权威细口径（`cellSize:1`）下**两向可达**
+ * ⇒ 是**粗口径伪影**（3m 格心取不到窄面/中间级），不是真实缺口。
+ * 布局变更导致集合变化 ⇒ 本条变红，须**同轮重新登记**（这正是"锁"的目的；不得据粗口径补几何）。
+ */
+const T26_COARSE_ARTIFACTS = [
+  'WK-B-hall-mid-transition-1@140,173',
+  'WK-B-hall-mid-transition-2@140,173',
+  'WK-B-hall-rear-transition-1@140,194',
+  'WK-B-hall-rear-transition-2@140,194',
+  'WK-B-side-east-main-transition-1@162,148',
+  'WK-B-side-west-main-transition-1@118,148',
+  'WK-B-side-east-rear-transition-1@158,201',
+  'WK-B-side-west-rear-transition-1@122,201',
+  'WK-C-hall-bed-rear-transition-1@140,265',
+  'WK-C-hall-bed-rear-transition-2@140,265',
+  'WK-C-hall-bed-rear-transition-3@140,265',
+  'WK-C-side-east-rear-transition-1@156,270',
+  'WK-C-side-west-rear-transition-1@124,270',
+  'WK-E-court2-hall-transition-1@221,137',
+];
 
 await runner.test('F27 库级口径一致（t156）：connected([a,b]).ok ≡ path(a→b).ok（固定锚点+代表性点集）+ 55 处过渡带双向读数', async () => {
   const solver = createWalkSolver({});
@@ -3478,22 +3586,133 @@ await runner.test('F27 库级口径一致（t156）：connected([a,b]).ok ≡ pa
   runner.info(`  库级一致（t156）：connected≡path 逐对比较 ${pts.length} 对 ⇒ 不一致 ${mismatches.length} 项；一次性 ${pts.length + 1} 点调用 ok=${allAtOnce.ok}（逐点可达 ${perPointOk}/${pts.length}）`);
 
   // ── F12：每处新增/修改的过渡带（-transition-* / -descent-* / -threshold）双向读数
-  const bands = LAYOUT.WALKABLE.filter((w) => /-transition-|-descent-|-threshold/.test(w.id));
-  assert(bands.length > 0, '必须存在过渡带面（-transition-*/-descent-*/-threshold）');
-  const bandRows = [];
-  for (const b of bands) {
-    const cx = (b.bounds.minX + b.bounds.maxX) / 2;
-    const cz = (b.bounds.minZ + b.bounds.maxZ) / 2;
-    const forward = graph.componentOf(cx, cz, A).ok; // 正向：从城外锚点能否走到该带
-    const backward = graph.connected([{ x: cx, z: cz }, A]).ok; // 反向：从该带能否走回城外锚点
-    bandRows.push({ id: b.id, forward, backward });
-  }
-  const oneWay = bandRows.filter((r) => r.forward !== r.backward);
-  assertEqual(oneWay.length, 0, `过渡带不得存在"单向"（正/反向读数不一致）：${oneWay.map((r) => `${r.id} fwd=${r.forward} bwd=${r.backward}`).slice(0, 6).join('；')}`);
-  const notInMain = bandRows.filter((r) => !r.forward && !r.backward);
+  const bandRows = t26BandRows(graph, 'fwd-first');
+  assert(bandRows.length > 0, '必须存在过渡带面（-transition-*/-descent-*/-threshold）');
+
+  // t26①：**取格口径统一** —— 同一坐标（带中心）经正向 `componentOf` 与反向 `connected`
+  //   必须取到**同一格**：① 坐标逐值相等（语义）；② **同一格对象**（机制：唯一取格入口
+  //   `snapPoint` + 按 `(半径,x,z)` 记忆化的同一缓存键）。两条都要 —— 只查坐标无法发现
+  //   "某一调用点悄悄换了半径"（实测 M1 突变：半径 6→5 时坐标仍相同、但对象不同 ⇒ 必红）。
+  const snapCoordMismatch = bandRows.filter((r) => r.cell === null || r.anchor === null || r.cell !== r.anchor);
+  assertEqual(
+    snapCoordMismatch.length,
+    0,
+    `同一坐标必须取到同一格坐标（componentOf().cell ≡ connected().anchors[0]）：不一致 ${snapCoordMismatch.length} 项：${snapCoordMismatch.slice(0, 4).map((r) => `${r.id} cell=${r.cell} anchor=${r.anchor}`).join('；')}`,
+  );
+  const snapMismatch = bandRows.filter((r) => r.sameSnap !== true);
+  assertEqual(
+    snapMismatch.length,
+    0,
+    `取格必须由**唯一入口**给出（同一吸附函数/同一半径/同一缓存键 ⇒ 同一格对象；重构取格实现须同轮同步本断言）：不一致 ${snapMismatch.length} 项：${snapMismatch.slice(0, 4).map((r) => `${r.id} cell=${r.cell} anchor=${r.anchor}`).join('；')}`,
+  );
+  const snapStats = graph.snapStats();
+  assert(snapStats.entries > 0 && snapStats.hits > 0, `取格口径缓存必须生效（条目 ${snapStats.entries} / 命中 ${snapStats.hits}）`);
+
+  const oneWay = bandRows.filter((r) => r.fwd !== r.bwd);
+  assertEqual(oneWay.length, 0, `过渡带不得存在"单向"（正/反向读数不一致）：${oneWay.map((r) => `${r.id} fwd=${r.fwd} bwd=${r.bwd}`).slice(0, 6).join('；')}`);
+  const notInMain = bandRows.filter((r) => !r.fwd && !r.bwd);
+
+  // ── t26②：**空真标注**（§12.1.4.4：粗口径永远不得驱动几何）
+  //   粗口径上"名义单向"的格对会被 float32 两向都拒（§12.1.4.5 的 0.6 级差）⇒ 被**掩码**，
+  //   于是上面那条「单向 = 0」对**这一整类**是**空真**（在空集上通过）。必须显式量化 + 在细口径重判。
+  const classes = t26EdgeClasses(graph);
+  const nominalOneWay = classes.filter((c) => c.nominalOneWay);
+  const graphOneWay = classes.filter((c) => c.graphOneWay);
+  const masked = classes.filter((c) => c.masked);
+  const maskedBands = [...new Set(masked.map((c) => c.bandId))];
   runner.info(
-    `  过渡带双向审计（F12）：${bands.length} 处（-transition-*/-descent-*/-threshold）｜正向可达 ${bandRows.filter((r) => r.forward).length}｜反向可达 ${bandRows.filter((r) => r.backward).length}｜单向 ${oneWay.length}｜两侧均不可达 ${notInMain.length}` +
+    `  空真标注（t26）：粗口径带邻域格对 ${classes.length}｜名义(float64)单向 ${nominalOneWay.length}｜图侧(float32)单向 ${graphOneWay.length}｜**被掩码（名义单向 ∧ 图侧双拒）${masked.length}**` +
+      (masked.length ? ` ⇒ 上面「单向=0」对**被掩码类**是空真：${masked.map((c) => `${c.bandId}:${c.pair} Δ64=${c.d64} Δ32=${c.d32}`).slice(0, 4).join('；')}` : '') +
+      `｜必须在**细口径**上重新判定（见下）`,
+  );
+  assert(masked.length > 0, `粗口径必须存在"名义单向但图侧双拒"的被掩码对（当前 ${masked.length}）——否则本条的「单向=0」才具内容；若几何已留裕量（§12.1.4.5）致该类消失，须同轮重新登记本标注`);
+  assert(nominalOneWay.length >= masked.length, '被掩码类必是名义单向类的子集（分类完备）');
+  assertEqual(graphOneWay.length, 0, `带邻域内图侧（float32）不得有单向格对：${graphOneWay.map((c) => `${c.bandId}:${c.pair}`).slice(0, 4).join('；')}`);
+
+  // ── t26③：被掩码类必须在**权威细口径**（cellSize:1 + 显式提额）上重新判定
+  const fineGraph = createWalkGraph(createWalkSolver({}), { cellSize: 1, maxCells: 3000000 });
+  const fineRows = t26BandRows(fineGraph, 'fwd-first');
+  const fineOneWay = fineRows.filter((r) => r.fwd !== r.bwd);
+  const fineUnreachable = fineRows.filter((r) => r.fwd === false || r.bwd === false);
+  assertEqual(fineOneWay.length, 0, `细口径（权威）下过渡带不得单向：${fineOneWay.map((r) => `${r.id} fwd=${r.fwd} bwd=${r.bwd}`).slice(0, 6).join('；')}`);
+  assertEqual(fineUnreachable.length, 0, `细口径（权威）下 ${bandRows.length} 处过渡带必须两向可达：${fineUnreachable.map((r) => `${r.id} fwd=${r.fwd} bwd=${r.bwd}`).slice(0, 6).join('；')}`);
+  const fineById = new Map(fineRows.map((r) => [r.id, r]));
+  const maskedNotJudged = maskedBands.filter((id) => {
+    const r = fineById.get(id);
+    return !(r && r.fwd === true && r.bwd === true);
+  });
+  assertEqual(maskedNotJudged.length, 0, `被粗口径掩码的带必须在细口径上两向可达（重判）：${maskedNotJudged.join('；')}`);
+  const fineClasses = t26EdgeClasses(fineGraph);
+  const fineMasked = fineClasses.filter((c) => c.masked);
+  assertEqual(fineMasked.length, 0, `细口径带邻域不得再有被掩码的单向对（实际 ${fineMasked.length}）`);
+
+  // ── t26④：粗口径只锁**已登记伪影集合**（§12.1.4.4，精确集合相等；不得据粗口径补几何）
+  const coarseArtifacts = bandRows.filter((r) => !r.fwd && !r.bwd).map((r) => `${r.id}@${r.cell}`);
+  assertEqual(
+    JSON.stringify(coarseArtifacts),
+    JSON.stringify(T26_COARSE_ARTIFACTS),
+    `粗口径"两侧均不可达"集合必须与已登记伪影集合**精确相等**（§12.1.4.4；布局变更 ⇒ 同轮重新登记）：实际 ${coarseArtifacts.length} / 登记 ${T26_COARSE_ARTIFACTS.length}` +
+      `｜新增 ${JSON.stringify(coarseArtifacts.filter((x) => !T26_COARSE_ARTIFACTS.includes(x)))}｜消失 ${JSON.stringify(T26_COARSE_ARTIFACTS.filter((x) => !coarseArtifacts.includes(x)))}`,
+  );
+  const artifactNotArtifact = bandRows
+    .filter((r) => !r.fwd && !r.bwd)
+    .filter((r) => {
+      const f = fineById.get(r.id);
+      return !(f && f.fwd === true && f.bwd === true);
+    });
+  assertEqual(artifactNotArtifact.length, 0, `登记为"粗口径伪影"的带在细口径下必须可达（否则是真实缺口，不得登记为伪影）：${artifactNotArtifact.map((r) => r.id).join('；')}`);
+
+  runner.info(
+    `  过渡带双向审计（F12）：${bandRows.length} 处（-transition-*/-descent-*/-threshold）｜粗口径正向可达 ${bandRows.filter((r) => r.fwd).length}｜反向可达 ${bandRows.filter((r) => r.bwd).length}｜单向 ${oneWay.length}｜两侧均不可达 ${notInMain.length}（= 已登记粗口径伪影集合，细口径两向全可达）` +
       (notInMain.length ? `：${notInMain.map((r) => r.id).slice(0, 6).join('、')}` : ''),
+  );
+  runner.info(
+    `  细口径（权威，cellSize:1 + maxCells:3e6）：${fineRows.length} 处过渡带**两向全可达**｜单向 ${fineOneWay.length}｜被掩码类 ${fineMasked.length}｜取格同对象 ${fineRows.filter((r) => r.sameSnap).length}/${fineRows.length}`,
+  );
+});
+
+/* ==========================================================================
+ *  t26 / T7.17：**取格口径确定性** —— F27 读数连跑 ≥10 轮逐轮一致（精确指纹）
+ * ======================================================================== */
+
+await runner.test('F28 取格口径确定性（t26）：F27 读数连跑 12 轮逐轮一致（精确指纹）+ 顺序无关 + 跨图无状态', async () => {
+  const mk = () => createWalkGraph(createWalkSolver({}), { cellSize: 3 });
+  const fingerprint = (rows) => JSON.stringify(rows.map((r) => [r.id, r.cell, r.anchor, r.fwd, r.bwd]));
+  const rounds = [];
+  // ① 共享图·暖（同一张图上反复读数；奇偶轮**对调调用顺序** componentOf/connected）
+  const shared = mk();
+  for (let i = 0; i < 6; i += 1) {
+    const order = i % 2 === 1 ? 'bwd-first' : 'fwd-first';
+    rounds.push({ label: `共享图·暖·${order}`, rows: t26BandRows(shared, order) });
+  }
+  // ② 每轮**新建图**（冷；无任何跨轮缓存/状态共享）
+  for (let i = 0; i < 4; i += 1) {
+    const order = i % 2 === 1 ? 'bwd-first' : 'fwd-first';
+    rounds.push({ label: `新图·冷·${order}`, rows: t26BandRows(mk(), order) });
+  }
+  // ③ 前置**不同调用历史**（先跑点集审计 + path，填充 cells 与 label 缓存）后读数
+  for (let i = 0; i < 2; i += 1) {
+    const order = i % 2 === 1 ? 'bwd-first' : 'fwd-first';
+    const g = mk();
+    g.connected([T26_ANCHOR, ...LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').slice(0, 10).map((v) => ({ x: v.position.x, z: v.position.z }))]);
+    g.path(T26_ANCHOR, { x: 0, z: 200 });
+    rounds.push({ label: `新图·暖·带前置历史·${order}`, rows: t26BandRows(g, order) });
+  }
+
+  assert(rounds.length >= 12, `必须连跑 ≥10 轮（实际 ${rounds.length}）`);
+  const prints = [...new Set(rounds.map((r) => fingerprint(r.rows)))];
+  assertEqual(
+    prints.length,
+    1,
+    `F27 读数必须**逐轮一致（精确）**：${rounds.length} 轮出现 ${prints.length} 个不同指纹｜各轮：${rounds.map((r) => `${r.label}=${fingerprint(r.rows).length}`).join(' ')}`,
+  );
+  const rows = rounds[0].rows;
+  assert(rows.length >= 50, `指纹必须覆盖 ≥50 处过渡带（防恒真；实际 ${rows.length}）`);
+  assert(rows.every((r) => r.cell !== null && r.anchor !== null && r.sameSnap === true), '每轮每带的取格都必须"同一坐标同一格对象"');
+  const oneWay = rows.filter((r) => r.fwd !== r.bwd);
+  assertEqual(oneWay.length, 0, `12 轮指纹内的单向必须为 0（实际 ${oneWay.length}）`);
+  runner.info(
+    `  取格口径确定性（t26）：${rounds.length} 轮（共享图暖 6 / 新图冷 4 / 带前置历史 2，奇偶轮对调调用顺序）⇒ **不同指纹 ${prints.length} 个**｜覆盖 ${rows.length} 处过渡带｜单向 ${oneWay.length}`,
   );
 });
 

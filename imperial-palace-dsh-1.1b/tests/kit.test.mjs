@@ -2273,6 +2273,157 @@ startSection('23 重檐脊饰归属：下檐 lowerRidge（g1 §5.4）/ 零几何
   notes.push(`t27 重檐脊饰：${doubleEave.length} 栋（${doubleEave.map((s) => s.id).join(', ')}）近景档 lowerRoof+lowerRidge 两类部件；${sample.join(' · ')}；中档无 lowerRidge ⇒ F 80/80 不变、主场景 341→342、C 55→56`);
 }
 
+/* ================================================================== 24 体块共面/套叠守卫（t46：红墙 × 白石墙基端面共面 / Z-fighting） */
+
+startSection('24 体块共面/套叠守卫：墙体件不得有"同向共面 + 面积重叠"（Z-fighting 本体）');
+
+{
+  /**
+   * 背景（t46）：`kit.wall` 的 `wallBody` 与 `wallBase` 修前**同长度、同中心、同底部高度**，
+   * 墙基只加厚 6% ⇒ 两块的**端面完全共面**（门洞两侧的红色端面 vs 白色端面，实测每处 0.8m×8m = 6.4m²）
+   * 且体块整段套叠 ⇒ 深度值在重叠区相等 ⇒ 走动时"红墙边缘闪缩"。
+   *
+   * 本节的判据口径（三要素）：
+   *   量   ：每个部位（wallBody/wallBase/wallLintel/wallCoping/wallCopingRidge/merlon）的三角面；
+   *   归一 ：按**轴对齐平面**归类（法线 ±x/±y/±z + 平面坐标 + 面内矩形）；
+   *   比什么：① **可见侧同向共面重叠** = 两件各有一面法线同向、平面差 < 1mm、面内矩形交叠面积 > 0
+   *          ⇒ 这是 Z-fighting 的充分机制（法线 `-y` 的朝地面排除：相机在地面之上，恒被背面剔除）；
+   *          ② **体块套叠** = 两件 AABB 三轴都正重叠（题干对禁止；贴面/压顶的"包裹式嵌套"允许并登记）。
+   * 禁止的掩盖手段（本卡未做、本判据也不接受）：提高 MSAA / 改绘制顺序 / 关闭深度检测。
+   */
+  const WALL_EPS_PLANE = 1e-3;
+  const WALL_EPS_VOL = 1e-3;
+  const WALL_EPS_AREA = 1e-6;
+
+  /** 把一个部位网格拆成轴对齐面 + 逐件 AABB（局部坐标）。 */
+  function wallFacesOf(mesh) {
+    const pos = mesh.geometry.attributes.position;
+    const faces = [];
+    const bb = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
+    const V = (i) => ({ x: pos.getX(i), y: pos.getY(i), z: pos.getZ(i) });
+    for (let i = 0; i + 2 < pos.count; i += 3) {
+      const a = V(i); const b = V(i + 1); const c = V(i + 2);
+      for (const v of [a, b, c]) {
+        bb.minX = Math.min(bb.minX, v.x); bb.maxX = Math.max(bb.maxX, v.x);
+        bb.minY = Math.min(bb.minY, v.y); bb.maxY = Math.max(bb.maxY, v.y);
+        bb.minZ = Math.min(bb.minZ, v.z); bb.maxZ = Math.max(bb.maxZ, v.z);
+      }
+      const ux = b.x - a.x; const uy = b.y - a.y; const uz = b.z - a.z;
+      const vx = c.x - a.x; const vy = c.y - a.y; const vz = c.z - a.z;
+      const nx = uy * vz - uz * vy; const ny = uz * vx - ux * vz; const nz = ux * vy - uy * vx;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      const ax = Math.abs(nx / len); const ay = Math.abs(ny / len); const az = Math.abs(nz / len);
+      let axis; let sign; let plane; let rect;
+      if (ax >= ay && ax >= az) {
+        axis = 'x'; sign = Math.sign(nx); plane = (a.x + b.x + c.x) / 3;
+        rect = { u0: Math.min(a.y, b.y, c.y), u1: Math.max(a.y, b.y, c.y), v0: Math.min(a.z, b.z, c.z), v1: Math.max(a.z, b.z, c.z) };
+      } else if (ay >= az) {
+        axis = 'y'; sign = Math.sign(ny); plane = (a.y + b.y + c.y) / 3;
+        rect = { u0: Math.min(a.x, b.x, c.x), u1: Math.max(a.x, b.x, c.x), v0: Math.min(a.z, b.z, c.z), v1: Math.max(a.z, b.z, c.z) };
+      } else {
+        axis = 'z'; sign = Math.sign(nz); plane = (a.z + b.z + c.z) / 3;
+        rect = { u0: Math.min(a.x, b.x, c.x), u1: Math.max(a.x, b.x, c.x), v0: Math.min(a.y, b.y, c.y), v1: Math.max(a.y, b.y, c.y) };
+      }
+      faces.push({ axis, sign, plane, rect });
+    }
+    return { faces, bb };
+  }
+
+  /** 两件之间的"可见侧同向共面重叠"与"体块套叠"。 */
+  function wallConflicts(A, B) {
+    const visible = new Map();
+    for (const fa of A.faces) {
+      for (const fb of B.faces) {
+        if (fa.axis !== fb.axis || fa.sign !== fb.sign) continue;
+        if (Math.abs(fa.plane - fb.plane) > WALL_EPS_PLANE) continue;
+        if (fa.axis === 'y' && fa.sign < 0) continue; // 朝地面：可见半球之外，恒被背面剔除
+        const ou = Math.min(fa.rect.u1, fb.rect.u1) - Math.max(fa.rect.u0, fb.rect.u0);
+        const ov = Math.min(fa.rect.v1, fb.rect.v1) - Math.max(fa.rect.v0, fb.rect.v0);
+        if (ou <= WALL_EPS_AREA || ov <= WALL_EPS_AREA) continue;
+        const key = `${fa.axis}|${fa.plane.toFixed(4)}|${fa.sign}|${Math.max(fa.rect.u0, fb.rect.u0).toFixed(3)}|${Math.max(fa.rect.v0, fb.rect.v0).toFixed(3)}`;
+        visible.set(key, { axis: fa.axis, plane: +fa.plane.toFixed(4), sign: fa.sign, u: [+Math.max(fa.rect.u0, fb.rect.u0).toFixed(3), +Math.min(fa.rect.u1, fb.rect.u1).toFixed(3)], v: [+Math.max(fa.rect.v0, fb.rect.v0).toFixed(3), +Math.min(fa.rect.v1, fb.rect.v1).toFixed(3)], area: +(ou * ov).toFixed(3) });
+      }
+    }
+    const interpenetration = ['x', 'y', 'z'].every((ax) => Math.min(A.bb[`max${ax.toUpperCase()}`], B.bb[`max${ax.toUpperCase()}`]) - Math.max(A.bb[`min${ax.toUpperCase()}`], B.bb[`min${ax.toUpperCase()}`]) > WALL_EPS_VOL);
+    return { visible: [...visible.values()], interpenetration };
+  }
+
+  const wallSamples = [
+    ['WALL-CITY-south(含 26m 门洞)', { ...layout.WALLS.find((w) => w.id === 'WALL-CITY-south'), baseY: 0, quality: 'medium' }],
+    ['院墙(无门洞)', { ...(layout.WALLS.find((w) => w.kind === 'courtWall' && (!w.openings || w.openings.length === 0)) ?? { id: 'CW', from: { x: -20, z: 0 }, to: { x: 20, z: 0 }, kind: 'courtWall' }), baseY: 0, quality: 'medium' }],
+    ['合成 cityWall(两个门洞)', { id: 'SYN-2', kind: 'cityWall', from: { x: -60, z: 0 }, to: { x: 60, z: 0 }, thickness: 8, height: 12, baseY: 0, quality: 'medium', openings: [{ at: -20, width: 10 }, { at: 20, width: 14 }] }],
+  ];
+
+  /** 允许的"包裹式嵌套"（贴面/压顶）—— 只允许**套叠**，绝不允许**可见侧共面**；未登记的新对⇒红。 */
+  const ALLOWED_NESTING = new Set([
+    'wallBody|wallLintel', 'wallBody|wallCoping', 'wallCoping|merlon', 'wallCoping|wallCopingRidge', // 门额包墙 / 院墙瓦顶嵌墙顶 / 垛口穿压顶 / 脊嵌瓦顶
+  ]);
+
+  const conflictsAll = [];
+  const unexpected = [];
+  const guards = [];
+  for (const [label, params] of wallSamples) {
+    const object = kit.wall(params);
+    object.updateMatrixWorld(true);
+    const parts = new Map();
+    object.traverse((mesh) => { if (mesh.isMesh) parts.set(mesh.userData.part, wallFacesOf(mesh)); });
+    const names = [...parts.keys()];
+    // ① 逐对：可见侧同向共面重叠必须为 0（Z-fighting 本体）
+    for (let i = 0; i < names.length; i += 1) {
+      for (let j = i + 1; j < names.length; j += 1) {
+        const ka = `${names[i]}|${names[j]}`;
+        const c = wallConflicts(parts.get(names[i]), parts.get(names[j]));
+        if (c.visible.length > 0) conflictsAll.push(`[${label}] ${ka}：${c.visible.length} 处可见侧共面（如 ${c.visible[0].axis}=${c.visible[0].plane} 法线 ${c.visible[0].sign > 0 ? '+' : '-'}${c.visible[0].axis} 面积 ${c.visible[0].area}m² @u[${c.visible[0].u}] v[${c.visible[0].v}]）`);
+        if (c.interpenetration && !ALLOWED_NESTING.has(ka)) unexpected.push(`[${label}] ${ka} 体块套叠（未登记）`);
+      }
+    }
+    // ② 题干对：墙基 / 红墙 逐值守卫
+    // 有效值按工厂口径复算（合成样本未显式给 battlementHeight 时，cityWall 取 MODULES 默认）
+    const isCityWall = params.kind === 'cityWall' || params.cityWall === true;
+    const effBattle = params.battlementHeight ?? (isCityWall ? CONFIG.MODULES.wallBattlementHeight : 0);
+    const GEOM_TOL = 1e-3; // 顶点为 Float32 ⇒ 几何实测容差取 1mm（与"共面 <1mm"同量级）
+    const base = parts.get('wallBase'); const body = parts.get('wallBody');
+    ok(`[${label}] 含 wallBase 与 wallBody 两个体块`, Boolean(base && body));
+    if (base && body) {
+      const baseH = Math.min(0.8, (params.height - effBattle) * 0.2);
+      const bH = params.height - effBattle;
+      const rangeOk = (got, want) => got.every((v, i) => Math.abs(v - want[i]) <= GEOM_TOL);
+      ok(`[${label}] 墙基 y 范围 = [baseY, baseY+baseH]（实测 ${base.bb.minY.toFixed(4)}..${base.bb.maxY.toFixed(4)}）`, rangeOk([base.bb.minY, base.bb.maxY], [params.baseY, params.baseY + baseH]));
+      ok(`[${label}] 红墙 y 范围 = [baseY+baseH, baseY+bodyH]（红墙从墙基顶面开始；实测 ${body.bb.minY.toFixed(4)}..${body.bb.maxY.toFixed(4)}）`, rangeOk([body.bb.minY, body.bb.maxY], [params.baseY + baseH, params.baseY + bH]));
+      ok(`[${label}] 墙基×红墙：无可见侧共面重叠`, wallConflicts(base, body).visible.length === 0);
+      ok(`[${label}] 墙基×红墙：体块不套叠（只允许 y=baseY+baseH 处接触）`, !wallConflicts(base, body).interpenetration);
+    }
+    // ③ 配对守卫：装配总高（= 最高面的 y）与门洞净宽
+    let maxY = -Infinity; let minY = Infinity;
+    for (const v of parts.values()) { maxY = Math.max(maxY, v.bb.maxY); minY = Math.min(minY, v.bb.minY); }
+    eq(`[${label}] 装配底面 = baseY（墙基仍落地）`, minY, params.baseY, GEOM_TOL);
+    const expectedTop = params.baseY + (effBattle > 0
+      ? params.height
+      : params.height + Math.max(0.3, params.thickness * 0.5) * 0.95);
+    eq(`[${label}] 装配总高（最高面 y）与修前公式逐值一致`, maxY, expectedTop, GEOM_TOL);
+    // 门洞净宽：只取**墙身/墙基**的门垛端面（merlon/coping 的 x 面与门洞无关，不得混入）
+    const jambFaces = [];
+    for (const pn of ['wallBody', 'wallBase']) {
+      const v = parts.get(pn);
+      if (v) for (const f of v.faces) if (f.axis === 'x') jambFaces.push(f.plane);
+    }
+    for (const op of (params.openings ?? [])) {
+      const left = Math.max(...jambFaces.filter((x) => x <= op.at + GEOM_TOL));
+      const right = Math.min(...jambFaces.filter((x) => x >= op.at - GEOM_TOL));
+      eq(`[${label}] 门洞净宽（由两侧门垛端面实测）= 登记 width`, right - left, op.width, GEOM_TOL);
+    }
+    // ④ 可见三角面与桶不变：逐部位面数与"每件一个盒（6 面/12 三角）"一致
+    const tri = parts.size > 0 ? [...parts.values()].reduce((n, v) => n + v.faces.length, 0) : 0;
+    guards.push([label, tri, object.userData.kit.metrics.triangles, names.join(',')]);
+  }
+  eq('可见侧同向共面重叠 = 0（所有墙体样本 × 所有部位对；失败打印双方与坐标）', conflictsAll.length, 0, conflictsAll.slice(0, 4).join(' | '));
+  eq('未登记的体块套叠 = 0（只允许 ALLOWED_NESTING 里的贴面/压顶包裹式嵌套）', unexpected.length, 0, unexpected.join(' | '));
+  // 三角面与桶守卫（修前/修后逐值相同：修前 wallBase/wallBody 也是每段各 1 盒；院墙压顶 beam→box 同为 12 三角）
+  eq('墙体样本三角面（逐部位三角面合计）与修前逐值一致（面数×2 = 三角面）', JSON.stringify(guards.map((g) => g[2])), JSON.stringify([1932, 48, 516]));
+  ok('墙体样本未新增部位名（合批桶不变）', guards.every((g) => g[3].split(',').every((n) => ['wallBody', 'wallBase', 'wallLintel', 'wallCoping', 'wallCopingRidge', 'merlon'].includes(n))));
+  notes.push(`t46 体块守卫：${wallSamples.length} 个墙体样本 × 逐部位对 = 可见侧共面 0 处；题干对（红墙×白石墙基）体块不套叠、y 范围 = [baseY, baseY+baseH] / [baseY+baseH, baseY+bodyH]；门洞净宽与装配总高逐值不变；三角面与部位名不变`);
+}
+
 /* ================================================================== 汇总 */
 
 console.log('\n=========================================================');

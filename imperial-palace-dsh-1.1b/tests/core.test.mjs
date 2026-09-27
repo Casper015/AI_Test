@@ -508,7 +508,7 @@ await runner.test('orbit：极角/距离受限，可复位', () => {
   assertClose(rig.position.z, oblique.position.z, 0.01, '复位应回到全城鸟瞰机位');
 });
 
-await runner.test('第一人称：最近 fp-spawn 出生、视线高 = 面高+1.65、退出恢复原模式与机位', () => {
+await runner.test('第一人称：有选中⇒落在选中建筑旁 / 无选中⇒最近的 fp-spawn、视线高 = 面高+1.65、退出恢复原模式与机位', () => {
   const { events, store, rig, settle } = makeCore();
   const entered = collect(events, EVENTS.fpEntered);
   const exited = collect(events, EVENTS.fpExited);
@@ -520,12 +520,13 @@ await runner.test('第一人称：最近 fp-spawn 出生、视线高 = 面高+1.
   settle();
   assert(rig.isFp, '应进入第一人称');
   assertEqual(entered.length, 1, '应发 fp:entered');
-  const spawn = entered[0].spawnId;
-  assert(typeof spawn === 'string' && spawn.includes('fp-spawn'), `出生点应为 fp-spawn，实际 ${spawn}`);
-  const spawnVp = LAYOUT.VIEWPOINT_BY_ID[spawn];
+  // t15：有选中 ⇒ 落点 = **选中建筑的就近可站点**（门外锚点 1m 内），不再落回"最近的 fp-spawn"
+  const sel = entered[0].selectionLanding;
+  assert(sel && sel.buildingId === 'B-hall-main', `有选中时必须落在选中建筑旁，实际 ${JSON.stringify(sel)}`);
+  const selSlot = LAYOUT.SLOT_BY_ID['B-hall-main'];
+  assert(Math.hypot(rig.position.x - selSlot.door.facade.x, rig.position.z - selSlot.door.facade.z) <= 1.0, '应落在选中建筑门外锚点 1m 内');
   const floor = LAYOUT.floorYAt(rig.position.x, rig.position.z);
-  assertClose(rig.position.y, floor + CONFIG.CAMERA.fpEyeHeight, 0.06, '视线高必须为面高 + 1.65m');
-  assertClose(rig.position.x, spawnVp.position.x, 1.2, '应停在最近的 fp-spawn 附近');
+  assertClose(rig.position.y, floor + CONFIG.CAMERA.fpEyeHeight, 1e-9, '视线高必须逐值 = 面高 + 1.65m');
   // 键盘路径：Esc 与 F 都是同一条请求事件（切换退出并恢复）
   events.request(EVENTS.requestViewMode, { mode: 'fp', source: 'keyboard-escape' });
   settle();
@@ -536,6 +537,19 @@ await runner.test('第一人称：最近 fp-spawn 出生、视线高 = 面高+1.
   assertClose(rig.position.x, before.position.x, 0.01, '退出后机位参数应恢复');
   assertClose(rig.position.z, before.position.z, 0.01, '退出后机位参数应恢复');
   assertClose(rig.describe().fov, before.fov, 0.01, '退出后 fov 应恢复');
+  // t15 回归：清掉选中 ⇒ 逐字恢复"最近的已登记 fp-spawn"出生路径（旧行为未被劫持、未被删除）
+  store.patch({ selectedBuildingId: null }, { source: 'test' });
+  events.request(EVENTS.requestViewMode, { mode: 'fp', source: 'keyboard' });
+  settle();
+  assert(rig.isFp, '无选中时应能进入第一人称');
+  assertEqual(entered.length, 2, '应发第二次 fp:entered');
+  assertEqual(entered[1].selectionLanding, null, '无选中时不得给出选中落点');
+  const spawn = entered[1].spawnId;
+  assert(typeof spawn === 'string' && spawn.includes('fp-spawn'), `无选中时出生点应为 fp-spawn，实际 ${spawn}`);
+  const spawnVp = LAYOUT.VIEWPOINT_BY_ID[spawn];
+  const floor2 = LAYOUT.floorYAt(rig.position.x, rig.position.z);
+  assertClose(rig.position.y, floor2 + CONFIG.CAMERA.fpEyeHeight, 0.06, '视线高必须为面高 + 1.65m');
+  assertClose(rig.position.x, spawnVp.position.x, 1.2, '应停在最近的 fp-spawn 附近');
 });
 
 await runner.test('第一人称行走内核：可行走面支撑、台阶阈值、障碍（含门洞）阻挡、包络夹取', () => {

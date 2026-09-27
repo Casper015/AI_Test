@@ -12,7 +12,7 @@
  * 真实生效值（samples 是否真的落到多重采样 RT）由真实浏览器读数承担（见 docs/handoff-t2-antialias.md）。
  */
 
-import { createTestRunner, loadModule, assert, assertEqual } from './harness.mjs';
+import { createTestRunner, loadModule, loadThree, assert, assertEqual } from './harness.mjs';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT } from './harness.mjs';
@@ -105,4 +105,139 @@ await runner.test('④ 守门：`?stats=1` 可读到 AA；`?dpr`（resolvePixelR
   runner.info(`?dpr 语义未变：非法⇒${bad.ratio}（fallback=${bad.fallback}）、合法 1.5⇒${good.ratio} ✓；antialiasInfo/getStats 上报就位 ✓`);
 });
 
+/* ==========================================================================
+ * t40：**移动协议守卫** —— 烟柱 LOD 滞回（moving 时整柱 visible 不得跳变）
+ * --------------------------------------------------------------------------
+ * 缺陷（t40 移动协议实测，见 `docs/report-motion-edges.md` §3）：t25 的 LOD 只有一个门限，相机在
+ * 门限附近运动时 `pointPx` 在 1.0 上下抖动 ⇒ 整柱 `points.visible` **逐帧跳变**（实测最高 12 次翻转/48 帧）。
+ * 修法：`smokeMinPointPx`(隐藏) + `smokeShowPointPx`(显示) 双门限滞回，带内保持上一帧状态。
+ * 本守则是**行为级**的（读生产 `environment.update` 写出的 `points.visible`），并由 ③ 的
+ * "旧单门限复算必 >0 翻转" 证明断言不恒真（不假绿）。
+ * ========================================================================== */
+
+const THREE = await loadThree();
+const { createEventBus } = await loadModule('src/core/events.js');
+const { createEnvironment } = await loadModule('src/core/environment.js');
+const LAYOUT = await loadModule('src/shared/layout.js');
+
+const ATM = CONFIG.LIGHTING.atmosphere;
+const CENSER_IDS = ['B-gate-front', 'B-hall-main', 'C-gate-inner', 'C-hall-bed-main'];
+/** 未挂渲染器时 `drawingBufferHeight()` 的生产回落值 = BUDGET.viewport.height × 档位 dpr。 */
+const FALLBACK_DRAW_H = CONFIG.BUDGET.viewport.height * CONFIG.QUALITY.tiers[CONFIG.QUALITY.default].dpr;
+
+function makeSmokeEnv() {
+  const scene = new THREE.Scene();
+  const environment = createEnvironment({ config: CONFIG, events: createEventBus(), scene, THREE });
+  scene.add(environment.root); // 与 src/main.js:201 同一条装配路径（生产口径）
+  const group = scene.getObjectByName('environment-smoke');
+  assert(group, '应存在 environment-smoke 组');
+  assertEqual(group.children.length, CENSER_IDS.length, `烟柱系统数应 = 香炉数 ${CENSER_IDS.length}`);
+  return { scene, environment, group };
+}
+/** 把相机放到"目标香炉点径 = px"的距离上（生产同一式反解；只沿 +x 平移，不动 y/z）。 */
+function cameraForPointPx(anchor, px, { size = 1.1, drawH = FALLBACK_DRAW_H } = {}) {
+  const dist = (size * (drawH / 2)) / px;
+  return { x: anchor.x + dist, y: anchor.y, z: anchor.z };
+}
+/** 逐帧驱动生产 `update`，返回被测柱每帧的 visible 序列。 */
+function driveVisible(environment, index, pxSeries, anchor, opts = {}) {
+  const out = [];
+  let elapsed = 0;
+  for (const px of pxSeries) {
+    elapsed += 1 / 60;
+    environment.update(1 / 60, elapsed, { cameraPosition: cameraForPointPx(anchor, px, opts) });
+    out.push(environment.describe().smoke.systems[index].visible);
+  }
+  return out;
+}
+const flipCount = (series) => series.slice(1).filter((v, i) => v !== series[i]).length;
+/** 旧（t25）单门限规则复算：用于"断言不恒真"的对照，不是被测对象。 */
+const legacyVisible = (px, prev, minPx = ATM.smokeMinPointPx) => (px >= minPx);
+
+await runner.test('t40① 登记与几何同轮：两个门限值 + 等效距离带 + 逐柱读数（describe().smoke）', () => {
+  assertEqual(ATM.smokeMinPointPx, 1.0, '隐藏门限仍应为 t25 的 1.0 px（不得放宽）');
+  assertEqual(ATM.smokeShowPointPx, 1.25, 't40 新增的显示门限应为 1.25 px');
+  assert(ATM.smokeShowPointPx > ATM.smokeMinPointPx, '显示门限必须 > 隐藏门限（否则不是滞回）');
+  const { environment } = makeSmokeEnv();
+  const smoke = environment.describe().smoke;
+  assertEqual(smoke.minPointPx, 1.0, 'describe().smoke.minPointPx 应回显登记值');
+  assertEqual(smoke.showPointPx, 1.25, 'describe().smoke.showPointPx 应回显登记值');
+  assert(smoke.bandMetres, '应给出滞回带的等效距离');
+  assertEqual(smoke.bandMetres.drawH, FALLBACK_DRAW_H, 'Node 侧绘制缓冲高度应 = 生产回落值');
+  assert(Math.abs(smoke.bandMetres.hideBeyondMetres - 495) < 1.0, `隐藏门限等效距离应 ≈495m（实际 ${smoke.bandMetres.hideBeyondMetres}）`);
+  assert(Math.abs(smoke.bandMetres.showWithinMetres - 396) < 1.0, `显示门限等效距离应 ≈396m（实际 ${smoke.bandMetres.showWithinMetres}）`);
+  assertEqual(smoke.systems.length, CENSER_IDS.length, '应逐柱给出读数');
+  for (const [i, id] of CENSER_IDS.entries()) {
+    const entrance = LAYOUT.SLOT_BY_ID[id].entrance;
+    const anchor = smoke.systems[i].anchor;
+    assertEqual(anchor.x, entrance.x, `${id} 的烟柱锚点 x 应 = 槽位入口 x`);
+    assertEqual(anchor.z, entrance.z, `${id} 的烟柱锚点 z 应 = 槽位入口 z`);
+  }
+  runner.info(`门限 ${smoke.minPointPx}(隐藏) → ${smoke.showPointPx}(显示)｜等效距离 ${smoke.bandMetres.hideBeyondMetres}m … ${smoke.bandMetres.showWithinMetres}m｜逐柱锚点与槽位入口逐值一致 ✓`);
+});
+
+await runner.test('t40② 滞回语义逐帧：带内保持上一帧状态（下穿隐藏 / 上穿显示 / 带内不动）', () => {
+  const { environment } = makeSmokeEnv();
+  const { environment: env2 } = makeSmokeEnv();
+  const anchor = environment.describe().smoke.systems[1].anchor;
+  const anchor2 = env2.describe().smoke.systems[1].anchor;
+  // ① 从"显示"起：2.0 → 0.98（<1.0 隐藏）→ 1.05（带内 ⇒ 仍隐藏）→ 1.20（带内 ⇒ 仍隐藏）→ 1.30（≥1.25 ⇒ 显示）→ 1.05（带内 ⇒ 仍显示）→ 0.99（隐藏）
+  const series = [2.0, 0.98, 1.05, 1.2, 1.3, 1.05, 0.99];
+  const got = driveVisible(environment, 1, series, anchor);
+  assertEqual(got.map((v) => (v ? 1 : 0)).join(''), '1000110', `滞回序列应为 显示→隐藏→隐藏→隐藏→显示→显示→隐藏（实际 ${got.map((v) => (v ? 1 : 0)).join('')}）`);
+  // 对照：同序列按**旧单门限**复算 ⇒ 1,0,1,1,1,1,0（带内会跳回显示 = 缺陷本身）
+  const legacy = [];
+  let prev = true;
+  for (const px of series) { prev = legacyVisible(px, prev); legacy.push(prev ? 1 : 0); }
+  assertEqual(legacy.join(''), '1011110', `旧单门限复算应为 1011110（对照，证明②抓的是新行为；实际 ${legacy.join('')}）`);
+  assert(legacy.join('') !== got.map((v) => (v ? 1 : 0)).join(''), '滞回序列必须与旧单门限序列不同（否则断言无对象）');
+  // ② 反向：从"隐藏"起，1.05 仍隐藏、1.20 仍隐藏、1.26 显示
+  const anchorB = env2.describe().smoke.systems[1].anchor;
+  const got2 = driveVisible(env2, 1, [0.9, 1.05, 1.2, 1.26], anchorB);
+  assertEqual(got2.map((v) => (v ? 1 : 0)).join(''), '0001', `从隐藏起：0.9→隐藏、1.05/1.20 带内仍隐藏、1.26 显示（实际 ${got2.map((v) => (v ? 1 : 0)).join('')}）`);
+  runner.info(`滞回序列 ${got.map((v) => (v ? 1 : 0)).join('')}（旧单门限 ${legacy.join('')}）｜反向 ${got2.map((v) => (v ? 1 : 0)).join('')} ✓`);
+});
+
+await runner.test('t40③ 不爆闪：绕门限往复 20 次的 visible 翻转 ≤1（旧单门限复算必 ≥8 ⇒ 断言不假绿）', () => {
+  const { environment } = makeSmokeEnv();
+  const anchor = environment.describe().smoke.systems[1].anchor;
+  // 0.98 / 1.05 交替（= 相机在门限附近微幅往复；0.98↔1.05 对应距离 ±3.4m）
+  const series = Array.from({ length: 40 }, (_, i) => (i % 2 === 0 ? 0.98 : 1.05));
+  const got = driveVisible(environment, 1, series, anchor);
+  const flips = flipCount(got);
+  // 旧单门限复算（同一序列）
+  let prev = true; const legacy = [];
+  for (const px of series) { prev = legacyVisible(px, prev); legacy.push(prev); }
+  const legacyFlips = flipCount(legacy);
+  assert(legacyFlips >= 8, `旧单门限在同一序列上必须 ≥8 次翻转（否则对照无效；实际 ${legacyFlips}）`);
+  assert(flips <= 1, `滞回后绕门限往复的翻转必须 ≤1（实际 ${flips}；旧单门限 ${legacyFlips} 次 = t25 的爆闪缺陷）`);
+  assertEqual(flips, 0, '门限附近往复且全程不出带 ⇒ 不应有任何翻转');
+  runner.info(`绕门限往复 40 帧：滞回翻转 ${flips} 次（旧单门限复算 ${legacyFlips} 次 = 缺陷复现）✓`);
+});
+
+await runner.test('t40④ 特征保留与预算未动：近景仍可见 / 远景仍不绘制 / 粒子规格逐值不变 / 台阶阈值未动', () => {
+  const { environment, group } = makeSmokeEnv();
+  const anchor = environment.describe().smoke.systems[1].anchor;
+  // 近景 20m ⇒ 点径 24.75px ≫ 显示门限 ⇒ 必须可见（t25/t40 都不许把近距离烟裁掉）
+  const near = driveVisible(environment, 1, [1.1 * (FALLBACK_DRAW_H / 2) / 20], anchor);
+  assertEqual(near[0], true, '近景 20m 处烟柱必须可见（点径 24.75px）');
+  // 远景 1500m ⇒ 0.33px ⇒ 必须隐藏（t25 的根因修复不得回退）
+  const far = driveVisible(environment, 1, [1.1 * (FALLBACK_DRAW_H / 2) / 1500], anchor);
+  assertEqual(far[0], false, '远景 1500m 处烟柱（0.33px）必须不绘制');
+  // 粒子规格/预算逐值不变（t25 的§8.2 判据，本卡不得放宽）
+  assertEqual(ATM.smokeParticleBudget, 48, 'smokeParticleBudget 仍应为 48');
+  assertEqual(ATM.smokeEnabled, true, 'smokeEnabled 仍应为 true');
+  for (const pts of group.children) {
+    assertEqual(pts.material.size, 1.1, '烟柱 size 仍应为 1.1');
+    assertEqual(pts.material.opacity, 0.16, '烟柱 opacity 仍应为 0.16');
+    assertEqual(pts.geometry.getAttribute('position').count, 12, '每柱粒子数仍应为 budget/4 = 12');
+    assertEqual(pts.material.sizeAttenuation, true, 'sizeAttenuation 仍应为 true');
+  }
+  // 台阶阈值未动（卡面硬约束）
+  assertEqual(CONFIG.INTERACTION.step.maxStepHeight, 0.5, '上台阶阈值不得被本卡改动');
+  assertEqual(CONFIG.INTERACTION.step.snapDownDistance, 0.6, '下台阶阈值不得被本卡改动');
+  runner.info(`近景 20m 可见 / 远景 1500m 不绘制｜budget 48 · size 1.1 · opacity 0.16 · 每柱 12 颗逐值不变｜台阶阈值 0.5/0.6 未动 ✓`);
+});
+
 process.exit(runner.summary());
+

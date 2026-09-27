@@ -73,8 +73,11 @@ F-tower-corner-nw      (-30, 1.65, -360)   VP-B-fp-spawn     871.209   858.878
 | --- | --- | --- |
 | `tests/fp-controls.test.mjs` | H1–H6（t15）：门厅/无门厅落地 ≤1m 且眼高逐值、确定性（纯函数 + 与相机位置无关 + 两次进入逐值相等）、无选中/显式 `spawnId`/`position` 优先级零变化、**整圈被挡**的失败路径（`ok:false` + 原因 + 机位不变 + `selectionOnly` 返回 `null` + 默认回落标注 fallback + 撤挡即恢复）、覆盖度（全部登记建筑都有合法落点，分层计数之和 = 建筑总数，未知 id 返回 `null`） | **15 / 15 通过** |
 | `tests/interaction.test.mjs` | S1–S3（t15）：面板按钮/请求链路落地 ≤1m + 眼高逐值 + 读数标明来源建筑；**Esc/G/F 互不冲突**（Esc 不动位置、G 仍回登记出生点且距选中建筑 >5m、F 退出逐值恢复）；无门洞建筑走 tier2 | **81 / 81 通过** |
+| `tests/core.test.mjs` | 旧断言「第一人称：最近 fp-spawn 出生…」编码的是**被本卡取代的旧语义**（该用例在 `focus` 模式下带着 `selectedBuildingId` 进第一人称 ⇒ 旧行为必然落回 `fp-spawn`，与本卡"选中即传送"直接冲突）⇒ 按新契约改写为**两条互补断言**：① **有选中** ⇒ 事件 `selectionLanding.buildingId='B-hall-main'` + 距门外锚点 ≤1m + 眼高**逐值**（容差 `1e-9`）；② **清掉选中** ⇒ 逐字恢复"最近的已登记 `fp-spawn`"出生（`spawnId` 含 `fp-spawn` + `selectionLanding===null` + 位置贴近出生点 + 眼高 `0.06`）。**旧断言一条未删**（全部落在 ② 分支），另加 ① 分支 ⇒ 覆盖只增不减 | **45 / 45 通过** |
 
-> 判据只增不减：既有 A–G 段断言**未改口径、未减项**；`tests/fp-controls.test.mjs` 的 ①–⑦b（t2）全部保留。
+> 判据只增不减：既有 A–G 段断言**未改口径、未减项**；`tests/fp-controls.test.mjs` 的 ①–⑦b（t2）全部保留；
+> `tests/core.test.mjs` 的改写属"契约变更与断言同轮登记"（旧语义已被卡面明确取代），改写后覆盖**增加**（旧断言全保留 + 新分支）。
+> 全量 `node tests/run.mjs`：本卡范围内全绿；剩余红为**他人证据轮**的既存红（`verify-experience.test.mjs` F7：`docs/shots/manifest.json` 里 `t1.3-*-oblique-*.png` 的 judge/imageStats 一侧缺失，路径指向旧树 `imperial-palace copy 3`，与 t15 无关）。
 
 ---
 
@@ -116,6 +119,7 @@ tpFallback:==1,tpRecover:==1,tpEscKeep:==1,tpGNotHijacked:==1,tpFExitRestore:==1
 node work/probe/t15-teleport.mjs            # 修前/修后对照读数（写 docs/reports/t15-fp-teleport-{before,after}.json）
 node tests/fp-controls.test.mjs             # 15/15（t2 ①–⑦b + t15 H1–H6）
 node tests/interaction.test.mjs             # 81/81（含 t15 S1–S3）
+node tests/core.test.mjs                    # 45/45（第一人称断言按新契约改写：有选中/无选中两条互补）
 node scripts/probe-fp-controls.mjs --phases=teleport --frames=30 "--expect=...（见 §4）"   # 真机 17/17
 node scripts/audit.mjs --enforce            # 预算与契约（本卡未动任何阈值/预算）
 node tests/run.mjs                          # 全量回归

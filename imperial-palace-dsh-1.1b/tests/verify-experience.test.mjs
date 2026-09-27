@@ -23,7 +23,7 @@ import { join } from 'node:path';
 import { loadModule, loadThree, makeSilentEvents, ROOT } from './harness.mjs';
 import { runWalkAudit } from '../scripts/verify-walk.mjs';
 /* t36：F5/F6 用**同一个**判据函数与清单合并函数做合成用例（不得另写一套替身；shot.mjs 已由 t41 保证 import 无副作用） */
-import { judgeShot, mergeManifestRows, rowCompleteness } from '../scripts/shot.mjs';
+import { judgeShot, mergeManifestRows, rowCompleteness, findSourceMismatches } from '../scripts/shot.mjs';
 
 const RESULTS = [];
 let FAILS = 0;
@@ -672,6 +672,23 @@ if (existsSync(manifestPath)) {
     const both = mergeManifestRows([{ ...full('k'), contentDark: 0.02 }], [full('k')], { preferComplete: true });
     assert(both.length === 1 && both[0].contentDark === 0.01, '两者都完整时新条目胜出（重跑覆盖语义保持）');
     return '旧完整+新空 ⇒ 保留完整；旧空+新完整 ⇒ 升级；都完整 ⇒ 新胜出；默认语义有对照';
+  });
+  /* ===== t36 缝③（同源守卫本身必须证活：不是"因为它没报错所以它存在"）===== */
+  await test('F7 合成用例：同键 judge 与 imageStats 不同源必须被检出（守卫证活）', async () => {
+    const j = (dark) => ({ name: 'k.png', contentDark: dark });
+    const st = (dark) => ({ name: 'k.png', content: { darkRatio: dark } });
+    assert(findSourceMismatches([j(0.01)], [st(0.01)]).length === 0, '同源应判 0 项');
+    assert(findSourceMismatches([j(0.02)], [st(0.01)]).length === 1, '数值不一致应被检出');
+    assert(findSourceMismatches([j(null)], [st(0.01)]).length === 1, 'judge 侧缺失（非对称）应被检出');
+    assert(findSourceMismatches([j(0.01)], [{ name: 'k.png', content: {} }]).length === 1, 'stat 侧缺失（非对称）应被检出');
+    assert(findSourceMismatches([j(null)], [st(null)]).length === 0, '两侧同为空的"一致空值"不算不同源（历史条目场景）');
+    assert(findSourceMismatches([j(NaN)], [st(0.01)]).length === 1, 'judge 侧 NaN 而 stat 有值应被检出');
+    assert(findSourceMismatches([j(0.01)], []).length === 0, '仅一侧存在（未统计）不算不同源');
+    assert(findSourceMismatches([], [st(0.01)]).length === 0, '仅一侧存在（反向）不算不同源');
+    /* 真实 manifest 必须同源（当前语料） */
+    const live = findSourceMismatches(judged, stats.filter((x) => !String(x.name).endsWith('(invalid)')));
+    assert(live.length === 0, `当前 manifest 存在不同源条目：${JSON.stringify(live).slice(0, 300)}`);
+    return '6 组合合成全部符合预期；当前 manifest 同源条目 0 处不一致';
   });
 } else {
   await test('F1 浏览器矩阵 manifest 存在', async () => {

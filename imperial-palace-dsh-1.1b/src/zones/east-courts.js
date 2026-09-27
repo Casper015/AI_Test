@@ -32,7 +32,7 @@
  */
 
 import { CONFIG, deriveSeed } from '../shared/config.js';
-import { STONE_STEP_LANES } from '../shared/layout.js';
+import { CLIMB_TOWERS, STONE_STEP_LANES } from '../shared/layout.js';
 import { rampsFromRoads } from '../core/layout-slice.js';
 
 export const ZONE_ID = 'E';
@@ -870,6 +870,85 @@ export async function createZone(ctx) {
   stats.bronzes = bronzes.length;
   stats.bronzeSpots = bronzes;
 
+  /* ========================================================================
+   *  8b. 可登塔楼（t39）：几何 = `kit.makeTower`，登记 = `layout.CLIMB_TOWERS` 派生
+   * ----------------------------------------------------------------------
+   * **登记与几何同轮**（禁止空气楼梯 / 幽灵面）：两者逐面核对 id 集合、kind、y、bounds，
+   * 任何漂移直接抛错（区域侧不自行扩张边界、不手写面）。
+   * ====================================================================== */
+  const towers = [];
+  const towerFacts = [];
+  /* 灰盒替身（`src/zones/_greybox.js` 的 createFallbackKit）没有 `makeTower`：此时**只登记、不建几何**
+     （72 面/1 障碍/1 机位仍来自 layout 派生，契约与计数一致），并在 stats 里显式留痕 —— 不得静默跳过。 */
+  if (typeof kit.makeTower !== 'function') stats.towerBuildSkipped = 'kit.makeTower 缺失（灰盒替身：只登记不建几何）';
+  for (const spec of (typeof kit.makeTower === 'function' ? CLIMB_TOWERS : [])) {
+    const built = kit.makeTower({
+      id: spec.id,
+      spec: spec.spec,
+      x: spec.x,
+      z: spec.z,
+      baseY: spec.baseY,
+      zone: ZONE_ID,
+      detail: BUILDING_DETAIL,
+    });
+    root.add(built.group);
+    const registeredFaces = (zone.walkable ?? []).filter((w) => w.towerId === spec.id);
+    const registeredShaft = (zone.obstacles ?? []).find((o) => o.id === `OB-${spec.id}-shaft`) ?? null;
+    const registeredVp = (zone.viewpoints ?? []).find((v) => v.towerId === spec.id) ?? null;
+    const drift = [];
+    const key = (w) => `${w.id}|${w.kind}|${w.y}|${w.bounds.minX},${w.bounds.maxX},${w.bounds.minZ},${w.bounds.maxZ}`;
+    const layoutKeys = new Set(registeredFaces.map(key));
+    for (const w of built.walkable) {
+      if (!registeredFaces.some((r) => r.id === w.id)) drift.push(`缺登记面 ${w.id}`);
+      else {
+        const r = registeredFaces.find((x) => x.id === w.id);
+        if (r.kind !== w.kind || Math.abs(r.y - w.y) > 1e-6 || Math.abs(r.bounds.minX - w.bounds.minX) > 1e-6
+          || Math.abs(r.bounds.maxX - w.bounds.maxX) > 1e-6 || Math.abs(r.bounds.minZ - w.bounds.minZ) > 1e-6
+          || Math.abs(r.bounds.maxZ - w.bounds.maxZ) > 1e-6) {
+          drift.push(`面不一致 ${w.id}：layout ${JSON.stringify(r.bounds)}@${r.y} vs kit ${JSON.stringify(w.bounds)}@${w.y}`);
+        }
+      }
+    }
+    for (const r of registeredFaces) {
+      if (!built.walkable.some((w) => w.id === r.id)) drift.push(`幽灵登记面 ${r.id}`);
+      if (layoutKeys.size !== new Set(built.walkable.map(key)).size) drift.push('面集合大小不一致');
+    }
+    const s0 = built.obstacles[0];
+    if (!registeredShaft) drift.push(`缺登记障碍 OB-${spec.id}-shaft`);
+    else if (Math.abs(registeredShaft.y0 - s0.y0) > 1e-6 || Math.abs(registeredShaft.y1 - s0.y1) > 1e-6
+      || JSON.stringify(registeredShaft.bounds) !== JSON.stringify(s0.bounds)) {
+      drift.push(`障碍不一致：layout ${JSON.stringify(registeredShaft.bounds)} y[${registeredShaft.y0},${registeredShaft.y1}] vs kit ${JSON.stringify(s0.bounds)} y[${s0.y0},${s0.y1}]`);
+    }
+    if (!registeredVp) drift.push(`缺登记机位 VP-${spec.id}-top`);
+    else if (registeredVp.position.y !== built.viewpoints[0].position.y || registeredVp.mode !== 'focus-extra') {
+      drift.push(`机位不一致：${JSON.stringify(registeredVp.position)} vs ${JSON.stringify(built.viewpoints[0].position)}`);
+    }
+    if (drift.length > 0) {
+      throw new Error(`east-courts: 塔楼 ${spec.id} 登记与几何不一致（${drift.length} 项）：${drift.slice(0, 4).join('；')}`);
+    }
+    towers.push({ id: spec.id, group: built.group, plan: built.plan, metrics: built.metrics, walkable: built.walkable, obstacles: built.obstacles, viewpoints: built.viewpoints });
+    towerFacts.push({
+      id: spec.id,
+      label: spec.label,
+      x: spec.x,
+      z: spec.z,
+      baseY: spec.baseY,
+      levels: built.plan.spec.levels,
+      roofType: built.plan.roofType,
+      topY: built.plan.topY,
+      totalHeight: built.plan.totalHeight,
+      faces: built.walkable.length,
+      shaft: { y0: s0.y0, y1: s0.y1, bounds: s0.bounds },
+      viewpointId: built.viewpoints[0].id,
+      triangles: built.metrics.triangles,
+      climb: { ok: built.plan.climb.ok, maxHop: built.plan.climb.maxHop, maxHopMeasured: built.plan.climb.maxHopMeasured, hops: built.plan.climb.hops, reverseOk: built.plan.climb.reverseOk, overlapCount: built.plan.climb.overlapCount },
+      parts: built.metrics.parts,
+    });
+  }
+  stats.towers = towers.length;
+  stats.towerFaces = towers.reduce((n, t) => n + t.walkable.length, 0);
+  stats.towerTriangles = towers.reduce((n, t) => n + t.metrics.triangles, 0);
+
 
   /* ========================================================================
    *  9. 整区合批（跨建筑 × 同材质同部位）——§8.2 分区预算
@@ -956,6 +1035,7 @@ export async function createZone(ctx) {
     lightAnchors: lightAnchors.length,
     groundY,
     buildingFacts,
+    towerFacts,
     wallOpenings,
     kitSource: kit.__fallback === true ? 'fallback(greybox)' : `kit ${kit.version ?? '?'}`,
   });
