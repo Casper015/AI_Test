@@ -753,3 +753,58 @@
 - `node scripts/audit.mjs --enforce` → **exit 0**（`主场景绘制调用 333/350 ✓`、`可见三角面 306269/1500000 ✓`、`预算与契约检查全部通过（信息性提示 0 项）`）。
 - 未改 `scripts/**` 既有文件、`src/**`、`tests/**` 的几何或断言；本卡只新增只读脚本与本报告节。
 
+---
+
+## 22. t77（attempt 6）复测：`t145` 的修补**未闭合**全局连通（LAYOUT 1.1.18）
+
+> attempt `1ab60eff-c325-4c5d-bb25-20615bb98d82` · 同一生产口径引擎（`assembleCity` + `createWalkGraph(solver,{cellSize:1,maxCells:2000000})`）与只读诊断 `scripts/probe-global-reach.mjs` · 原始读数 `/tmp/t77b-measure.json`、`/tmp/t77f-probe.log`
+
+### 22.1 复测读数（与 attempt 5 对照）
+
+| 项 | 1.1.17 | **1.1.18（t145 后）** |
+| --- | --- | --- |
+| 内景可达 | 41 / 43 | **41 / 43（未变）** |
+| 不可达内景 | 2（`C-side-{west,east}-main`） | **2（同一对，未变）** |
+| t13「门内」路点不可达 / 走查段不可达 | 2 / 3 | **2 / 3（未变）** |
+| 局部口径 `facade→室内` | ✓ 13m | **✓ 13m（未变）** |
+| 全局口径（spawnB / 南桥起点 → 门外锚点 / 室内） | ✗ unreachable | **✗ unreachable（未变）** |
+
+### 22.2 `t145` 改了什么 + 为什么仍未闭合（逐格底数据）
+
+`t145`（v1.1.18 头注：“C 两殿台基接近走廊有界开槽（0.9↔1.3 恢复相邻）”）新增了 `WK-C-side-{west,east}-main-transition-2`（ground，**y=0.9**）。逐格剖面（spawnB 起点，1m 网格，**可达=✓**）：
+
+| x（z=168，西殿） | 面高 | 顶层覆盖面 | spawnB 可达 |
+| --- | --- | --- | --- |
+| −70…−58 | 1.7 | `…-interior` | ✗ |
+| −56…−50 | 1.7 | `…-door-passage` | ✗ |
+| **−48** | **1.3** | `…-transition-1`（次层 = `WK-C-ground`） | ✗ |
+| **−46 / −45** | **0.9** | `WK-C-ground` | ✗ |
+| **−44…−30** | **2.4** | `WK-C-bed-terrace-mid` | **✓** |
+
+沿 x=−45（z=150→190）：`z=150/154` = terrace-south **2.4 可达 ✓** → `z=158…178` = **ground 0.9 不可达 ✗** → `z=182…190` = terrace-north **2.4 可达 ✓**。
+
+⇒ **断点前沿已从 1.1.17 的“台基→transition-1（Δ=−1.1，离目标 2m）”外移到 1.1.18 的“台基(2.4)→门内地面 pocket(0.9)：Δ=−1.5 `dropTooDeep`（离目标 5m）”**（实测前沿前 6 对：`A(±44,168/172/163) y2.4 WK-C-bed-terrace-mid → B(±45,…) y0.9 WK-C-ground`；次前沿 `A(±51/53,155/181) y2.4 → B y1.7 door-passage，Δ=−0.7`）。
+**新 `transition-2`（0.9）在任何采样格都不是顶层**（x=−48 顶层=transition-1，x=−46/−45 顶层=`WK-C-ground`）⇒ **它没有产生任何“0.9 顶层格”与 1.3 带相邻**，因此 `0.9↔1.3` 的相邻关系并未真正建立。
+
+### 22.3 结论性归因（本轮底数据）
+
+- C 侧两殿的门内区域（`door-passage` 1.7 / `transition-1` 1.3 / 门前 `WK-C-ground` pocket 0.9）被 **C 殿台基（`WK-C-bed-terrace-{south,mid,north}`，y=2.4）三面包围**；该 pocket 与主城之间**唯一可能的下/上台阶都超阈值**：台基→pocket **−1.5**（阈值 0.6）、台基→transition-1 **−1.1**、台基→passage **−0.7** ⇒ 全部 `dropTooDeep`；而 pocket 与 transition-1 之间（0.9↔1.3，+0.4）**因为两侧不形成相邻格对而取不到**。
+- ⇒ 两栋仍是**只挂在 C 殿台基之外、与主城不连的“坑中孤岛”**；局部口径（`facade→室内` ✓ 13m）与全局口径（✗）继续并存——与 `t140` 的 63/0/0 不矛盾（那是局部口径）。
+
+### 22.4 最小修法（交回派单；本轮未改 `src/**`）
+
+1. **让 0.9 顶层格真正出现在 1.3 带旁边**：把 `transition-2` 的足迹**向外（东侧）延伸出 `transition-1` 的覆盖范围**（或减小 `transition-1` 的东缘），使存在“顶层=transition-2(0.9)”且与“顶层=transition-1(1.3)”相邻的格对；或
+2. **给 pocket 一条通往可达地面的走廊**：在 `WK-C-bed-terrace-{south,north}` 之间开一条 **0.9 顶层的通廊**接到东侧可达的 `WK-C-ground`；或
+3. **把门内区域抬到台基层级**：按 2.4→1.9→1.4→0.9（每级 ≤0.5 下）补 2–3 条过渡带，使“台基↔门内”可下。
+   （三者任选其一即可；**不得**改 `maxStepHeight`/`snapDownDistance`。）
+
+### 22.5 三条 verify 的真实状态（1.1.18）
+
+| 命令 | 结果 | 红项与归因 |
+| --- | --- | --- |
+| `node tests/verify-completeness.test.mjs` | **exit 1 · 52 项 49 PASS / 2 FAIL** | 5.3（4 个关键点不在主分量）；5.4b 已按契约口径 PASS（不计入退出码，见 §20.2） | 
+| `node tests/verify-experience.test.mjs` | **exit 1 · 35 项 32 PASS / 3 FAIL** | B1（3/49 段）· B10（4 点）= 本卡残差；F1 = **非本卡**（t13 矩阵门） |
+| `node scripts/verify-completeness.mjs`（含浏览器） | **exit 1 · 56 项 53 PASS / 2 FAIL / 1 UNVERIFIED** | 同源 5.3/5.4b |
+| `node scripts/probe-global-reach.mjs`（只读诊断） | **exit 0** | 两口径读数 + 断点格对（§22.2） |
+| `node scripts/audit.mjs --enforce` | **exit 0** | 333/350、306,269 tri、全部通过 |
+
