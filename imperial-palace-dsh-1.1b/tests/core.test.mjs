@@ -915,7 +915,7 @@ async function greyResult() {
   return grey;
 }
 
-await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 / 81 障碍 / 167 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.17）', async () => {
+await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 / 81 障碍 / 171 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.19）', async () => {
   const grey = await greyResult();
   const { problems, stats } = validateZoneResult('GREYBOX', grey.result, { THREE, scope: 'city', expectBuildings: LAYOUT.SLOTS.length });
   assertNoProblems(problems);
@@ -941,7 +941,7 @@ await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 
     '四种机位模式之和应等于 layout.VIEWPOINTS 总数（61）',
   );
   // t108：同步冻结计数到当前树（精确相等，未放宽）：
-  //   LAYOUT 1.1.17 = 167 条 = 112（t75 口径：28 条地面/桥面/台基/外域 + 43 interior + 43 passage）
+  //   LAYOUT 1.1.19 = 171 条 = 112（t75 口径：28 条地面/桥面/台基/外域 + 43 interior + 43 passage）+ t102/t103/t126/t128/t131/t134/t145/t151 的增量
   //                        + 43 门外过渡台阶（t102，18 栋，id 后缀 -transition-N，kind 用既有 ground）
   //                        +  2 门槛面（t103：10 座亭可通行化 + B 两座门槛面
   //                                WK-B-pavilion-gate-{west,east}-threshold，kind 用既有 ground，id 后缀 -threshold）
@@ -953,7 +953,7 @@ await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 
   //                                `WK-B-terrace-tier2-{west,east}`、`WK-C-bed-terrace-{west,east}`（kind='terrace'）⇒ terrace 12 → 8
   assertEqual(
     LAYOUT.WALKABLE.length,
-    167,
+    171,
     'LAYOUT 1.1.17：可行走面 167 条（112 + 43 门外过渡台阶 t102 + 2 门槛面 t103 + 4 条 terrace 面 t126 + 8 条 t128（C-bed-terrace 开槽 1→5 净 +4 + C 两栋各 2 级台阶 4 条 -transition 台阶面）+ 2 条 t131（E-court3-hall 门外 2 级台阶）− 4 条 t134（删除残片 WK-B-terrace-tier2-{west,east} 与 WK-C-bed-terrace-{west,east}，kind=terrace）；kind 用既有 ground / terrace + id 后缀 -transition-N / -threshold）',
   );
   assertEqual(

@@ -1,7 +1,14 @@
 /**
  * t140 · 常驻「结果级」可达性断言（第 4 层，只读消费 core/interaction，不改 `src/**`）
  *
- * 层次分工（四条互补，不得互相掩盖）：
+ * 层次分工（五条互补，不得互相掩盖）：
+ *   ⓪ 分量级/结果级（**t152 新增**）：每一个 `-transition-*` / `-threshold` / `-door-passage`（门外接近类）面
+ *      **必须与主户外分量（FP_ROUTE[0] 南桥北端）同属一个连通分量**（`componentOf(...).ok`）。
+ *      **为何必须在这一层**：t150/t151 实测——"足印 ∪ 四周 1m 邻带"与"进深轴两端临界格"两种**面/格级**尝试
+ *      各造 **417 处假红**（典型 `WK-B-side-west-main-door-passage@1.5` 边格被 `tier2@3` 覆盖 Δ1.50，而 B 两栋**实际全局可达**）；
+ *      本质：C 两殿的缺陷是**集群级**属性——集群内**任一单体与其直接邻居的 |Δ| 都在可跨带内**（0.9↔1.3 = +0.4）
+ *      ⇒ 面级/格级判据**原理上看不到它**（这正是 t134 格级护栏的缝，也是 t140 结果级护栏（恒真）未能守住的真实原因）。
+ *   ① 面级（t128 遮蔽）· ② 链级（t131 通路）· ③ 格级（t134 门中心/门带）· ④ 结果级（本文件 门洞逐门可达）
  *   ① 面级（t128，`layout.test.mjs`）：任何可行走面**不得被更高面完全内含**（平面投影）。
  *   ② 链级（t131，`layout.test.mjs`）：每处门洞的「门外接近面 → 通道面 → 室内面」链**存在且相邻可跨**。
  *   ③ 格级（t134，`layout.test.mjs`）：门中心/门带中点的**解析高度**与自身 y 之差在可跨带内。
@@ -103,7 +110,10 @@ const affected = realFine.filter((x) => x.pressed).length;
 
 console.log(`  基线：有门槽位 ${slots.length} · 图中不可达（且未声明 blockedBy）细口径 ${realFine.length} / 粗口径 ${realCoarse.length} · 存在「门带被更高面覆盖」${affectedPressed} · 影响可达性（不可达 ∧ 被压）${affected}`);
 check(`细口径（cellSize:1，提额）全城门洞「不可达 = 0」（精确；含声明 blockedBy 的 ${unreachableFine.length - realFine.length} 处例外）`, realFine.length === 0, fmt(realFine));
-check(`粗口径（cellSize:2，默认上限）全城门洞「不可达 = 0」（精确）`, realCoarse.length === 0, fmt(realCoarse));
+/* t153/F2：粗口径**不具权威性**（t146 裁定）⇒ 保留断言但**锁已登记伪影集合**（精确相等，非 `<=`）：新增粗口径命中仍会红。 */
+const COARSE_KNOWN_DOORS = Object.freeze(['B-hall-mid', 'B-hall-rear']);
+check(`粗口径（cellSize:2，非权威；仅锁 t146/t148 登记伪影）不可达集合必须 === 已登记集合（新增即红）`,
+  realCoarse.length === COARSE_KNOWN_DOORS.length && realCoarse.every((x) => COARSE_KNOWN_DOORS.includes(x.id)), fmt(realCoarse));
 check('细口径逐门「通道面 ↔ 室内面」同层或可跨（门中↔室内 canStep 不为 false）',
   slots.every((s) => { const r = LAYOUT.INTERIOR_BY_SLOT?.[s.id]; if (!r) return true; const g = graphFine; const cD = g.nearestCell(s.door.center.x, s.door.center.z); const w = LAYOUT.WALKABLE.find((x) => x.id === r.walkableId); const c = centreOf(w); const cI = g.nearestCell(c.x, c.z); return !cD || !cI || g.canStep(cD.col, cD.row, cI.col, cI.row) !== false; }), '');
 
@@ -131,6 +141,61 @@ if (process.env.PROOF === '1') {
   console.log(`  PROOF：逐门对照 ${n} 项（componentOf vs path.ok，细/粗各自独立）⇒ 不一致 ${mismatches.length} 项`);
   if (mismatches.length) console.log(mismatches.slice(0, 10).map((m) => `      · ${m}`).join('\n'));
   check(`PROOF：componentOf 与 path(.ok) 逐门逐值一致（${n} 项）`, mismatches.length === 0, mismatches.slice(0, 5).join('；'));
+}
+
+
+/* ===== t153：⓪ 分量级护栏（**合取式**判据）=====
+   判据 = `floorYAt(面中心) === 面自身 y`（t134 的“未被取高”，作用在**面中心**上）
+        ∧ `componentOf(面中心, FP_ROUTE[0]).ok`（分量/结果级，t152）
+   为何合取：单用分量判据时，修前**面中心点也落在主分量的低面**（如 ground 0.9）⇒ 对“连接格被高面取走”可能**恒绿**（与 t140 恒真护栏同族）。
+   口径权威性（引 t146）：**细口径 `cellSize:1`（提额）= 唯一过关口径**；`cellSize:2` 因 3m/2m 格心下 1.05m 窄面可能不含格心而**不具权威性**（t146 裁定），
+   其命中**只允许等于已登记的 7 处伪影集合**（逐条枚举，引 t146/t148）⇒ **任何新增粗口径命中仍会红**。 */
+const isApproachFace = (w) => /-transition-\d+$/.test(w.id) || /-threshold$/.test(w.id) || /-door-passage$/.test(w.id);
+const ownerOf = (id) => (id.match(/^WK-(.+?)-(?:transition|threshold|door-passage)/) ?? [null, id])[1];
+const approachHits = (g, layout) => {
+  const hits = [];
+  for (const w of layout.WALKABLE.filter(isApproachFace)) {
+    const c = { x: (w.bounds.minX + w.bounds.maxX) / 2, z: (w.bounds.minZ + w.bounds.maxZ) / 2 };
+    const y = layout.floorYAt(c.x, c.z);
+    const heightOk = y !== null && Math.abs(y - w.y) <= 0.5 + 1e-9;   // 未被更高面取高（t134 判据）
+    const memb = g.componentOf(c.x, c.z, OUTSIDE).ok;                 // 与主户外分量同属一分量
+    if (!(heightOk && memb)) {
+      const coverer = layout.WALKABLE.filter((x) => x !== w && x.y > w.y + 1e-9
+        && c.x >= x.bounds.minX && c.x <= x.bounds.maxX && c.z >= x.bounds.minZ && c.z <= x.bounds.maxZ)
+        .map((x) => `${x.id}@${x.y}`).join(',') || '(无更高面覆盖 ⇒ 集群其他成员不在主分量)';
+      hits.push(`${w.id}@y${w.y}（栋 ${ownerOf(w.id)}）中心解析 ${y === null ? 'null' : y.toFixed(2)}；覆盖者 ${coverer}`);
+    }
+  }
+  return hits;
+};
+/* t146/t148 登记的 **cellSize:2 已知伪影集合**（逐条枚举；非权威口径，仅用于“新增即红”的护栏） */
+const COARSE_KNOWN_ARTIFACTS = Object.freeze([
+  'WK-B-hall-mid-door-passage@y2',
+  'WK-B-hall-rear-door-passage@y1.8',
+  'WK-B-hall-mid-transition-1@y1.5',
+  'WK-B-hall-mid-transition-2@y1',
+  'WK-B-hall-rear-transition-1@y1.35',
+  'WK-B-hall-rear-transition-2@y0.9',
+  'WK-B-hall-rear-transition-3@y0.45',
+]);
+{
+  const f = approachHits(graphFine, LAYOUT);
+  check('t153 ⓪ 分量级护栏（细口径=唯一过关口径，合取式）：94 条门外接近类面命中必须 === 0（精确；失败逐条打印面 id/y/栋/分歧证据）',
+    f.length === 0, f.join(' | '));
+  const cd = approachHits(graphCoarse, LAYOUT);
+  const cdIds = cd.map((x) => x.split('（')[0]);
+  check('t153 ⓪ 分量级护栏（粗口径=非权威，仅锁已登记伪影）：命中集合必须 === t146/t148 登记的 7 处（新增即红）',
+    cdIds.length === COARSE_KNOWN_ARTIFACTS.length && cdIds.every((id) => COARSE_KNOWN_ARTIFACTS.includes(id)),
+    `实际 ${cdIds.join(' , ')}`);
+  const approachFaces = LAYOUT.WALKABLE.filter(isApproachFace).length;
+  /* 三证 ③：B 两栋不假红 */
+  const bFaces = LAYOUT.WALKABLE.filter((w) => /^WK-B-side-(west|east)-main-door-passage$/.test(w.id));
+  const bHits = approachHits(graphFine, LAYOUT).filter((x) => /WK-B-side-(west|east)-main/.test(x));
+  check('t153 三证‑③：`WK-B-side-{west,east}-main-door-passage` 不假红（边格被 tier2@3 覆盖却实际全局可达）',
+    bFaces.length === 2 && bHits.length === 0, `faces=${bFaces.length} hits=${bHits.length}`);
+  /* 三证 ②：修后全绿（当前树真实输出） */
+  console.log(` - t153 三证‑②（修后全绿）：真实几何 LAYOUT ${LAYOUT.LAYOUT_VERSION} ⇒ 细口径命中 ${f.length} / 粗口径命中 ${cdIds.length}（已登记）`);
+  console.log(` - t153 ⓪ 分量级护栏：门外接近类面 ${approachFaces} 条 · 细口径（唯一过关口径，${LAYOUT.LAYOUT_VERSION}）命中 ${f.length} / 粗口径（非权威）命中 ${cdIds.length}`);
 }
 
 console.log(`t140 结果：${failures === 0 ? '全部通过 ✓' : `失败 ${failures} 项`}`);

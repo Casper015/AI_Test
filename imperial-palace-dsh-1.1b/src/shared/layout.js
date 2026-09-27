@@ -25,7 +25,7 @@ import {
   deepFreeze,
 } from './config.js';
 
-export const LAYOUT_VERSION = '1.1.18'; // t145：C 两殿台基接近走廊有界开槽（0.9↔1.3 恢复相邻） // t134：删除 4 片开槽残片，使门带不再被更高面取高（门洞节点高度回到 1.5/1.7） // t131：通路存在守卫 + 加法补 E-court3-hall 门外台阶 // t128：C 两栋遮蔽开槽（第二次授权减法）+ 遮蔽常驻守卫 + C 侧分级台阶 // t126：tier2 有界开槽（两条坡道走廊，主理人授权的减法例外）+ 遮蔽普查 // t121：过渡台阶足印进深 ≥1.05m（cellSize:1 网格可见），18 栋门外分级过渡 // t119：ZONES.drawCallBudget 对齐唯一权威源 config.BUDGET.drawCalls.perZone（C60/D56/E56） // t117：门洞可通行性声明与实际一致（passable/blockedBy 具名登记） // t103：10 座开敞亭可通行化（hasDoor→exceptDoor）+ B 两座入口门槛 // t102：按 t100 权威 Δ 清单登记门外过渡台阶（仅登记几何，不宣称可达） // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
+export const LAYOUT_VERSION = '1.1.19'; // t151：C 两殿门外加法下坡带（未被覆盖窗口内 1.9/1.4） // t145：C 两殿台基接近走廊有界开槽（0.9↔1.3 恢复相邻） // t134：删除 4 片开槽残片，使门带不再被更高面取高（门洞节点高度回到 1.5/1.7） // t131：通路存在守卫 + 加法补 E-court3-hall 门外台阶 // t128：C 两栋遮蔽开槽（第二次授权减法）+ 遮蔽常驻守卫 + C 侧分级台阶 // t126：tier2 有界开槽（两条坡道走廊，主理人授权的减法例外）+ 遮蔽普查 // t121：过渡台阶足印进深 ≥1.05m（cellSize:1 网格可见），18 栋门外分级过渡 // t119：ZONES.drawCallBudget 对齐唯一权威源 config.BUDGET.drawCalls.perZone（C60/D56/E56） // t117：门洞可通行性声明与实际一致（passable/blockedBy 具名登记） // t103：10 座开敞亭可通行化（hasDoor→exceptDoor）+ B 两座入口门槛 // t102：按 t100 权威 Δ 清单登记门外过渡台阶（仅登记几何，不宣称可达） // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
 
 /* =============================================================================
  * 一、包络、区域边界与外墙（§2.3）
@@ -975,6 +975,13 @@ function buildInteriorSliceA() {
     }
     walkables.push(WK(`WK-${id}-door-passage`, slot.zone, 'passage', `${slot.name}门洞通道`, minX, maxX, minZ, maxZ, groundY));
   }
+  for (const spec of C_DESCENT_BANDS) {
+    const slot = SLOT_BY_ID[spec.id];
+    for (let i = 0; i < spec.ys.length; i += 1) {
+      walkables.push(WK(`WK-${spec.id}-descent-${i + 1}`, spec.zone, 'ground', `${slot.name}门外下坡 ${i + 1}/${spec.ys.length}`,
+        spec.xs[i][0], spec.xs[i][1], spec.z0, spec.z1, spec.ys[i]));
+    }
+  }
   for (const spec of T131_EXTRA_STEPS) {
     const slot = SLOT_BY_ID[spec.id];
     for (let i = 0; i < spec.ys.length; i += 1) {
@@ -1080,6 +1087,15 @@ const PAVILION_THRESHOLDS = Object.freeze(['B-pavilion-gate-west', 'B-pavilion-g
 
 /* t128：C 两栋（开槽后暴露的）通道面 ↔ C 区地坪（0.9）之间的**加法分级台阶** —— 1.3 → 1.7，
    每级 0.4 ≤ 0.5，进深 ≥1.05m 且外沿吸附整数格界（t121 口径：cellSize:1 必须含格心）。 */
+/* t151：**加法下坡带**（只读口袋分析结论）——C 两殿门外走廊带内 x∈[±44,±48] 的格
+   **未被任何更高面覆盖**（实测顶层 = `WK-C-ground` 0.9），而相邻台基段 `WK-C-bed-terrace-mid`(2.4) 与之相差 1.5 ⇒ dropTooDeep。
+   ⇒ 在该未被覆盖的窗口内补 2 级下坡（1.9 / 1.4，每级 0.5 ≤ 0.5），下端接既有 transition-1(1.3) 与 ground(0.9)。
+   **加法优先**：此处加法不会被取高（窗口未被覆盖），故不必再动台基（t150 已证仅回撤不足）。 */
+const C_DESCENT_BANDS = Object.freeze([
+  { id: 'C-side-west-main', zone: 'C', xs: [[-46, -44], [-48, -46]], ys: [1.9, 1.4], z0: 155, z1: 181 },
+  { id: 'C-side-east-main', zone: 'C', xs: [[44, 46], [46, 48]], ys: [1.9, 1.4], z0: 155, z1: 181 },
+]);
+
 /* t131：**加法**补 `E-court3-hall` 的门外分级台阶 —— 其通道面 1.3 与 E 区地坪 0.4 相差 0.9 > 0.5，
    而它**不在 t100 的 18 栋内**（当时记为“Δ 超阈但已可达”）⇒ 新加的“通路存在守卫”首个捕获项。
    加法（新增面），不动任何既有几何。 */

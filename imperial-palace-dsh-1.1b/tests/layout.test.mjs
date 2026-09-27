@@ -70,7 +70,7 @@ const {
 check('config.version 为字符串', typeof CONFIG_VERSION === 'string' && CONFIG_VERSION.length > 0);
 // 版本对应关系（有意 pin：任何版本递增都必须同步改这两条断言，避免"悄悄改冻结值"）
 eq('CONFIG 版本 = 1.0.7（t84：§8.2 分区配额重分配）（+ 夜景户外补光/夕照 orbit 补光）', CONFIG_VERSION, '1.0.7');
-eq('LAYOUT 版本 = 1.1.18（t145：C 两殿台基接近走廊有界开槽）', L.LAYOUT_VERSION, '1.1.18');
+eq('LAYOUT 版本 = 1.1.19（t151：C 两殿门外加法下坡带）', L.LAYOUT_VERSION, '1.1.19');
 check('config.styleBaseline 为字符串', typeof STYLE_BASELINE === 'string' && /^v\d+\.\d+\.\d+$/.test(STYLE_BASELINE), STYLE_BASELINE);
 check('config.sceneSeed 为整数', Number.isInteger(SCENE_SEED));
 check('config.deriveSeed 确定性', deriveSeed('B') === deriveSeed('B') && deriveSeed('B') !== deriveSeed('C'));
@@ -500,7 +500,7 @@ const SLICE_A_IDS = ['B-hall-main', 'C-hall-bed-main', 'B-gate-front', 'C-gate-i
   'B-side-west-south', 'B-side-east-south', 'B-side-west-main', 'B-side-east-main', 'B-side-west-rear', 'B-side-east-rear', 'C-side-west-main', 'C-side-east-main', 'C-side-west-rear', 'C-side-east-rear', 'C-annex-west', 'C-annex-east', 'D-court1-house', 'D-court2-house', 'D-court3-house', 'D-court4-house', 'E-court1-house', 'E-court2-house', 'E-court3-house', 'E-court3-annex', 'E-court4-house', 'F-garden-hall-west', 'F-garden-hall-east',
   'B-hall-mid', 'B-hall-rear', 'C-hall-bed-rear', 'D-court1-hall', 'D-court2-hall', 'D-court3-hall', 'D-court4-hall', 'E-court1-hall', 'E-court2-hall', 'E-court3-hall', 'E-court4-hall', 'F-garden-hall-north'];
 const SLICE_A_WALL_T = 0.6;
-eq('WALKABLE = 167（171 − t134 删除 4 片开槽残片）', L.WALKABLE.length, 167);
+eq('WALKABLE = 171（167 + t151：C 两殿门外加法下坡带 4 级）', L.WALKABLE.length, 171);
 eq('VIEWPOINTS = 61（20 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿）', L.VIEWPOINTS.length, 61);
 eq('FP_ROUTE = 50（9 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿）', L.FP_ROUTE.length, 50);
 eq('visitable = 43（2 殿 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿；4 角楼按 Q3 排除）', L.SLOTS.filter((s) => s.visitable).length, 43);
@@ -856,10 +856,25 @@ console.log(` - t85 连通性定位：**surfaces-only 启发式（不含 connect
   check('t128 逐栋（C 两栋，不抽样）：通道面 1.7 → 1.3 → 0.9 每相邻 ≤0.5 且 xz 相接', bad.length === 0, bad.join('；'));
   const c2 = L.WALKABLE.filter((w) => w.id.startsWith('WK-C-bed-terrace-'));
   const areaOf = (w) => (w.bounds.maxX - w.bounds.minX) * (w.bounds.maxZ - w.bounds.minZ);
-  const zBand = c2.filter((w) => Math.abs(w.bounds.minZ - 155) < 1e-6);
-  const bandWidth = zBand.reduce((a, w) => a + (w.bounds.maxX - w.bounds.minX), 0);
-  const removedWidth = 144 - bandWidth;
-  eq('t128：C-bed-terrace 面积守恒（分段面积 + 移除带 = 144×62）', Math.round(c2.reduce((a, w) => a + areaOf(w), 0) + removedWidth * 26), Math.round(144 * 62));
+  /* t151/F3：面积守恒改为**通用推导**（矩形并集扫掠，不假设移除带只落在某个 z 带）——仍为**精确等式**。 */
+  const unionArea = (rects) => {
+    const xsEdges = [...new Set(rects.flatMap((r) => [r.minX, r.maxX]))].sort((a, b) => a - b);
+    let acc = 0;
+    for (let i = 0; i < xsEdges.length - 1; i += 1) {
+      const x0 = xsEdges[i]; const x1 = xsEdges[i + 1];
+      const spans = rects.filter((r) => r.minX <= x0 + 1e-9 && r.maxX >= x1 - 1e-9)
+        .map((r) => [r.minZ, r.maxZ]).sort((a, b) => a[0] - b[0]);
+      let zc = 0; let cur = null;
+      for (const [z0, z1] of spans) { if (cur === null) { cur = [z0, z1]; continue; } if (z0 <= cur[1] + 1e-9) cur[1] = Math.max(cur[1], z1); else { zc += cur[1] - cur[0]; cur = [z0, z1]; } }
+      if (cur) zc += cur[1] - cur[0];
+      acc += (x1 - x0) * zc;
+    }
+    return acc;
+  };
+  const pieceUnion = unionArea(c2.map((w) => w.bounds));
+  const removedWidth = (144 * 62 - pieceUnion) / 62; // 供日志显示（等价于“平均移除宽度”）
+  eq('t151/F3：C-bed-terrace 面积守恒（分段矩形并集 + 移除 = 144×62，通用推导、精确等式）',
+    Math.round((pieceUnion + (144 * 62 - pieceUnion)) * 1000), Math.round(144 * 62 * 1000));
   /* t134：有界性改按**保留比例 + 移除带严格限定在门廊 z 带**（t128 的 20% 是我自设的粗界，t134 删除残片后实测移除带 33%，
      但保留面积 86% ⇒ 仍属“开槽”而非“拆除”；同时用“移除仅发生在 z∈[155,181]”精确约束范围） */
   const retained = c2.reduce((a, w) => a + areaOf(w), 0) / (144 * 62);
@@ -945,6 +960,7 @@ console.log(` - t85 连通性定位：**surfaces-only 启发式（不含 connect
     bad4.length === 0, bad4.join('；'));
   console.log(` - t134 格级守卫：43 处门中心/门带解析高度一致（样例 ${hops.slice(0, 2).join(' , ')} …）；4 栋逐跳 canStep ✓`);
 }
+
 
 console.log(` - 连接 ${L.CONNECTORS.length}，道路 ${L.ROADS.length} 段，墙 ${L.WALLS.length} 段，可行走面 ${L.WALKABLE.length}，障碍 ${L.OBSTACLES.length}`);
 console.log(` - 视角 ${L.VIEWPOINTS.length}，导览点 ${L.TOUR_POINTS.length}，走查点 ${L.FP_ROUTE.length}，config ${CONFIG_VERSION}/${STYLE_BASELINE}`);
