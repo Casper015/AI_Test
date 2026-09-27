@@ -254,12 +254,13 @@ export function antialiasPlanFor(tierId = CONFIG.QUALITY.default, { aa = null, s
  */
 export function antialiasApplyDecision(prev, next) {
   const nextSamples = Math.max(0, Math.round(next?.samples ?? 0));
-  if (prev === null || prev === undefined || prev?.samples === null || prev?.samples === undefined) {
+  const prevSamples = (prev === null || prev === undefined) ? null : prev.samples;
+  if (prevSamples === null || prevSamples === undefined) {
     return { writeSamples: true, rebuild: false, reason: 'init' };
   }
-  const prevSamples = Math.max(0, Math.round(prev.samples));
-  if (prevSamples === nextSamples) return { writeSamples: false, rebuild: false, reason: 'unchanged' };
-  return { writeSamples: true, rebuild: true, reason: `samples ${prevSamples}→${nextSamples}` };
+  const prevN = Math.max(0, Math.round(prevSamples));
+  if (prevN === nextSamples) return { writeSamples: false, rebuild: false, reason: 'unchanged' };
+  return { writeSamples: true, rebuild: true, reason: `samples ${prevN}→${nextSamples}` };
 }
 
 export function createRenderSystem({
@@ -436,9 +437,10 @@ export function createRenderSystem({
       const dbg = gl.getExtension('WEBGL_debug_renderer_info');
       glRenderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
     } catch { /* 诊断失败不得抛出 */ }
+    const planSamples = antialiasPlan.samples;
     const matchesPlan = vals.length === 0
-      ? (antialiasPlan.samples === 0 ? true : null)
-      : vals.every((v) => v === antialiasPlan.samples);
+      ? (planSamples === 0 ? true : null)
+      : vals.every((v) => v === planSamples);
     return {
       samples: min,
       renderTarget1: rt1,

@@ -415,7 +415,7 @@ export function createInteraction({
    *   4. **事后复核**实际落点：与出生点逐值相等 + 可站立 + 包络内 + 眼高一致；
    *      任一不通过 ⇒ **回滚到快照**（视图/位置不被改动）并给失败提示；**只有通过才给"已脱离"提示**。
    */
-  function escapeToSafePointRENAMED(source = 'escape-api') {
+  function escapeToSafePoint(source = 'escape-api') {
     stats.escapes += 1;
     if (rig.isFp !== true) {
       pushHint({ tone: 'warn', kind: 'escape', title: '当前不在第一人称', detail: '脱困只在第一人称走查中生效：按 F 进入第一人称后再试。' }, { kind: 'escape' });
@@ -556,6 +556,8 @@ export function createInteraction({
     return result;
   }
 
+  /* t30 突变B：两函数之间插入一行（旧的位置切片会把本行静默纳入作用域） */
+  const t30InjectedBetween = 1;
   function exitInterior(source = 'interior-api') {
     if (store.state.viewMode !== 'interior') return false;
     const back = interiorReturn?.mode ?? 'oblique';

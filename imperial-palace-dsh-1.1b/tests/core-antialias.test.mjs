@@ -239,5 +239,79 @@ await runner.test('t40④ 特征保留与预算未动：近景仍可见 / 远景
   runner.info(`近景 20m 可见 / 远景 1500m 不绘制｜budget 48 · size 1.1 · opacity 0.16 · 每柱 12 颗逐值不变｜台阶阈值 0.5/0.6 未动 ✓`);
 });
 
+/* ==========================================================================
+ * t47：**档位切换必须真正重建渲染目标**（外部审查 findings ①：面板报 4× 而 GPU 实际 2×）
+ * --------------------------------------------------------------------------
+ * 口径三要素：
+ *   · 来源 = `renderer.js` 的 `antialiasApplyDecision()`（唯一判据）+ `applyAntialias()` 的消费点；
+ *   · 判据 = ①samples 变化 ⇒ `rebuild:true`（必须 dispose 两条 RT，否则 GL 侧不会重建）
+ *            ②samples 不变 ⇒ 不写不重建（同档重复设置 / resize / dpr 路径零开销，不回归）
+ *            ③首次（prev=null）⇒ 只写不重建（RT 未上传，首帧按新值创建）
+ *            ④`antialiasInfo()` / `getStats().quality.antialias` 必须上报 **GL 侧读回**的生效值，
+ *              而不是把计划值当生效值（"上报必须与实际一致"）；
+ *   · 反例 = 退回"只改 samples 不重建"（旧实现）⇒ ① 转红；把 effective 换成计划值回显 ⇒ ④ 转红。
+ * 真实 GL 读数（headless Chrome + `--use-angle=metal`，逐档 × `?aa=off|2|4|8` 计划 vs 读回对照表）
+ * 见 `docs/report-aa-rebuild.md`；本文件承担**常驻**守门（Node 可跑、不需要 WebGL）。
+ * ========================================================================== */
+await runner.test('t47⑤ 档位切换必须真重建：判据/消费点/上报三处守门（纯逻辑 + 源码+行为模拟）', () => {
+  const R = RENDERER;
+  const { antialiasApplyDecision } = R;
+  assertEqual(typeof antialiasApplyDecision, 'function', 'renderer.js 必须导出 antialiasApplyDecision（唯一判据）');
+  const src = readFileSync(join(ROOT, 'src', 'core', 'renderer.js'), 'utf8');
+
+  /* ① 判据语义（行为级，Node 可跑） */
+  const init = antialiasApplyDecision(null, { samples: 2 });
+  assertEqual(init.rebuild, false, '首次写入不得触发重建（RT 未上传）');
+  assertEqual(init.writeSamples, true, '首次必须写 samples');
+  const same = antialiasApplyDecision({ samples: 2 }, { samples: 2 });
+  assertEqual(same.writeSamples, false, 'samples 相同不得重复写');
+  assertEqual(same.rebuild, false, 'samples 相同不得重建（resize/同档重复设置零开销）');
+  for (const [a, b] of [[2, 4], [4, 2], [4, 0], [0, 2], [2, 8], [8, 2]]) {
+    const d = antialiasApplyDecision({ samples: a }, { samples: b });
+    assertEqual(d.writeSamples, true, `samples ${a}→${b} 必须写`);
+    assertEqual(d.rebuild, true, `samples ${a}→${b} 必须重建（否则 GL 侧仍是旧值）`);
+  }
+
+  /* ② 行为模拟：three 的"只改 samples 不重建 ⇒ 不生效"契约下，判据必须让实际值跟上计划值 */
+  const makeTarget = () => ({ samples: 0, effective: 0, uploaded: false, dispose() { this.uploaded = false; } });
+  const applyLikeRenderer = (rt, prev, next) => {
+    const d = antialiasApplyDecision(prev, next);
+    if (d.writeSamples) rt.samples = next.samples;
+    if (d.rebuild) { rt.dispose(); rt.effective = rt.samples; rt.uploaded = true; }
+    else if (!rt.uploaded) { rt.effective = rt.samples; rt.uploaded = true; }   // 首次上传（首帧创建）
+    return { d, rt };
+  };
+  const t1 = makeTarget();
+  applyLikeRenderer(t1, null, { samples: 2 });
+  assertEqual(t1.effective, 2, '首次：上传后生效值必须 = 计划');
+  applyLikeRenderer(t1, { samples: 2 }, { samples: 4 });
+  assertEqual(t1.effective, 4, '切换 2→4：生效值必须跟上（真重建）');
+  applyLikeRenderer(t1, { samples: 4 }, { samples: 0 });
+  assertEqual(t1.effective, 0, '切换 4→off：生效值必须归零');
+  applyLikeRenderer(t1, { samples: 0 }, { samples: 0 });
+  assertEqual(t1.effective, 0, '同档重复：不得改变生效值');
+
+  /* ③ 消费点守门：applyAntialias 必须"按判据写 samples + 变化时 dispose 两条 RT + 计数" */
+  const applyStart = src.indexOf('function applyAntialias(plan)');
+  assert(applyStart > 0, 'renderer.js 必须仍有 applyAntialias(plan)');
+  const applyBody = src.slice(applyStart, applyStart + 1800);   // 函数体足够长；末尾另含"不得退回只改 samples"的负向检查
+  assert(/antialiasApplyDecision\(/.test(applyBody), 'applyAntialias 必须消费 antialiasApplyDecision（不得另立第二套判据）');
+  assert(/composer\.renderTarget1\.samples\s*=/.test(applyBody) && /composer\.renderTarget2\.samples\s*=/.test(applyBody), 'applyAntialias 必须写两条 RT 的 samples');
+  assert(/if \(decision\.rebuild\)/.test(applyBody), 'applyAntialias 必须按 decision.rebuild 分支');
+  assert(/composer\.renderTarget1\.dispose\(\)/.test(applyBody) && /composer\.renderTarget2\.dispose\(\)/.test(applyBody), 'rebuild 分支必须 dispose 两条 RT（three 只在此重建 GL FBO）');
+  assert(/antialiasRebuilds \+= 1/.test(applyBody), 'rebuild 必须计数（供断言与 ?stats=1 取证）');
+  const strippedBody = applyBody.replace(/composer\.renderTarget[12]\.samples\s*=\s*plan\.samples;/g, '');
+  assert(!/\.samples\s*=[^=]/.test(strippedBody), 'applyAntialias 里除两条 composer RT 外不得再有 samples 赋值（禁止退回"只改 samples"）');
+
+  /* ④ 上报守门：GL 侧生效值必须上报（不是把计划值当生效值） */
+  const infoBody = src.slice(src.indexOf('antialiasInfo() {'), src.indexOf('dprInfo() {'));
+  assert(/effective:\s*readComposerAntialias\(\)/.test(infoBody), 'antialiasInfo() 必须上报 GL 读回的 effective');
+  assert(/rebuilds:\s*antialiasRebuilds/.test(infoBody), 'antialiasInfo() 必须上报重建计数');
+  assert(/effectiveSamples:/.test(src) && /matchesPlan:/.test(src), 'getStats().quality.antialias 必须上报 effectiveSamples / matchesPlan');
+  assert(/__webglMultisampledFramebuffer/.test(src) && /getRenderbufferParameter/.test(src), '生效值必须来自 GL 侧读回（multisampled FBO / renderbuffer samples）');
+  assertEqual(typeof R.antialiasPlanFor, 'function', 'antialiasPlanFor 仍应导出（既有 API 不变）');
+  runner.info('判据：init 只写不重建 · unchanged 零开销 · 变化必重建；消费点按 decision 分支并 dispose 两条 RT；上报含 effective/matchesPlan/rebuilds ✓');
+});
+
 process.exit(runner.summary());
 

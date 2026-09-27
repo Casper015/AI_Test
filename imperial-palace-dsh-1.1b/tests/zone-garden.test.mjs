@@ -895,17 +895,24 @@ await runner.test('每栋建筑底面 = 本地地坪（无悬空、无沉降）�
 });
 
 await runner.test('合批后的实际几何自证：墙体网格覆盖宫墙环、水面网格 = 登记水体范围', () => {
-  const wallMats = new Set([kit.materials.get('plasterRed').uuid]);
+  // t34（t46）：墙基是**白石**材质（`wallBase` 角色 = stoneWhite），红墙是 `plasterRed` ⇒ 两者都要收。
+  const wallMats = new Set([kit.materials.get('plasterRed').uuid, kit.materials.get('wallBase').uuid]);
   const wallBoxes = [];
+  /* t34（t46）：红墙从**白石墙基顶面**起砌（`baseH = min(0.8, bodyH×0.2)`）⇒ 单看 `part==='wallBody'`
+     的装配体最低点是"墙基顶面"而非地面，故"落地"判据必须把 `wallBase` 一并纳入：
+     **装配体落地（min.y ≤ cityGroundY + 1e-3）**。判据语义与阈值均未放宽（容差 0.01 → 0.001 更紧），
+     且新增"墙基与墙体同材质同归属"的逐件登记（见下）。 */
   result.root.traverse((n) => {
-    if (n.isMesh && wallMats.has(n.material?.uuid) && n.userData.part === 'wallBody') wallBoxes.push(new THREE.Box3().setFromObject(n));
+    if (n.isMesh && wallMats.has(n.material?.uuid) && (n.userData.part === 'wallBody' || n.userData.part === 'wallBase')) {
+      wallBoxes.push(new THREE.Box3().setFromObject(n));
+    }
   });
-  assert(wallBoxes.length > 0, '未找到宫墙墙体网格（wallBody）');
+  assert(wallBoxes.length > 0, '未找到宫墙墙体/墙基网格（wallBody ∪ wallBase）');
   const wallBox = wallBoxes.reduce((acc, b) => acc.union(b), new THREE.Box3());
   const ring = { minX: -304, maxX: 304, minZ: -454, maxZ: 454 };
   assert(wallBox.min.x <= ring.minX + 0.01 && wallBox.max.x >= ring.maxX - 0.01, '墙体网格未覆盖环东西边界');
   assert(wallBox.min.z <= ring.minZ + 0.01 && wallBox.max.z >= ring.maxZ - 0.01, '墙体网格未覆盖环南北边界');
-  assert(wallBox.min.y <= TERRAIN.cityGroundY + 0.01, '墙体网格底面未落地');
+  assert(wallBox.min.y <= TERRAIN.cityGroundY + 1e-3, `墙体装配体（wallBody ∪ wallBase）底面必须落地（实测 min.y=${wallBox.min.y} vs 地坪 ${TERRAIN.cityGroundY}）`);
   assert(wallBox.max.y >= MODULES.wallHeight - MODULES.wallBattlementHeight - 0.01, '墙体网格高度不足');
 
   const waterMat = kit.materials.get('waterSurface');

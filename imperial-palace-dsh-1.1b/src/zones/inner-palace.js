@@ -425,6 +425,16 @@ export async function createZone(ctx) {
 
   const wallObstacles = [];
   const wallOpenings = [];
+  /* t47③：**跨区共面重复墙线的归属唯一化**（外部审查 findings ②）。
+     `layout.WALLS` 里 z=80 这条物理墙被**两份声明**各写一遍：B 的 `CY-B-rear-wall-north(-east)` 与
+     C 的 `CY-C-front-wall-south(-east)`（同线/同厚 1.2/同高 4.2/同跨度）。core 的 `deriveWallRuns()`
+     已把它们归并成**单段** `WALLRUN-B-x80.00`（owner=B，owners=[B,C]），可视化层（t48）早已只由 B 建；
+     但**碰撞登记**此前由 C 逐条墙另登一份（`OB-CY-C-front-wall-south-span*`）⇒ 数据侧跨区重复
+     （运行时被 registry 的"几何重合"去重规则吃掉，属隐性重复：装配顺序一变归属就漂移）。
+     本卡把碰撞也统一到**归属区**：C 只登记"归并段 owner 就是本区"的墙；被跳过的那份由 core 派生层
+     `OB-WALLRUN-<owner>-…`（zone 无关、永不被 unregisterZone 删除）承载——两侧地坪高度上的拦截都已实测。 */
+  const zoneOwnedWallIds = new Set(wallRunsForZone(ZONE_ID).flatMap((run) => run.wallIds));
+  const skippedCrossZoneWalls = [];
   /* t48：**可视院墙改为消费 core 的权威归并段**（`wallRunsForZone`，与碰撞层同一份 `deriveWallRuns()`）——
      每段边界墙**恰由一个区域建造**（`seg.owner`）。旧实现逐条 `kit.wall({ baseY: 0.9 })` **完全不归并**
      ⇒ ① 与 B 在 z=80 形成**跨区双层共面**（同长 192m，UV 不同 ⇒ 红白交替 + 斜条纹）；
@@ -433,6 +443,12 @@ export async function createZone(ctx) {
      = 贡献者名义跨度并集（C 独占段 = [0.9, 0.9+墙高]；跨区段整片归 B ⇒ C 不再重复建）。
      **碰撞登记仍逐条墙**（`wallSolidSpans`）⇒ `deriveCityWallColliders()` 输出与改前逐值一致、覆盖不减少。 */
   for (const wall of courtyardWalls) {
+    /* t47③：跨区重复共面的那一份不再由本区登记碰撞（归并段 owner 是别的区 ⇒ core 派生层已覆盖同一几何）。
+       未被跳过的墙（本区独占段 / 与邻区共线但**不共面重叠**的侧墙）登记行为与改前逐值一致。 */
+    if (!zoneOwnedWallIds.has(wall.id)) {
+      skippedCrossZoneWalls.push(wall.id);
+      continue;
+    }
     const horizontal = wall.axis === 'x';
     // 院墙实心段碰撞：layout.OBSTACLES 未登记院墙，而院墙是 C 自己负责的实体边界（缺碰撞即穿模）
     for (const [i, [a, b]] of wallSolidSpans(wall).entries()) {
