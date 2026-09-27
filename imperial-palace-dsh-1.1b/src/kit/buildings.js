@@ -450,7 +450,8 @@ export function composeMass(env, p, kind) {
   const eaveY = terraceH + (doubleEave ? scale.eaveHeight * (1 + PROPORTIONS.doubleEaveUpperStorey) : scale.eaveHeight);
 
   if (terraceH > 0.001) parts.add('terrace', 'stoneWhite', box(T, { w: p.localW, h: terraceH, d: p.localD, y: 0, tile: tile.stone }));
-  parts.add('wall', 'plasterRed', box(T, { w: bodyW, h: eaveY - terraceH, d: bodyD, y: terraceH, tile: tile.wall }));
+  /* t52：屋身大块（前后立面的最后兜底块）也纳入世界锚定 ⇒ `wall` 桶内**全部可见大面**同一口径 */
+  parts.add('wall', 'plasterRed', box(T, { w: bodyW, h: eaveY - terraceH, d: bodyD, y: terraceH, tile: tile.wall, uvAnchor: true }));
   const plan = roofPlanOf(config, {
     localW: doubleEave ? bodyW * PROPORTIONS.doubleEaveUpperBody : bodyW,
     localD: doubleEave ? bodyD * PROPORTIONS.doubleEaveUpperBody : bodyD,

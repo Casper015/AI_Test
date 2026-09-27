@@ -672,8 +672,8 @@ export function buildBody(T, {
     facadeWall(-1, frontOpenings);
     facadeWall(1, backOpenings);
     const sideWallD = bodyD - inset * 2;
-    parts.add('wall', 'plasterRed', box(T, { w: wallThick, h: wallH, d: sideWallD, x: halfW - inset - wallThick / 2, y: baseY, tile }));
-    parts.add('wall', 'plasterRed', box(T, { w: wallThick, h: wallH, d: sideWallD, x: -halfW + inset + wallThick / 2, y: baseY, tile }));
+    parts.add('wall', 'plasterRed', box(T, { w: wallThick, h: wallH, d: sideWallD, x: halfW - inset - wallThick / 2, y: baseY, tile, uvAnchor: true }));
+    parts.add('wall', 'plasterRed', box(T, { w: wallThick, h: wallH, d: sideWallD, x: -halfW + inset + wallThick / 2, y: baseY, tile, uvAnchor: true }));
   }
 
   // 额枋彩画带（青绿彩画）+ 鎏金线
@@ -730,14 +730,14 @@ export function buildBody(T, {
     parts.add('doorFrame', 'timberLacquer', box(T, { w: doorWidth * 1.14, h: lintelH, d: leafT * 2, z: -halfD + inset + leafT, y: baseY + columnFootDiameter + doorHeight, tile }));
     const aboveH = h - (columnFootDiameter + doorHeight + lintelH);
     if (aboveH > 0.1) {
-      parts.add('wall', 'plasterRed', box(T, { w: doorWidth * 1.14, h: aboveH, d: wallThick, z: -halfD + inset + wallThick / 2, y: baseY + columnFootDiameter + doorHeight + lintelH, tile }));
+      parts.add('wall', 'plasterRed', box(T, { w: doorWidth * 1.14, h: aboveH, d: wallThick, z: -halfD + inset + wallThick / 2, y: baseY + columnFootDiameter + doorHeight + lintelH, tile, uvAnchor: true }));
     }
     // t6：贯穿门洞的**背面门额 + 背面门上墙**（与正面同高、同宽；背面不设门扇与门钉）。
     // 复用既有部位名（doorFrame / wall）⇒ 不新增合批桶，§8.2 分区绘制调用不变。
     if (through) {
       parts.add('doorFrame', 'timberLacquer', box(T, { w: doorWidth * 1.14, h: lintelH, d: leafT * 2, z: halfD - inset - leafT, y: baseY + columnFootDiameter + doorHeight, tile }));
       if (aboveH > 0.1) {
-        parts.add('wall', 'plasterRed', box(T, { w: doorWidth * 1.14, h: aboveH, d: wallThick, z: halfD - inset - wallThick / 2, y: baseY + columnFootDiameter + doorHeight + lintelH, tile }));
+        parts.add('wall', 'plasterRed', box(T, { w: doorWidth * 1.14, h: aboveH, d: wallThick, z: halfD - inset - wallThick / 2, y: baseY + columnFootDiameter + doorHeight + lintelH, tile, uvAnchor: true }));
       }
     }
     if (detail === 'near' && grade >= 2 && leafW > 0.15) {

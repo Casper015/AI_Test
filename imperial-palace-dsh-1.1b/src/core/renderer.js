@@ -239,6 +239,29 @@ export function antialiasPlanFor(tierId = CONFIG.QUALITY.default, { aa = null, s
   return { ...base, reason: 'override:unknown-value' };
 }
 
+/**
+ * t47：**「写 samples？」「重建渲染目标？」的唯一纯判据**（Node 直测；真重建由调用点执行）。
+ *
+ * 背景（外部审查 findings ①）：three 的 `WebGLRenderTarget.samples` 只是 JS 字段，
+ * 单改它**不会**重建 GL FBO ⇒ 面板报 4× 而 GPU 仍 2×（实测见 `docs/report-aa-rebuild.md`）。
+ *
+ * @param {{samples:number}|null} prev 上一次已应用的读数（`null` = 尚未应用过）
+ * @param {{samples:number}} next 本次计划
+ * @returns {{writeSamples:boolean, rebuild:boolean, reason:string}}
+ *   · `init`      ：首次写入 samples（RT 未上传，首帧按新值创建）⇒ 不重建；
+ *   · `unchanged` ：samples 未变 ⇒ 不写不重建（档位重复设置 / resize / dpr 路径零开销，不回归）；
+ *   · `samples a→b`：samples 变化 ⇒ 写 + **必须重建**（否则新值不生效）。
+ */
+export function antialiasApplyDecision(prev, next) {
+  const nextSamples = Math.max(0, Math.round(next?.samples ?? 0));
+  if (prev === null || prev === undefined || prev?.samples === null || prev?.samples === undefined) {
+    return { writeSamples: true, rebuild: false, reason: 'init' };
+  }
+  const prevSamples = Math.max(0, Math.round(prev.samples));
+  if (prevSamples === nextSamples) return { writeSamples: false, rebuild: false, reason: 'unchanged' };
+  return { writeSamples: true, rebuild: true, reason: `samples ${prevSamples}→${nextSamples}` };
+}
+
 export function createRenderSystem({
   container,
   events = null,
@@ -392,11 +415,18 @@ export function createRenderSystem({
     return { ...out, samples, source: 'gl-read' };
   }
 
-  /** 两条 composer RT 的合并读数（取最小生效值）+ GL 能力与渲染器串（供 e2e 取证/上报）。 */
+  /** 两条 composer RT 的合并读数 + GL 能力与渲染器串（供 e2e 取证/上报）。 */
   function readComposerAntialias() {
     const rt1 = readRenderTargetSamples(composer?.renderTarget1 ?? null);
     const rt2 = readRenderTargetSamples(composer?.renderTarget2 ?? null);
-    const vals = [rt1.samples, rt2.samples].filter((v) => typeof v === 'number');
+    const targets = [rt1, rt2];
+    /* 口径（t47）：
+       · 已上传（有 GL FBO/renderbuffer）的 RT ⇒ 其 samples **必须 == 计划值**（否则就是"报告 X 实际 Y"缺陷）；
+       · 未上传（`not-uploaded`）的 RT ⇒ 尚未创建，首次使用时会按当前 samples 创建 ⇒ 记 pending 而非判负；
+         但计划 samples > 0 时**至少须有一条已上传**，否则视为不可判定（null），避免"全 pending 也自证通过"。 */
+    const uploaded = targets.filter((t) => t.source !== 'not-uploaded');
+    const pending = targets.length - uploaded.length;
+    const vals = uploaded.map((t) => t.samples).filter((v) => typeof v === 'number');
     const min = vals.length > 0 ? Math.min(...vals) : null;
     let maxSamples = null;
     let glRenderer = null;
@@ -406,13 +436,19 @@ export function createRenderSystem({
       const dbg = gl.getExtension('WEBGL_debug_renderer_info');
       glRenderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
     } catch { /* 诊断失败不得抛出 */ }
+    const matchesPlan = vals.length === 0
+      ? (antialiasPlan.samples === 0 ? true : null)
+      : vals.every((v) => v === antialiasPlan.samples);
     return {
       samples: min,
       renderTarget1: rt1,
       renderTarget2: rt2,
+      uploaded: uploaded.length,
+      pending,
       maxSamples,
       glRenderer,
-      matchesPlan: min === null ? null : min === antialiasPlan.samples,
+      /** 已上传 RT 的实际 samples 是否都等于计划值（true/false；无法判定时 null） */
+      matchesPlan,
     };
   }
 

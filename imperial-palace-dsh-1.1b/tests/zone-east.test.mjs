@@ -388,10 +388,56 @@ await runner.test('可行走面 1 面回显 layout、坡道斜率 ≤ rampMaxSlo
          （否则"跨水面"无意义），且逐级落在 [地坪, 亭台基面] 内。 */
       assert(w.y > groundY + 1e-9, `${w.id} 汀步面应高于庭院地坪（实测 ${w.y}）`);
       assert(w.y <= groundY + MODULES.eaveHeight, `${w.id} 汀步面标高超限`);
+    } else if (w.towerId || /^WK-T-watchtower-/.test(w.id)) {
+      /* t34（t39 可登塔楼）：塔楼面（kind='terrace'，由 `CLIMB_TOWERS` 派生）**不属于"区地坪"类** ——
+         其标高沿塔链逐跳抬升（见本用例末尾的**塔链自证**），故此处不得再要求"等于东宫苑地坪"。
+         本分支只保留弱断言（不得低于庭院地坪）；塔链的强判据在下方逐跳给出。 */
+      assert(w.y >= groundY - 1e-6, `${w.id} 塔楼面不得低于庭院地坪（实测 ${w.y} vs 地坪 ${groundY}）`);
     } else {
       assertEqual(w.y, groundY, `${w.id} 标高应等于东宫苑地坪`);
     }
   }
+  /* t34（t39 塔楼）**塔链自证**（全部由 layout 权威源派生，不写死面数/高度）：
+     ① 塔楼可行走面数 = `CLIMB_TOWER_SUMMARY.faceCount`；
+     ② 沿 `plan.pathIds`（塔链顺序，唯一权威源）逐跳 **Δy ≤ maxHop**；
+     ③ 沿塔链 **y 非降**（且至少一跳严格上升 ⇒ 确实在爬升，不是平地）；
+     ④ **观景台（`plan.deckFaceId`）是该塔唯一最高面**。 */
+  const towerWalkables = result.colliders.walkable.filter((w) => /^WK-T-watchtower-/.test(w.id));
+  const towerSummary = LAYOUT.CLIMB_TOWER_SUMMARY ?? null;
+  assert(towerSummary && Number.isFinite(towerSummary.maxHop), 'layout 必须导出 CLIMB_TOWER_SUMMARY.maxHop（塔楼权威摘要）');
+  assertEqual(
+    towerWalkables.length,
+    towerSummary.faceCount,
+    `塔楼可行走面数必须等于 CLIMB_TOWER_SUMMARY.faceCount（${towerSummary.faceCount}；实际 ${towerWalkables.length}）`,
+  );
+  const towerWalkableById = new Map(towerWalkables.map((w) => [w.id, w]));
+  for (const plan of LAYOUT.CLIMB_TOWER_PLANS ?? []) {
+    const walkableIdOf = (faceId) => `WK-${plan.id}-${String(faceId).replace(`${plan.id}-`, '')}`;
+    const chain = (plan.pathIds ?? []).map((pid) => towerWalkableById.get(walkableIdOf(pid))).filter(Boolean);
+    assert(chain.length >= 2, `${plan.id}：塔链至少应有 2 面（实际 ${chain.length}）`);
+    let rises = 0;
+    for (let i = 1; i < chain.length; i += 1) {
+      const dy = chain[i].y - chain[i - 1].y;
+      assert(dy >= -1e-9, `${plan.id}：塔链 y 必须逐跳非降（${chain[i - 1].id} ${chain[i - 1].y} → ${chain[i].id} ${chain[i].y}）`);
+      assert(
+        Math.abs(dy) <= towerSummary.maxHop + 1e-6,
+        `${plan.id}：相邻塔面 |Δy| 必须 ≤ maxHop ${towerSummary.maxHop}（${chain[i - 1].id} → ${chain[i].id}：${Math.abs(dy)}）`,
+      );
+      if (dy > 1e-9) rises += 1;
+    }
+    assert(rises > 0, `${plan.id}：塔链必须至少有一跳严格上升（否则是"平地"而非塔）`);
+    const deck = towerWalkableById.get(walkableIdOf(plan.deckFaceId));
+    assert(deck, `${plan.id}：观景台面 ${walkableIdOf(plan.deckFaceId)} 必须登记为可行走面`);
+    const towerYs = towerWalkables.filter((w) => w.towerId === plan.id).map((w) => w.y);
+    const maxY = Math.max(...towerYs);
+    assertEqual(deck.y, maxY, `${plan.id}：观景台必须是该塔最高面（deck ${deck.y} vs 最高 ${maxY}）`);
+    assertEqual(
+      towerYs.filter((y) => y === maxY).length,
+      1,
+      `${plan.id}：最高面必须**唯一**（= 观景台；实际 ${towerYs.filter((y) => y === maxY).length} 面同为最高）`,
+    );
+  }
+  runner.info(`塔链自证（t34）：${(LAYOUT.CLIMB_TOWER_PLANS ?? []).length} 座塔｜塔面 ${towerWalkables.length} = summary.faceCount ${towerSummary.faceCount}｜maxHop ${towerSummary.maxHop}｜观景台唯一最高 ✓`);
   assert(result.colliders.ramps.length > 0, 'E 区有侧门台阶与花园坡道，ramps 不应为空');
   for (const r of result.colliders.ramps) assert(r.slope <= STEP.rampMaxSlope + 1e-6, `${r.id} 斜率超限`);
   runner.info(`可行走面 ${result.colliders.walkable.length} 面，坡道/台阶 ${result.colliders.ramps.length} 段（最大斜率 ${Math.max(...result.colliders.ramps.map((r) => r.slope))}）`);

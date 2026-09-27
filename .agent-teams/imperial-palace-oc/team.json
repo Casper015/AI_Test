@@ -5739,12 +5739,12 @@
       "id": "t52",
       "subject": "门贴图收尾：立面非 facadeWall 子构件锚定 + (z,y) 分带判据 + 真实 GPU A/B 出图",
       "description": "【来源】t49 已交付并通过主理人独立复测（夹具与 608 m 真实宫墙 `WALL-CITY-south` 的 wallBody/wallBase/wallLintel 偏差 0.00e+0 / 0.00e+0 / ~1e-7，`kit.test` 1772/1772，`audit --enforce` exit 0）。本卡是 t49 回执 §5 里自己登记的**两项未完成**，收口它。\n\n【未完成项 ①：立面混合桶残留】`wall` 合批键把前后立面 / 侧墙 / 山墙 / 槛墙等子构件混在同一桶；`facadeWall` 的两处分块盒**已锚定**，但同桶内其余子构件尚未锚定。t49 的量测显示该桶单一仿射拟合残差 ≤ **2.08e+1 格** —— 但你自己也指出这个口径**无意义**，因为它把不同 (z,y) 的分带混在一起拟合。\n⇒ 本卡要求：① 把同桶内其余分块盒一并锚定；② 把判据改成**按 (z, y) 分带分组**的逐组一致性判据；③ **证明新判据有效**：用反例说明为何单一仿射拟合会把「正常的多分带」误判为超差，并给 1 个突变对照（把锚定关掉 ⇒ 分组判据必红）。\n\n【未完成项 ②：视觉证据】t49 未跑 `scripts/shot.mjs` 的 ≥2 机位 A/B（该路径在本机会话多次 >600s 不返回）。请**换路线**：照 `scripts/probe-motion-edges.mjs` 已验证可用的做法——真实 CDP + 真实 GPU（headless Chrome `--use-angle=metal`，**不要** `--disable-gpu`）——只截 2 张图（门洞近景 + 一栋建筑门面），落 `work/t52/shots/**`。**不要**再去跑整条 shot.mjs 全流程，也不要为了出图改 §12 阈值。若仍失败，把**原始错误与耗时**交回，不许用文字替代图。\n\n【背景读数（可直接复现）】红墙门两侧的相位偏差异常改前是 右段 **14.6875 格 = 94.00 m**、门额 **14.6875 格**；改后夹具与真实宫墙均为 **0.00e+0**。tile 逐值未变（plasterRed 6.4 / stone 1.6）。",
-      "status": "claimed",
+      "status": "in_progress",
       "assignee": "kit-engineer",
       "dependencies": [],
       "attempt": 2,
       "createdAt": 1790547258219,
-      "updatedAt": 1790547292307,
+      "updatedAt": 1790547328469,
       "kind": "work",
       "objective": "收口 t49 的两项未完成：① 把 `wall` 合批桶内其余分块子构件纳入世界锚定，并把「门侧/立面连续性」判据改为按 (z,y) 分带分组（现单一仿射拟合残差 ≤2.08e+1 格、口径无意义），附能区分真假超差的突变对照；② 用真实 GPU CDP 路线出 ≥2 张门洞/门面 A/B 图作为视觉证据。",
       "inScope": [
@@ -5773,8 +5773,46 @@
       ],
       "reassigning": false,
       "attemptId": "3fa76fa5-b494-4e98-aea0-27487108e274"
+    },
+    {
+      "id": "t53",
+      "subject": "越界红归因与 pin 同步（第二轮）：verify-completeness 3.2/6.1 + verify-experience A3/E3 + core.test 两条只归因",
+      "description": "【来源】你的 t48 回执 §16.5 如实交回的一批越界红。它们混了两类完全不同的东西：**陈旧期望**（t39/t41/t46/t48 落地后计数与分段变了）与**可能的真实回退**（在飞的 t42 灯光改动）。本卡负责**逐条判定并收口**，判定必须带原始输出。\n\n【要处理的清单（原文照抄）】\n- `verify-completeness`：`[FAIL] 3.2 60 段墙…6 段偏弱：CY-C-front/main/rear-wall-{west,east}`；`6.1 focus-extra 6`；`5.4b`（既有数据集项，登记即可）\n- `verify-experience`：`A3 focus-extra 7≠6`；`E3 院墙连接连续…CY-B-plaza 墙数 6 ≠ wallIds`；`F1`（既有存量截图项，登记即可）\n- `core.test`（**只归因，不要写该文件**，t34 在改）：`terrace 面应为 8 条…实际 80`；`夜景实时灯…远端灯 829.54 不应是实时点光`\n\n【方法（沿用本团队已验证的纪律）】先只读取证 → 判定 → 只把「陈旧期望」改数据推导（断言只增不减）→ 真实回退带原始输出交回。**口径三要素**（网格/锚点/maxCells 或本处的计数来源）必须写明；判据缺失值必须 FAIL，不得静默通过。\n\n【为什么是你】你是 layout/契约/测试脚手架负责人，`scripts/verify-completeness.mjs` 与 `tests/verify-experience.test.mjs` 当前无人在写；`tests/core.test.mjs` 已由 t34 占用，故明确排除。",
+      "status": "claimed",
+      "assignee": "foundation-lead",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1790547481717,
+      "updatedAt": 1790547507608,
+      "kind": "work",
+      "objective": "逐条判定并收口 t48 交回的一批越界红（verify-completeness 3.2/6.1、verify-experience A3/E3、core.test 两条只归因），区分「陈旧期望」与「真实回退」：陈旧期望改数据推导（断言只增不减），真实回退带原始输出交回而不自行改 src。",
+      "inScope": [
+        "scripts/verify-completeness.mjs",
+        "tests/verify-experience.test.mjs",
+        "docs/report-run-reds.md",
+        "work/t53/"
+      ],
+      "outOfScope": [
+        "tests/core.test.mjs",
+        "src/"
+      ],
+      "acceptance": [
+        "**逐条判定 + 原始输出**（不是摘要）：对每一条越界红，给出「陈旧期望 / 真实回退」的判定，判定依据必须附命令与原始输出片段（含期望值、实际值、file:line）",
+        "`scripts/verify-completeness.mjs` 3.2（`60 段墙…6 段偏弱：CY-C-front/main/rear-wall-{west,east}`）与 6.1（`focus-extra 6`）逐条处置：属陈旧期望的改**数据推导**（`WALLS.length` 现 72、切口后段数变化、focus-extra 现 7），属真实几何回退的**不要自己改 src**，带原始输出交回；两者都必须写清理由",
+        "`tests/verify-experience.test.mjs` A3（`focus-extra 7≠6`）与 E3（`院墙连接连续…CY-B-plaza 墙数 6 ≠ wallIds`）逐条处置：A3 若为陈旧计数改数据推导；E3 必须证明「改造后每段边界墙的可视分段与 `wallIds` 登记一致」，并说明归并后子区间的语义（B/C 各消费自己 owned 的子区间）",
+        "红线：只允许「陈旧字面量 → 数据推导」；禁止改区间/包含式/恒真式，禁止删断言或放宽阈值；断言条数只增不减（给改前/改后条数表）",
+        "`tests/core.test.mjs` **不在本卡写域**（ui-engineer 的 t34 正在改）：把它的两条红（`terrace 面 8 → 实测 80`、`夜景实时灯 远端灯 829.54 不应是实时点光`）**只做归因**，把原始输出与初步判定交回主理人，由主理人并入 t34；**不要写该文件**",
+        "回归原样报退出码：`node scripts/verify-completeness.mjs`、`node tests/verify-experience.test.mjs`，并说明仍红项与归因；不得为了让退出码变绿放宽任何判据",
+        "若判定某条是**真实回退**（尤其 `远端灯 829.54 不应是实时点光` 疑似来自在飞的 t42 灯光改动），必须给出可复现命令与最小复现读数，并标明疑似引入者（哪张卡/哪个文件）"
+      ],
+      "verify": [
+        "node scripts/verify-completeness.mjs",
+        "node tests/verify-experience.test.mjs"
+      ],
+      "reassigning": false,
+      "attemptId": "6879463e-1e68-45f8-bb87-f94e5e9819aa"
     }
   ],
-  "taskSeq": 52,
+  "taskSeq": 53,
   "approvedAt": 1790501240056
 }

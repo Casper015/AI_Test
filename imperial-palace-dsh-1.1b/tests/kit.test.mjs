@@ -2426,7 +2426,7 @@ startSection('24 体块共面/套叠守卫：墙体件不得有"同向共面 + �
 
 /* ================================================================== 26 墙面 UV 世界锚定（t49） */
 
-startSection('26 墙面 UV 世界锚定：门洞两侧 / 门额 / 立面分块相位连续');
+startSection('26 墙面 UV 世界锚定：门洞两侧 / 门额 / 立面分块（(z,y) 分带判据）');
 
 {
   /* 口径：修前 `metricBoxUVs()` 让每个盒体从 0 起算 ⇒ 同一堵墙被洞口切开后**相邻块相位跳变**
@@ -2510,18 +2510,20 @@ startSection('26 墙面 UV 世界锚定：门洞两侧 / 门额 / 立面分块�
     const worstF = Math.max(...pts.map((q) => Math.abs(q.u - q.x / tw)));
     facades.push({ id: slot.id, pts: pts.length, worst: worstF, samples: pts });
   }
-  /* 立面（facadeWall）：判据 = **同一堵墙的所有 ±z 面三角面落在同一条仿射函数 u=k·x+b 上**
-     （k = 1/tile、逐点残差 < 1e-3 格）—— 这与"门洞两侧相位连续"等价，且不受容器后续平移/旋转影响
-     （`buildBody` 之后仍会整体平移，故不能用 `u == x/tile` 的绝对式；夹具那条绝对式仍保留）。 */
-  const facadeFits = [];
-  for (const slot of layout.SLOTS.filter((s2) => ['hall', 'gateHall'].includes(s2.kind)).slice(0, 4)) {
+  /* 立面 `wall` 桶（含 facadeWall 分块盒 + 侧墙 + 门楣上墙 + 屋身大块）：
+     判据 = **按 (z, y) 分带分组后逐组单仿射**（同组内 u 是 x 的单一仿射函数 ⇒ 同一世界点相位唯一）。
+     为什么**不能**用单一全局仿射拟合（反例，本块同时给出读数）：同一桶里各 (z,y) 分带各有独立截距
+     （前立面 / 后立面 / 门楣上墙 / 屋身大块…）⇒ 混在一起拟合残差 ≈ 2e+1 格，但**并非缺陷**（每组内部完全一致）。 */
+  const bandGroups = [];
+  const globalResid = [];
+  for (const slot of layout.SLOTS.filter((s2) => ['hall', 'gateHall', 'sideHall'].includes(s2.kind)).slice(0, 6)) {
     const obj = kit[slot.kind]({ ...slot, quality: 'medium', lod: 'near' });
     obj.updateMatrixWorld(true);
-    let worstRes = 0; let slopeErr = 0; let n = 0;
+    const groups = new Map();
+    const all = [];
     obj.traverse((m) => {
       if (!m.isMesh || m.userData.part !== 'wall') return;
       const pos = m.geometry.attributes.position; const uv = m.geometry.attributes.uv;
-      const pts = [];
       for (let a = 0; a + 2 < pos.count; a += 3) {
         const ax = pos.getX(a); const ay = pos.getY(a); const az = pos.getZ(a);
         const bx = pos.getX(a + 1); const by = pos.getY(a + 1); const bz = pos.getZ(a + 1);
@@ -2529,25 +2531,89 @@ startSection('26 墙面 UV 世界锚定：门洞两侧 / 门额 / 立面分块�
         const ux = bx - ax; const uy = by - ay; const uz = bz - az;
         const vx = cx - ax; const vy = cy - ay; const vz = cz - az;
         const nx = Math.abs(uy * vz - uz * vy); const ny = Math.abs(uz * vx - ux * vz); const nz = Math.abs(ux * vy - uy * vx);
-        if (!(nz >= nx && nz >= ny)) continue;
-        for (let k2 = 0; k2 < 3; k2 += 1) pts.push({ x: pos.getX(a + k2), u: uv.getX(a + k2) });
+        if (!(nz >= nx && nz >= ny)) continue; // 只取 ±z 面
+        const zPlane = +((az + bz + cz) / 3).toFixed(3);
+        const yLo = +Math.min(ay, by, cy).toFixed(3);
+        const yHi = +Math.max(ay, by, cy).toFixed(3);
+        const key = `${zPlane}|${yLo}|${yHi}`;
+        const tri = { x0: Math.min(ax, bx, cx), x1: Math.max(ax, bx, cx), pts: [] };
+        for (let k2 = 0; k2 < 3; k2 += 1) tri.pts.push({ x: pos.getX(a + k2), u: uv.getX(a + k2) });
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(tri);
+        all.push(...tri.pts);
       }
-      if (pts.length < 6) return;
-      n += pts.length;
+    });
+    let worstBand = 0; let bandCount = 0;
+    for (const tris of groups.values()) {
+      const pts = tris.flatMap((t) => t.pts);
+      if (pts.length < 6) continue;
+      bandCount += 1;
       const c = pts.length;
       const mx = pts.reduce((t, q) => t + q.x, 0) / c; const mu = pts.reduce((t, q) => t + q.u, 0) / c;
       let num = 0; let den = 0;
       for (const q of pts) { num += (q.x - mx) * (q.u - mu); den += (q.x - mx) ** 2; }
       const k = den > 1e-12 ? num / den : 0; const b = mu - k * mx;
-      slopeErr = Math.max(slopeErr, Math.abs(k - 1 / kit.materials.tileMeters('plasterRed')));
-      for (const q of pts) worstRes = Math.max(worstRes, Math.abs(q.u - (k * q.x + b)));
-    });
-    facadeFits.push({ id: slot.id, n, worstRes, slopeErr });
+      worstBand = Math.max(worstBand, ...pts.map((q) => Math.abs(q.u - (k * q.x + b))));
+    }
+    let worstGlobal = 0;
+    if (all.length >= 6) {
+      const c = all.length;
+      const mx = all.reduce((t, q) => t + q.x, 0) / c; const mu = all.reduce((t, q) => t + q.u, 0) / c;
+      let num = 0; let den = 0;
+      for (const q of all) { num += (q.x - mx) * (q.u - mu); den += (q.x - mx) ** 2; }
+      const k = den > 1e-12 ? num / den : 0; const b = mu - k * mx;
+      worstGlobal = Math.max(...all.map((q) => Math.abs(q.u - (k * q.x + b))));
+    }
+    bandGroups.push({ id: slot.id, bands: bandCount, worstBand, global: worstGlobal });
+    globalResid.push(worstGlobal);
   }
-  /* 如实登记（**不作守卫**，因为 `wall` 合批桶把前后立面/侧墙/其它子构件混在一起，
-     单一仿射拟合在该桶上无意义；门两侧的正确判据由上一条"墙级绝对式"覆盖）：*/
-  console.log(` - t49 立面 wall 桶（混合子构件）实测残差 ≤ ${Math.max(...facadeFits.map((f) => f.worstRes)).toExponential(2)} 格 —— 待派对账（facadeWall 分块盒已锚定；混合桶内其余子构件 + 按 (z,y) 带分组的门侧连续性判据另派）`);
-  ok('t49 立面门带判据已如实登记（facadeWall 分块盒锚定由 §26 墙级绝对式覆盖；混合桶残差已量化待派）', facadeFits.every((f) => Number.isFinite(f.worstRes)));
+  const worstBanded = Math.max(...bandGroups.map((g) => g.worstBand));
+  const worstGlobal = Math.max(...bandGroups.map((g) => g.global));
+  ok(`t52 立面 (z,y) 分带分组后逐组单仿射残差 < 1e-3 格（${bandGroups.length} 栋 / ${bandGroups.reduce((n, g) => n + g.bands, 0)} 个分带 · 最大 ${worstBanded.toExponential(2)}）`,
+    worstBanded < HALF, JSON.stringify(bandGroups.map((g) => [g.id, g.bands, +g.worstBand.toExponential(2)])));
+  ok(`t52 锚定后 wall 桶**全局一致**（单拟合残差 ${worstGlobal.toExponential(2)} 格 < 1e-3）—— 比"分带一致"更强`,
+    worstGlobal < HALF, JSON.stringify(bandGroups.map((g) => [g.id, +g.global.toExponential(2)])));
+  /* 口径说明（为何**不能**用单一全局拟合做判据）：t49 的 2.08e+1 格读数来自**未锚定的子构件**；
+     原理上，若某子构件与其它分带不共原点（如另一局部帧 / 另一 tile），分带内仍完全连续而全局拟合会**误报**超差。
+     下面用解析反例复现"误报"：两块各自内部连续、但整体相差 1 格偏移 ⇒ 全局残差 ≥ 0.5 格，分带残差 = 0。 */
+  const misreport = (() => {
+    const t = kit.materials.tileMeters('plasterRed');
+    const pts = [];
+    for (const [x0, x1, off] of [[-50, -6, 0], [6, 50, 1]]) {
+      for (const x of [x0, x1]) pts.push({ x, u: x / t + off });
+    }
+    const global = (() => {
+      const c = pts.length; const mx = pts.reduce((a, q) => a + q.x, 0) / c; const mu = pts.reduce((a, q) => a + q.u, 0) / c;
+      let num = 0; let den = 0; for (const q of pts) { num += (q.x - mx) * (q.u - mu); den += (q.x - mx) ** 2; }
+      const k = den > 1e-12 ? num / den : 0; const b = mu - k * mx;
+      return Math.max(...pts.map((q) => Math.abs(q.u - (k * q.x + b))));
+    })();
+    const perBand = Math.max(
+      (() => { const q = pts.slice(0, 2); return Math.abs((q[1].u - q[0].u) - (q[1].x - q[0].x) / t); })(),
+      (() => { const q = pts.slice(2, 4); return Math.abs((q[1].u - q[0].u) - (q[1].x - q[0].x) / t); })(),
+    );
+    return { global, perBand };
+  })();
+  ok(`t52 口径反例：两块各自内部连续、整体差 1 格 ⇒ 全局拟合残差 ${misreport.global.toFixed(3)} 格（误报）、分带残差 ${misreport.perBand.toExponential(2)} 格（不误报）⇒ 判据必须分带`,
+    misreport.global >= 0.25 && misreport.perBand < HALF);
+  /* 突变对照（分带内）：把**同一 (z,y) 分带**里的一块回到旧行为（u 从 0 起）⇒ 该组残差必 ≥ 1 格 */
+  const mutResid = (() => {
+    const t = kit.materials.tileMeters('plasterRed');
+    const anchored = [];
+    for (const [x0, x1] of [[-50, -6], [-6, 6], [6, 50]]) for (const x of [x0, x1]) anchored.push({ x, u: x / t });
+    const mutated = anchored.map((q) => (q.x > 6 ? { x: q.x, u: (q.x - 6) / t } : q)); // 右段旧行为（相位归零）
+    const fit = (pts) => {
+      const c = pts.length;
+      const mx = pts.reduce((a, q) => a + q.x, 0) / c; const mu = pts.reduce((a, q) => a + q.u, 0) / c;
+      let num = 0; let den = 0;
+      for (const q of pts) { num += (q.x - mx) * (q.u - mu); den += (q.x - mx) ** 2; }
+      const k = den > 1e-12 ? num / den : 0; const b = mu - k * mx;
+      return Math.max(...pts.map((q) => Math.abs(q.u - (k * q.x + b))));
+    };
+    return { ok: fit(anchored), mutated: fit(mutated) };
+  })();
+  ok(`t52 突变对照：分带内一块回到旧行为 ⇒ 分组判据必红（锚定后 ${mutResid.ok.toExponential(2)} 格 → 突变后 ${mutResid.mutated.toFixed(2)} 格 ≥ 1e-3）`,
+    mutResid.ok < HALF && mutResid.mutated >= HALF);
   /* ⑤ 零漂移：tile 尺度不变（只改 UV ⇒ 顶点/桶不变，audit 计数逐值不变） */
   ok(`t49 tile 尺度逐值不变（plasterRed ${tW}m / stone ${tileOf('wallLintel')}m）`, Math.abs(tW - 6.4) < 1e-9 && Math.abs(tileOf('wallLintel') - 1.6) < 1e-9);
   notes.push(`t49 UV 世界锚定：夹具偏差 ${dev.toExponential(2)} 格 · 全城 ${layout.WALLS.length} 条墙最大 ${worst.v.toExponential(2)} 格 · 立面 ${facades.length} 栋最大 ${Math.max(...facades.map((f) => f.worst)).toExponential(2)} 格 · 突变对照旧行为 ${oldDev.toFixed(2)} 格（必红）`);
