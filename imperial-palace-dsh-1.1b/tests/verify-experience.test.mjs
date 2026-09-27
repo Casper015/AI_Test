@@ -105,8 +105,10 @@ await test(`A3 机位普查与 LAYOUT ${LAYOUT.LAYOUT_VERSION} 实测一致（zo
   const slots = Object.keys(LAYOUT.INTERIOR_BY_SLOT ?? {});
   assert(interior.length === slots.length, `interior 机位 ${interior.length} ≠ INTERIOR_BY_SLOT ${slots.length}`);
   const perAreaInterior = interior.reduce((acc, v) => { const a = v.area ?? v.zone; acc[a] = (acc[a] ?? 0) + 1; return acc; }, {});
-  // focus-extra = 6：B/C/D/E 各 1 + F 2（南/北城门），是 1.1.4 实际注册表的稳定集合
-  assert(focusExtra.length === 6, `focus-extra ${focusExtra.length} ≠ 6`);
+  /* t53：focus-extra 计数改**数据推导** —— 基线 6（B/C/D/E 各 1 + F 2 城门）+ 每座可登塔楼 1 个塔顶机位
+     （t39：`CLIMB_TOWERS` ⇒ focus-extra 6→7）。判据未放宽：仍要求与 layout 逐值相等，且 B/C/D/E 每区 ≥1。 */
+  const expectFocusExtra = 6 + (LAYOUT.CLIMB_TOWERS?.length ?? 0);
+  assert(focusExtra.length === expectFocusExtra, `focus-extra ${focusExtra.length} ≠ ${expectFocusExtra}（6 基线 + 可登塔楼 ${LAYOUT.CLIMB_TOWERS?.length ?? 0}）`);
   for (const area of ['B', 'C', 'D', 'E']) assert(focusExtra.some((v) => (v.area ?? v.zone) === area), `${area} 缺 focus-extra`);
   return `zone ${zoneByMode.zone}（覆盖 ${areas.join('/')}）· fp-spawn ${zoneByMode['fp-spawn']}（每区 1）· interior ${zoneByMode.interior}（按区 ${JSON.stringify(perAreaInterior)}，= INTERIOR_BY_SLOT ${slots.length} 条）· focus-extra ${zoneByMode['focus-extra']}；依据：LAYOUT ${LAYOUT.LAYOUT_VERSION} 实际注册表（t70/t72/t74 派生内景机位、t75 加门洞通道面）`;
 });
@@ -465,7 +467,16 @@ await test('E3 院墙连接连续：56 段院墙全部落在院界上（与 t12 
   const bad = [];
   for (const cy of LAYOUT.COURTYARDS) {
     const walls = LAYOUT.WALLS.filter((w) => w.courtyardId === cy.id);
-    assert(walls.length === cy.wallIds.length, `${cy.id} 墙数 ${walls.length} ≠ wallIds`);
+    /* t53（t48 语义）：每段边界墙的可视分段 = `wallIds` 登记的原段 **+ 中轴切口拆出的 `<id>-east` 段**
+       （t48-②：跨中轴的东西向院墙按数据推导的 W 拆成左右两段；两段同 `courtyardId`、同墙线/厚/高，
+       仅在中央 W 内断开）。判据只增不减：原「段数相等」升级为「逐段可归属到 wallIds 或其声明拆分段」。 */
+    const registered = new Set(cy.wallIds);
+    const splitSiblings = new Set([...registered].map((id) => `${id}-east`));
+    const unregistered = walls.filter((w) => !registered.has(w.id) && !splitSiblings.has(w.id)).map((w) => w.id);
+    assert(unregistered.length === 0, `${cy.id} 有未登记墙段：${unregistered.join(',')}`);
+    const splitPairs = walls.filter((w) => splitSiblings.has(w.id));
+    assert(splitPairs.every((w) => registered.has(w.id.replace(/-east$/, ''))), `${cy.id} 拆分段缺少原段`);
+    assert(walls.length === cy.wallIds.length + splitPairs.length, `${cy.id} 墙数 ${walls.length} ≠ wallIds ${cy.wallIds.length} + 拆分段 ${splitPairs.length}`);
     for (const w of walls) {
       const b = cy.bounds;
       const on = (Math.abs(w.from.z - b.minZ) < 0.51 && Math.abs(w.to.z - b.minZ) < 0.51)

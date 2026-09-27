@@ -226,6 +226,51 @@ export function createKit(ctx = {}) {
     lod: (levels, options) => makeLOD(THREE_NS, levels, { budget: config.BUDGET.lod, quality: tier, ...options }),
     makeLOD: (levels, options) => kit.lod(levels, options),
 
+    /**
+     * t44：**院落陈设构件工厂**（唯一入口；区域只按 `layout.COURTYARD_DRESSING` 的 `type` 调它）。
+     *
+     * 设计目标 = **最大化复用既有 `material.uuid|part` 桶**（§8.2 预算，实测成本见
+     * `work/t44/report/cost-table.json`）：石材统一 `stoneWhite`（石栏/花坛/水钵）、铜器统一
+     * `metalGilt` 家族、花木走既有 `trunk/canopy` 桶。
+     *
+     * 语义：返回**贴地装饰** Group（**不进 OBSTACLES、不改 WALKABLE/CONNECTORS**）⇒ 可走面与门洞净宽零影响。
+     *
+     * @param {{ id:string, type:string, x:number, z:number, y?:number, detail?:string, rotationYDeg?:number, rngSeed?:number }} o
+     */
+    dressing: (o = {}) => {
+      const type = o.type;
+      const detail = o.detail ?? 'mid';
+      const base = {
+        id: o.id ?? `dressing-${type}`,
+        name: o.name ?? `陈设-${type}`,
+        x: o.x ?? 0,
+        z: o.z ?? 0,
+        y: o.y ?? 0,
+        detail,
+        rotationYDeg: o.rotationYDeg ?? 0,
+      };
+      const seed = o.rngSeed ?? deriveSeed(o.id ?? `dressing-${type}`, type);
+      switch (type) {
+        /* 石作 / 铺装 / 水体 —— 复用 stoneWhite 家族桶 */
+        case 'railing': return props.railing({ ...base, w: o.w ?? 8, d: o.d ?? 6, height: o.height ?? config.MODULES.stairsStepHeight * 8, material: 'stoneWhite' });
+        case 'bed': return props.paving({ ...base, w: o.w ?? 8, d: o.d ?? 6, thickness: o.thickness ?? 0.32, material: 'stoneWhite' });
+        case 'pavingPlatform': return props.paving({ ...base, w: o.w ?? 6, d: o.d ?? 4, thickness: o.thickness ?? 0.3, material: 'stoneWhite' });
+        case 'rockery': return props.rockery({ ...base, w: o.w ?? 7, d: o.d ?? 5, height: o.height ?? 3.5, rngSeed: seed });
+        case 'screenWall': return props.screenWall({ ...base, w: o.w ?? 12, height: o.height ?? 3, thickness: o.thickness ?? 0.8 });
+        /* 铜器 —— 复用既有 bronze* 桶 */
+        case 'censer': return props.bronze({ ...base, kind: 'censer', size: o.size ?? 1.8 });
+        case 'lion': return props.bronze({ ...base, kind: 'lion', size: o.size ?? 1.4 });
+        case 'vessel': return props.bronze({ ...base, kind: 'vessel', size: o.size ?? 1.7 });
+        case 'drum': return props.bronze({ ...base, kind: 'drum', size: o.size ?? 1.5 });
+        case 'bell': return props.bronze({ ...base, kind: 'bell', size: o.size ?? 1.6 });
+        /* 灯 / 花木 —— 复用 lantern* 与 trunk/canopy 桶 */
+        case 'lantern': return props.lantern({ ...base, kind: 'post', height: o.height ?? 3.4 });
+        case 'blossom': return props.tree({ ...base, height: o.height ?? config.PLANTS.treeHeights.medium, canopyShape: o.canopyShape ?? config.PLANTS.canopyShapes[0], blossom: true, rngSeed: seed });
+        case 'tree': return props.tree({ ...base, height: o.height ?? config.PLANTS.treeHeights.tall, canopyShape: o.canopyShape ?? config.PLANTS.canopyShapes[1] ?? config.PLANTS.canopyShapes[0], blossom: false, rngSeed: seed });
+        default: throw new Error(`kit.dressing：未知陈设类型 "${type}"（合法：railing/bed/basin/rockery/screenWall/censer/lion/vessel/drum/bell/lantern/blossom/tree）`);
+      }
+    },
+
     // —— 统计 / 诊断
     countTriangles: (object) => countTriangles(object),
     countDrawCalls: (object) => countDrawCalls(object),

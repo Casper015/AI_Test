@@ -1134,4 +1134,56 @@ async function assertThrowsAsync(fn, message) {
   assert(threw, message);
 }
 
+/* ==========================================================================
+ * t47③：跨区共面重复墙线的**归属唯一**（z=80 的 B/C 边界）
+ * --------------------------------------------------------------------------
+ * 事实：`layout.WALLS` 把同一条物理墙声明了两份 —— B 的 `CY-B-rear-wall-north(-east)` 与
+ *   C 的 `CY-C-front-wall-south(-east)`（同线 z=80 / 同厚 1.2 / 同高 4.2 / 跨度重叠 81.4m）。
+ * 判据（只增不减，把"重复也算"改为"按归属唯一"）：
+ *   ① core 的 `deriveWallRuns()` 必须把两份**归并成一段**且 owner 唯一（= B），owners 记录两份来源；
+ *   ② 可视化与碰撞都只由归属区负责：C 侧**不得**再登记同一几何的碰撞副本（逐 id 核对 + 计数）；
+ *   ③ 被删那份的**覆盖不减少**：core 派生层 `OB-WALLRUN-B-x80.00-span*` 必须逐段覆盖其跨度，
+ *      且在 **B/C 两侧地坪高度**上都能拦住行人（运行时口径，不是纸面声明）。
+ * 反例：多删一条 / 少删一条 / 把 owner 判给 C / core 派生段消失 ⇒ 立即红。
+ * ========================================================================== */
+await runner.test('t47③ 跨区共面重复墙线归属唯一（z=80）：core 归并为 B 所有 + C 不再登记副本 + 派生层覆盖不减少', async () => {
+  const slice = await loadModule('src/core/layout-slice.js');
+  const runs = slice.deriveWallRuns(LAYOUT.WALLS, { helpers: LAYOUT });
+  const run = runs.find((r) => (r.wallIds ?? []).includes('CY-B-rear-wall-north'));
+  assert(run, 'z=80 的归并段必须存在（含 CY-B-rear-wall-north）');
+  assertEqual(run.owner, 'B', '归并段 owner 必须唯一 = B');
+  assert(run.wallIds.includes('CY-C-front-wall-south') && run.wallIds.includes('CY-C-front-wall-south-east'), '归并段必须记录 C 侧的两份来源（可核对）');
+  assertEqual([...new Set(run.owners)].sort().join(','), 'B,C', `owners 应同时含 B/C（实际 ${JSON.stringify(run.owners)}）`);
+
+  // ① 同一条物理墙的两份声明（同线 / 同厚 / 同高 / 跨度重叠 ≥0.5m）确实存在
+  const coplanar = LAYOUT.WALLS.filter((w) => w.kind === 'courtWall' && w.axis === 'x' && Math.abs(w.from.z - 80) < 0.01);
+  const ids = coplanar.map((w) => w.id).sort();
+  assertEqual(ids.join(','), 'CY-B-rear-wall-north,CY-B-rear-wall-north-east,CY-C-front-wall-south,CY-C-front-wall-south-east', `z=80 应有 2 区 × 2 段共 4 条声明（实际 ${ids.join(',')}）`);
+  assertEqual([...new Set(coplanar.map((w) => w.thickness))].join(','), '1.2', '厚度必须一致（否则不是共面重复）');
+  assertEqual([...new Set(coplanar.map((w) => w.height))].join(','), '4.2', '高度必须一致（否则不是共面重复）');
+
+  // ② C 侧不再登记同一几何的碰撞副本（真构建 C 区读 stats；数据驱动、不写死条数）
+  const cMod = await loadModule(zoneModulePath('C'));
+  const cBuilt = await cMod.createZone(await makeTestCtx({ zoneId: 'C', kit: createKit({ THREE, config: CONFIG, quality: MEASURE_QUALITY }), quality: MEASURE_QUALITY }));
+  const skipped = [...(cBuilt.stats.crossZoneDupWallsSkipped ?? [])].sort();
+  assertEqual(skipped.join(','), 'CY-C-front-wall-south,CY-C-front-wall-south-east', `C 必须只跳过跨区共面重复的那两份（实际 ${skipped.join(',')}）`);
+  const dupColliders = cBuilt.colliders.obstacles.filter((o) => /^OB-CY-C-front-wall-south(-east)?-span/.test(o.id));
+  assertEqual(dupColliders.length, 0, `C 不得再登记重复副本的碰撞（实际 ${dupColliders.map((o) => o.id).join(',')}）`);
+  // 反面：与 B **共线但不共面重叠**的侧墙仍必须由 C 登记（不得顺手删掉）
+  assert(cBuilt.colliders.obstacles.some((o) => o.id.startsWith('OB-CY-C-front-wall-west-span')), 'C 的侧墙（x=-96，与 B 共线但不重叠）仍必须登记碰撞');
+
+  // ③ 覆盖不减少：core 派生层逐段覆盖 + 两侧地坪高度上都拦得住（运行时口径）
+  const core = slice.deriveWallColliders(LAYOUT.WALLS, { helpers: LAYOUT });
+  const spanRuns = core.filter((o) => /x80\.00/.test(o.id));
+  assertEqual(spanRuns.length, 2, `z=80 归并段应有 2 个实心碰撞段（实际 ${spanRuns.length}）`);
+  for (const [lo, hi] of [[-96, -14.6], [14.6, 96]]) {
+    const hit = spanRuns.find((o) => o.bounds.minX <= lo + 0.05 && o.bounds.maxX >= hi - 0.05);
+    assert(hit, `[${lo},${hi}] 必须被 core 派生段覆盖`);
+    for (const feet of [LAYOUT.floorYAt((lo + hi) / 2, 80), 0.9]) {
+      assert(feet >= hit.y0 && feet <= hit.y1, `地坪 ${feet} 必须落在派生碰撞段 y=[${hit.y0},${hit.y1}] 内（否则可穿墙）`);
+    }
+  }
+  runner.info(`z=80 归并段 owner=${run.owner}（owners=${run.owners.join('+')}）· C 跳过 ${skipped.length} 份重复声明（${skipped.join(',')}）· core 派生 ${spanRuns.map((o) => `${o.id}(y ${o.y0}..${o.y1})`).join(' + ')} 覆盖两段跨度且在 B/C 两侧地坪上均拦截 ✓`);
+});
+
 process.exit(runner.summary());

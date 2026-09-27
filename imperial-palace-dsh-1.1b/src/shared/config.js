@@ -10,7 +10,7 @@
  *   4. 对象全部深冻结：下游只能读，不能就地改写。
  */
 
-export const CONFIG_VERSION = '1.0.11'; // t42：灯池**换灯可见性闸门**（LIGHTING.lamps.evictRangeMargin=0.25 / allowInRangeEviction=false / reselectMaxSeconds=0.8 / reselectSpeedReference=60）——只在在位者已离开自身照度范围（>75m，像素贡献为 0）时才换灯 ⇒ 交换构造性不可见；并让重选节流窗口随相机速度在 0.35…0.8s 之间；只改选择/节流规则，实时灯数、距离、强度、flicker 与全部预算逐值未动。上一版 1.0.10 = t40：新增 LIGHTING.atmosphere.smokeShowPointPx = 1.25（烟柱 LOD **滞回上门限**：单门限时点径在 1.0 附近抖动 ⇒ 整柱 visible 逐帧跳变，移动协议实测最高 12 次翻转/48 帧，滞回后 0–1 次；只改可见性、**零新增绘制调用**，粒子数/预算/材质规格逐值未动）；上一版 1.0.9 = t25：新增 LIGHTING.atmosphere.smokeMinPointPx = 1.0（烟柱 LOD 门限，落地 t1 交回的最小修复：亚像素点精灵整柱不绘制，修"红色边缘持续闪烁"；粒子数/预算/材质规格逐值未动）；上一版 1.0.8 = t2：INTERACTION.jump 启用（enabled true + maxHeight/cooldownSeconds）；再上版 1.0.7 = t84 §8.2 分区配额重分配
+export const CONFIG_VERSION = '1.0.12'; // t45：新增 LIGHTING.interiorFill.suppressInFirstPerson = true（第一人称下不施加内景补光与其 bloom 缩放，修「晚上走进阴影屏幕反而变亮」：内景体积按区 AABB 聚合，B/C 区的 AABB 把整个宫院包进去 ⇒ 走动即触发全局 Ambient+Hemi 抬升（moonlitNight 实测 +1.9/+0.672）；只改**生效条件**，补光剂量 INTERIOR_FILL、淡出时长、bloom 档位、§12 阈值与台阶阈值逐值未动；interior/focus 等视角逐值不变）。上一版 1.0.11 = t42：灯池**换灯可见性闸门**（LIGHTING.lamps.evictRangeMargin=0.25 / allowInRangeEviction=false / reselectMaxSeconds=0.8 / reselectSpeedReference=60）——只在在位者已离开自身照度范围（>75m，像素贡献为 0）时才换灯 ⇒ 交换构造性不可见；并让重选节流窗口随相机速度在 0.35…0.8s 之间；只改选择/节流规则，实时灯数、距离、强度、flicker 与全部预算逐值未动。上一版 1.0.10 = t40：新增 LIGHTING.atmosphere.smokeShowPointPx = 1.25（烟柱 LOD **滞回上门限**：单门限时点径在 1.0 附近抖动 ⇒ 整柱 visible 逐帧跳变，移动协议实测最高 12 次翻转/48 帧，滞回后 0–1 次；只改可见性、**零新增绘制调用**，粒子数/预算/材质规格逐值未动）；上一版 1.0.9 = t25：新增 LIGHTING.atmosphere.smokeMinPointPx = 1.0（烟柱 LOD 门限，落地 t1 交回的最小修复：亚像素点精灵整柱不绘制，修"红色边缘持续闪烁"；粒子数/预算/材质规格逐值未动）；上一版 1.0.8 = t2：INTERACTION.jump 启用（enabled true + maxHeight/cooldownSeconds）；再上版 1.0.7 = t84 §8.2 分区配额重分配
 export const STYLE_BASELINE = 'v1.0.0';
 
 /** 统一场景种子：每个区域用 deriveSeed(zone) 派生固定随机序列，保证复现与截图可比对（§3.1 随机性）。 */
@@ -510,6 +510,23 @@ export const LIGHTING = Object.freeze({
      */
     reselectMaxSeconds: 0.8,
     reselectSpeedReference: 60,
+  }),
+  /**
+   * t45：**内景补光的适用条件**（修"晚上走进阴影屏幕反而变亮"）。
+   *
+   * 缺陷（本卡实测，`docs/report-night-shadow.md`）：内景补光（t38/t43）按**每区内景可行走面的包围盒**
+   * 判定（`environment.js:160-200`），而一个区里所有内景面聚合出的 AABB 会**把整个宫院广场包进去**
+   * （B 区从南侧殿到北后殿）⇒ 玩家在第一人称里**只是在院子里走**就会触发全量的全局 AmbientLight /
+   * HemisphereLight 抬升（moonlitNight 实测 +1.9 / +0.672，而该时辰全局 ambient 仅 0.22）⇒
+   * **走进阴影/院落后整帧反而变亮**。
+   *
+   * 修法（**只改生效条件，不改任何剂量与阈值**）：第一人称（`state.viewMode === 'fp'`）下**不施加**
+   * 内景补光与其 bloom 缩放 —— 理由是"暗部是否该被抬亮"在**走动**语境下应由用户所在位置的物理光照决定，
+   * 而不是由"是否落在某区的内景 AABB 里"决定；截图/内景视角（`?view=interior`）**照常生效**，
+   * 故 §12 的内景可读性判据与 t43 的剂量-响应标定**完全不受影响**（那些判据都在 interior 视角上取）。
+   */
+  interiorFill: Object.freeze({
+    suppressInFirstPerson: true,
   }),
   atmosphere: Object.freeze({
     smokeEnabled: true, // 香炉轻烟

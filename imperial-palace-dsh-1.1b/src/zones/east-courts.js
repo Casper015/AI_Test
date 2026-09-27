@@ -32,7 +32,7 @@
  */
 
 import { CONFIG, deriveSeed } from '../shared/config.js';
-import { CLIMB_TOWERS, STONE_STEP_LANES } from '../shared/layout.js';
+import { CLIMB_TOWERS, STONE_STEP_LANES, dressingPlanForZone, towerDressingAnchors } from '../shared/layout.js';
 import { rampsFromRoads } from '../core/layout-slice.js';
 
 export const ZONE_ID = 'E';
@@ -956,6 +956,39 @@ export async function createZone(ctx) {
 
   stats.preMergeMeshes = countMeshes(root);
   stats.preMergeTriangles = countTriangles(root);
+
+  /* ========================================================================
+   *  t44：院落陈设充实（数据表 `layout.COURTYARD_DRESSING` / `GARDEN_DRESSING`）
+   *  —— 全部为**贴地装饰**：不进 `OBSTACLES`、不改 `WALKABLE`/`CONNECTORS`
+   *     ⇒ 可走面数量与门洞净宽零影响；锚点由 `dressingAnchors()` 推导
+   *     （院内净空 ∩ 非障碍外扩 ∩ 非门前走廊 ∩ 非中轴御道 ∩ 落点有可行走面）。
+   * ====================================================================== */
+  let dressingPlaced = 0;
+  if (typeof kit.dressing === 'function' && typeof dressingPlanForZone === 'function') {
+    for (const plan of dressingPlanForZone(ZONE_ID)) {
+      for (const item of plan.items) {
+        for (const [i, pt] of item.points.entries()) {
+          const floorFn = ctx?.zoneLayout?.helpers?.floorYAt;
+          const y = typeof floorFn === 'function' ? floorFn(pt.x, pt.z) : null;
+          if (y === null || y === undefined) continue; // 锚点判据已保证有面；此处仅防御
+          root.add(kit.dressing({
+            id: `dressing-${plan.courtId}-${item.type}-${i + 1}`,
+            type: item.type, x: pt.x, z: pt.z, y, detail: 'mid',
+          }));
+          dressingPlaced += 1;
+        }
+      }
+    }
+  }
+
+  /* t44：塔上陈设（只落 T-watchtower-3 顶层观景台 deck；踏步面 1.8×0.34m ⇒ 一律不落件） */
+  if (typeof kit.dressing === 'function' && typeof towerDressingAnchors === 'function') {
+    for (const [i, a] of towerDressingAnchors().entries()) {
+      root.add(kit.dressing({ id: `dressing-T-watchtower-3-${a.type}-${i + 1}`, type: a.type, x: a.x, z: a.z, y: a.y, detail: 'mid' }));
+      dressingPlaced += 1;
+    }
+  }
+
   if (typeof kit.mergeZone === 'function') {
     const merged = kit.mergeZone(root, { name: `zone-batch:${ZONE_ID}` });
     stats.merge = merged?.stats ?? null;

@@ -857,3 +857,60 @@ $ node scripts/audit.mjs --enforce   → exit 0（预算与契约全部通过；
 
 **预算**：F27 新增细口径一次（建图 0.03s + 首轮 18.5s）、F28 十二轮粗口径（冷 2.33s / 暖 0.61s，合计 ≈11s）；
 `interaction` 单文件耗时由 ≈58s 增至 ≈95s。**未放宽任何既有阈值**（`maxCells` 仅按 `§12.1.4.4` 显式提额）。
+
+---
+
+# 18. t34：E13 数据推导与四个开槽水体的**独立复核**（结论：**无重复变更**）
+
+> 卡：`t34`（attempt 1 · `ui-engineer`）· 派单标注「**重要变更：本卡降级为独立复核（禁止重复改动）**」。
+> 本节的复核对象 = `tests/interaction.test.mjs` 的 E13 反向断言与 t13/t31 的四个开槽水体。
+> **本卡对 `tests/interaction.test.mjs` 的改动 = 0 行**（E13 的塔楼类属 **t30**（repair，verifier）inScope，板面标题即写明；
+> 本卡 A 面的四处陈旧 pin 落在另外四个测试文件，处置与退出码见 `docs/report-run-reds.md` 的 t34 节）。
+
+## 18.1 复核①：E13 反向断言是否真的数据推导（读 + 只读复算）
+
+**结论：是。**（复核时点：`tests/interaction.test.mjs` mtime 稳定于 14:51:36 之后）
+
+| 检查项 | 结果 | 证据（file:line / 读数） |
+| --- | --- | --- |
+| 无残留字面量 | ✅ | `derived` 集合四类全部推导：实心槽位 = `LAYOUT.SLOTS.filter(visitable===false && hasDoor!==true)`；护城河 = `LAYOUT.MOAT.rects`；山石 = 求解器 `sourceType==='rockery'`；未开槽水体 = 求解器 `sourceType==='water' ∧ blocks==='all' ∧ ¬MOAT`；**t30 新增**塔楼 = `buildingKind==='towerShaft'`（无对应 SLOT ⇒ 只能按对象字段识别）。计数断言用 `derivedBlockedIds.size`，**不再出现 14/24/22 这类等值字面量** |
+| missing/extra **双向**相等 | ✅ | `assertEqual(blockerAudit.missing.length, 0, …)` ＋ `assertEqual(blockerAudit.extra.length, 0, …)`（`auditBlockers` 纯函数：`runtime` 与 `derived` 两套独立来源做双向差集） |
+| `illegalWater` 在位 | ✅ | `illegalWater` = 水体既非"整足迹阻挡"、也非"有界开槽（`exceptDoor` + 有限 `door.width`）" ⇒ `assertEqual(…, 0, …)` |
+| 判据非恒真（突变对照） | ✅ | A(实心改可通行)→missing 1｜B(护城河开槽)→missing 1｜C(水体开槽无 door)→illegal 1｜D(凭空多出)→extra 1（基线 0/0/0） |
+| 分组**逐组集合相等** | ✅ | 角楼 = `SLOTS.kind==='cornerTower'`；护城河 = `MOAT.rects`；山石 = rockery；水体 = 未开槽水体；批量装饰 = `GARDEN_BULK_SLOTS`；**塔楼 = layout 的 towerShaft 障碍集合**（t30） |
+| 历史快照的处置 | ✅ | 仅两处**单调下界**：`blockedAll.length >= 14`、`pavilionSlots.length >= 10`，均带"历史快照/不参与判定"注释（同 t8 的设计） |
+
+**只读复算（同一公式，独立进程）**：求解器水体 8 条｜实心槽位 16｜护城河 4｜山石 2｜未开槽水体 0
+⇒ `运行时整足迹阻挡 23 / 推导集合 23`、`missing 0`、`extra 0`、`illegalWater 0`；
+E13 运行读数：`整足迹阻挡者 23 条（推导集合 23；分组 角楼 4 / 批量装饰 12 / 护城河 4 / 山石 2 / 塔楼 1）逐条提示齐备`。
+
+## 18.2 复核②：t13/t31 的四个开槽水体是否被**同一公式**覆盖（grep/计数证据）
+
+**结论：是（同一公式覆盖全部四个），且几何另有逐条交叉核对。**
+
+| 水体 | `blocks` | `door` | 开槽权威源 | 在 E13 公式中的处置 |
+| --- | --- | --- | --- | --- |
+| `OB-WB-D-pond`（t13） | `exceptDoor` | `width=8 axis=z` | `STONE_STEP_LANES`（`WB-D-pond`） | 不进 `derived`（"应整足迹阻挡"集合）⇒ 不会假红；`illegalWater` 判为**合法** |
+| `OB-WB-E-pond`（t13） | `exceptDoor` | `width=8 axis=z` | `STONE_STEP_LANES`（`WB-E-pond`） | 同上 |
+| `OB-WB-F-pond-west`（t31） | `exceptDoor` | `width=14 axis=z` | `F_POND_WALKWAYS`（`WB-F-pond-west`） | 同上 |
+| `OB-WB-F-pond-east`（t31） | `exceptDoor` | `width=14 axis=z` | `F_POND_WALKWAYS`（`WB-F-pond-east`） | 同上 |
+| `OB-MOAT-{south,north,west,east}` | `all` | — | — | 走"护城河 = `MOAT.rects`"一路，逐段在册断言 |
+
+- **覆盖机制（为何四个都被同一公式吃到）**：公式的**水体一侧取自求解器**（`solver.obstacles().filter(sourceType==='water')`），
+  而不是取自"某张卡登记的开槽清单" ⇒ 无论是 t13 的 `STONE_STEP_LANES` 还是 t31 的 `F_POND_WALKWAYS`，
+  只要落成 `exceptDoor + door` 就自动合法、自动退出 `derived`；反过来，任何"开槽却不登记 door"的水体一律进 `illegalWater`。
+- **只读复算读数**：`四个开槽水体全部 exceptDoor + 有限 door.width：true`；`四个开槽水体是否在 derived（应整足迹阻挡）集合内：false`（= 全部正确退出）；`illegalWater 0`。
+- **几何逐条核对另有两处**（不重复、不留缝）：D/E 两池在 **E13 自身的 lane 循环**里核对（`door.width === lane.corridor.width`、`door.axis === lane.corridor.axis`、每级汀步有 `bridgeDeck` 面、开槽水体不在整足迹清单内）；F-west/F-east 两池在 **`tests/zone-garden.test.mjs` 的 t31 块**核对（`F_POND_WALKWAYS` 2 条、`RD-*-pond-walk` 道路段、`blocks/​door` 与突变对照）。
+- **普查命令（可复跑）**：`grep -o "OB-WB-[A-Za-z-]*" src/shared/layout.js | sort | uniq -c` ⇒ D/E/F-west/F-east 四个 id 齐备；
+  `grep -n "F_POND_WALKWAYS" src/shared/layout.js` ⇒ 唯一权威源（2 条）。
+
+## 18.3 结论：**无重复变更**（并按纪律处置并发窗口）
+
+1. **E13（含塔楼类）→ 0 行改动**：开工时 `tests/interaction.test.mjs` mtime = **14:51:36**（距观察时刻 16 秒）⇒ 判定为**并发写入窗口**，
+   按纪律**不为窗口伪影改代码**；轮询至 mtime 稳定（>100 s 无写入）后复跑：`node tests/interaction.test.mjs` **exit 0（82/82）**、
+   `node scripts/audit.mjs --enforce` **exit 0**。窗口内那条"整足迹阻挡多出 `OB-T-watchtower-3-shaft`"的红，**已由 t30 在同一文件内以数据推导修好**
+   （`buildingKind === 'towerShaft'`），本卡**零重复改动**（符合派单的"禁止重复改动"）。
+2. **四个开槽水体 → 0 行改动**：如上，公式与几何两层均已覆盖，无遗漏。
+3. **本卡实际改动**（A 面四条陈旧 pin，均**非**本文件）：`tests/core.test.mjs`（terrace 期望改灰盒实测推导）、
+   `tests/core-precision-consistency.test.mjs`（`REGISTERED` 魔数 → 判定面自证）、`tests/zone-east.test.mjs`（塔楼面排除 + 塔链自证）、
+   `tests/zone-garden.test.mjs`（装配体落地 = `wallBody ∪ wallBase`）；逐条处置、断言条数表、退出码与交回清单见 `docs/report-run-reds.md` 的 t34 节。

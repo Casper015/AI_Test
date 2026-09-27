@@ -40,7 +40,7 @@
 
 import * as THREE from 'three';
 import { CONFIG, MODULES, TERRAIN, INTERACTION, PLANTS, deriveSeed } from '../shared/config.js';
-import { INTERIOR_BY_SLOT, STONE_STEP_LANES, WALKABLE, WATER_BODIES, WALLS } from '../shared/layout.js';
+import { INTERIOR_BY_SLOT, STONE_STEP_LANES, WALKABLE, WATER_BODIES, WALLS, dressingPlanForZone } from '../shared/layout.js';
 import { rampsFromRoads } from '../core/layout-slice.js';
 
 export const ZONE_ID = 'D';
@@ -1003,6 +1003,31 @@ export async function createZone(ctx) {
   root.traverse((node) => { if (node.isMesh || node.isInstancedMesh) preMergePieces += 1; });
 
   let mergeStats = null;
+
+  /* ========================================================================
+   *  t44：院落陈设充实（数据表 `layout.COURTYARD_DRESSING` / `GARDEN_DRESSING`）
+   *  —— 全部为**贴地装饰**：不进 `OBSTACLES`、不改 `WALKABLE`/`CONNECTORS`
+   *     ⇒ 可走面数量与门洞净宽零影响；锚点由 `dressingAnchors()` 推导
+   *     （院内净空 ∩ 非障碍外扩 ∩ 非门前走廊 ∩ 非中轴御道 ∩ 落点有可行走面）。
+   * ====================================================================== */
+  let dressingPlaced = 0;
+  if (typeof kit.dressing === 'function' && typeof dressingPlanForZone === 'function') {
+    for (const plan of dressingPlanForZone(ZONE_ID)) {
+      for (const item of plan.items) {
+        for (const [i, pt] of item.points.entries()) {
+          const floorFn = ctx?.zoneLayout?.helpers?.floorYAt;
+          const y = typeof floorFn === 'function' ? floorFn(pt.x, pt.z) : null;
+          if (y === null || y === undefined) continue; // 锚点判据已保证有面；此处仅防御
+          root.add(kit.dressing({
+            id: `dressing-${plan.courtId}-${item.type}-${i + 1}`,
+            type: item.type, x: pt.x, z: pt.z, y, detail: 'mid',
+          }));
+          dressingPlaced += 1;
+        }
+      }
+    }
+  }
+
   if (typeof kit.mergeZone === 'function') {
     mergeStats = kit.mergeZone(root, { name: 'D:batch' })?.stats ?? null;
   }

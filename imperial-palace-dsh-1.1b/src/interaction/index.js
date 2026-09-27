@@ -556,8 +556,6 @@ export function createInteraction({
     return result;
   }
 
-  /* t30 突变B：两函数之间插入一行（旧的位置切片会把本行静默纳入作用域） */
-  const t30InjectedBetween = 1;
   function exitInterior(source = 'interior-api') {
     if (store.state.viewMode !== 'interior') return false;
     const back = interiorReturn?.mode ?? 'oblique';

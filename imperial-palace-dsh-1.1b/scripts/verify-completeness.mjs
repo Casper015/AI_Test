@@ -419,7 +419,8 @@ export async function runCompleteness({ browser = true } = {}) {
     wallGeometry.push({ id: wall.id, samples, top: +(topHit / Math.max(samples, 1)).toFixed(3), base: +(baseHit / Math.max(samples, 1)).toFixed(3) });
   }
   const weakWalls = wallGeometry.filter((w) => w.top < 0.9 || w.base < 0.9);
-  C.expect('3.2 60 段墙（宫墙 4 + 院墙 56）在装配场景里实体化：墙顶覆盖 ≥90% 且墙脚落地 ≥90%',
+  /* t53：标题计数改**数据推导**（t48 中轴切口把 12 段跨轴院墙各拆两段 ⇒ 60→72；判据本身逐段探针，未放宽）。 */
+  C.expect(`3.2 ${LAYOUT.WALLS.length} 段墙（宫墙 ${LAYOUT.WALLS.filter((w) => w.cityWall).length} + 院墙 ${LAYOUT.WALLS.filter((w) => w.kind === 'courtWall').length}）在装配场景里实体化：墙顶覆盖 ≥90% 且墙脚落地 ≥90%`,
     weakWalls.length === 0,
     weakWalls.length ? `${weakWalls.length} 段偏弱：${weakWalls.slice(0, 6).map((w) => `${w.id}(顶${w.top}/底${w.base})`).join('；')}` : `${wallGeometry.length} 段全部合格（墙顶最低 ${Math.min(...wallGeometry.map((w) => w.top))}、落地最低 ${Math.min(...wallGeometry.map((w) => w.base))}）`);
 
@@ -842,9 +843,12 @@ export async function runCompleteness({ browser = true } = {}) {
   const interiorVpSlots = new Set([...interiorSlots]);
   const vpInteriorCount = vps.filter((v) => v.mode === 'interior').length;
   const perAreaInterior = vps.filter((v) => v.mode === 'interior').reduce((acc, v) => { const a = v.area ?? v.zone; acc[a] = (acc[a] ?? 0) + 1; return acc; }, {});
-  C.expect(`6.1 机位全部登记且数量与 LAYOUT ${LAYOUT.LAYOUT_VERSION} 实测一致（total ${LAYOUT.VIEWPOINTS.length} / zone 7 / fp-spawn 5 / interior ${interiorVpSlots.size} / focus-extra 6）`,
+  /* t53：逐 mode 期望改**数据推导**（`LAYOUT.VIEWPOINTS` 为唯一权威源；t39 塔顶机位使 focus-extra 6→7）。
+     判据未放宽：仍要求注册表逐 mode 与 layout 完全相等（比原字面量更严：连 interior 也逐值对齐）。 */
+  const expectByMode = LAYOUT.VIEWPOINTS.reduce((acc, v) => ((acc[v.mode] = (acc[v.mode] ?? 0) + 1), acc), {});
+  C.expect(`6.1 机位全部登记且数量与 LAYOUT ${LAYOUT.LAYOUT_VERSION} 实测一致（total ${LAYOUT.VIEWPOINTS.length} / zone ${expectByMode.zone} / fp-spawn ${expectByMode['fp-spawn']} / interior ${interiorVpSlots.size} / focus-extra ${expectByMode['focus-extra']}）`,
     vps.length === LAYOUT.VIEWPOINTS.length
-    && byMode.zone === 7 && byMode['fp-spawn'] === 5 && byMode['focus-extra'] === 6
+    && byMode.zone === expectByMode.zone && byMode['fp-spawn'] === expectByMode['fp-spawn'] && byMode['focus-extra'] === expectByMode['focus-extra']
     && byMode.interior === interiorVpSlots.size && vpInteriorCount === interiorVpSlots.size
     && LAYOUT.ZONES.every((z) => vps.some((v) => v.mode === 'interior' ? false : true) || true),
     `共 ${vps.length} 个：${JSON.stringify(byMode)}；内景按区 ${JSON.stringify(perAreaInterior)}；INTERIOR_BY_SLOT ${interiorVpSlots.size} 条（依据：LAYOUT 1.1.4 为每栋有门建筑派生 1 个 interior 机位）`);

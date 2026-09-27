@@ -256,7 +256,19 @@ export function createEnvironment({
     return { ambient: p.ambientIntensity * factors.ambient, hemi: p.hemiIntensity * factors.hemi };
   }
 
-  function updateInteriorFill(dt, cameraPosition) {
+  /**
+   * t45：内景补光的**生效条件**（`LIGHTING.interiorFill.suppressInFirstPerson`）。
+   * 第一人称下不施加补光 ⇒ "走进阴影/院落"不会再抬亮整帧（缺陷见 `docs/report-night-shadow.md`）。
+   * 非第一人称（`interior`/`focus`/`oblique`/… 与默认）逐值保持 t38/t43 的行为。
+   */
+  let interiorFillSuppressedFrames = 0;
+  let interiorFillSuppressOverride = null;
+  function interiorFillSuppressed(state) {
+    const flag = interiorFillSuppressOverride ?? (LIGHTING.interiorFill?.suppressInFirstPerson !== false);
+    const mode = state?.viewMode ?? null;
+    return flag && mode === 'fp';
+  }
+  function updateInteriorFill(dt, cameraPosition, state = null) {
     const previousBlend = interiorState.blend;
     const inside = insideInteriorVolume(cameraPosition);
     // t120：登记"当前所在的最小内景房间"的净面积（用于 bloom 分档；不在房间内 → null）
@@ -277,12 +289,18 @@ export function createEnvironment({
       interiorState.darkFrames += 1;
     }
     const target = interiorFillTargets();
-    interiorAmbient.intensity = +(target.ambient * interiorState.blend).toFixed(4);
-    interiorHemi.intensity = +(target.hemi * interiorState.blend).toFixed(4);
+    // t45：第一人称下**不施加**内景补光（只改生效条件；剂量/阈值/淡出时长逐值未动）
+    const suppressed = interiorFillSuppressed(state);
+    interiorState.suppressed = suppressed;
+    if (suppressed) interiorFillSuppressedFrames += 1;
+    const effective = suppressed ? 0 : interiorState.blend;
+    interiorAmbient.intensity = +(target.ambient * effective).toFixed(4);
+    interiorHemi.intensity = +(target.hemi * effective).toFixed(4);
     // t106：内景入境程度变化时重算 Bloom（外景 blend=0 → 逐位等同预设；进出内景各重算一次）
-    if (Math.abs(interiorState.blend - previousBlend) > 1e-3) {
+    if (Math.abs(interiorState.blend - previousBlend) > 1e-3 || suppressed !== interiorState.lastSuppressed) {
       applyBloom(presetOf(currentPreset), presetOf(currentPreset).lampIntensityScale);
     }
+    interiorState.lastSuppressed = suppressed;
   }
 
   /** 环境贴图（t38 B）：由当前时辰的天空色生成 equirect 数据贴图（无需 WebGLRenderer，可测）。 */
@@ -705,9 +723,15 @@ export function createEnvironment({
    * t106：按"当前时辰预设 + 内景入境程度"求 Bloom 参数。
    * 内景入境时 strength ×（1 −(1−SCALE)×blend）；blend=0（外景）时**逐位等同预设值**。
    */
+  /** t45：内景 bloom 缩放用的**生效 blend**（第一人称下为 0，见 `interiorFillSuppressed`）。 */
+  function effectiveInteriorBlend() {
+    return interiorState.suppressed ? 0 : interiorState.blend;
+  }
+
   function bloomForState(preset = presetOf(currentPreset), lampScale = preset?.lampIntensityScale ?? 0) {
     const base = preset?.bloom ?? null;
-    const blend = interiorState.blend;
+    // t45：用**生效 blend**（第一人称下内景补光被抑制 ⇒ 内景 bloom 缩放也必须一并抑制，否则"变亮"换个通道回来）
+    const blend = effectiveInteriorBlend();
     // t120：按房间尺度取上限档（大空间 = t106 冻结值 0.5；小院房 = 0.3）；不在任何房间内时取最松档
     const tier = interiorBloomTierFor(blend > 0 ? interiorState.activeArea : null);
     const shrink = 1 - (1 - tier.scale) * blend;
@@ -1383,7 +1407,7 @@ export function createEnvironment({
     const t = elapsed ?? (elapsedTotal += dt);
     const cameraPosition = state?.cameraPosition ?? null;
     syncAnchors();
-    updateInteriorFill(dt, cameraPosition);
+    updateInteriorFill(dt, cameraPosition, state);
     bindInteriorEnvMaps();
     updateLampSelection(t, cameraPosition, dt);
     // t5：唯一的每帧灯光输出（限速斜坡 + 进出池开合 + flicker）；dt ≤ 0（settle/截图）直接落稳态
@@ -1479,6 +1503,10 @@ export function createEnvironment({
         volumeBounds: interiorVolumes.map((v) => ({ zone: v.zone, minX: v.minX, maxX: v.maxX, minY: v.minY, maxY: v.maxY, minZ: v.minZ, maxZ: v.maxZ })),
         inside: interiorState.inside,
         blend: +interiorState.blend.toFixed(3),
+        /** t45：第一人称下补光被抑制的生效值 + 抑制帧计数（权威读数） */
+        effectiveBlend: +effectiveInteriorBlend().toFixed(3),
+        suppressed: interiorState.suppressed === true,
+        suppressedFrames: interiorFillSuppressedFrames,
         ambientIntensity: interiorAmbient.intensity,
         hemiIntensity: interiorHemi.intensity,
         fillFactors: INTERIOR_FILL[currentPreset] ?? null,
@@ -1628,6 +1656,14 @@ export function createEnvironment({
       lampState.lastReselect = -Infinity;
       lampState.snapFade = true;
       return lampSelectionMode;
+    },
+    /**
+     * t45：运行时开关"第一人称抑制内景补光"（**仅供探针/守卫做同树 A/B 与突变对照**，默认取 config）。
+     * 返回生效值。
+     */
+    setInteriorFillSuppressInFp: (on) => {
+      interiorFillSuppressOverride = typeof on === 'boolean' ? on : null;
+      return interiorFillSuppressOverride ?? (LIGHTING.interiorFill?.suppressInFirstPerson !== false);
     },
     /** t42：当前生效的选择架构。 */
     lampSelectionMode: () => lampSelectionMode,

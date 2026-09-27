@@ -2620,6 +2620,261 @@ export const STOREY_BAND_SUMMARY = deepFreeze({
   walkable: 0,
 });
 
+/* =============================================================================
+ * t44：院落陈设充实（**数据表 + 锚点推导**；全部为「贴地装饰」，不进 OBSTACLES）
+ * =============================================================================
+ *
+ * 口径（判据与实现同源，见 `tests/zone-forecourt.test.mjs` / `zone-inner.test.mjs` / `zone-garden.test.mjs`）：
+ *   · **逐院签名** = 该院陈设的「构件类型 → 数量」直方图；**任两院签名不得相同**（`dressingSignatureCollisions()` 为 0）。
+ *   · **锚点**（`dressingAnchors`）＝ 院内净空 ∩ 非建筑/障碍/水体/景观件外扩 ∩ 非门前走廊（只以
+ *     `door.facade`/`door.back` 为基准，`CONTRACTS §4.1.1`）∩ 非中轴御道 ∩ 落点**必须有可行走面**。
+ *   · 陈设**不写 `OBSTACLES`、不动 `WALKABLE`/`CONNECTORS`** ⇒ 可走面与门洞净宽零影响（判据另在区域测试里断言计数不变）。
+ *   · 成本口径：复用既有 `material.uuid|part` 桶（实测见 `work/t44/report/cost-table.json`）；新增桶按 §8.2 记账。
+ */
+export const DRESSING_SPEC = deepFreeze({
+  /** 净距（米）：院墙内缩 / 障碍外扩 / 门前走廊半径 / 同院两件最小间距 / 扫描格边长。 */
+  clearances: Object.freeze({ courtInset: 1.5, obstacle: 1.5, door: 3, minGap: 5, lattice: MODULES.bayPitch / 2 }),
+  /** 逐类型占地半径（米）：决定同院最小间距与是否可落（沿院中心由近及远取点）。 */
+  footprint: Object.freeze({
+    censer: 1.6, lion: 1.4, vessel: 1.4, drum: 1.6, bell: 1.6, lantern: 1.0,
+    blossom: 3.5, tree: 3.5, rockery: 5.5, bed: 5.5, railing: 7.0, screenWall: 8.0,
+  }),
+  /** 环形布点类型（沿院内净空边缘成环），其余按「由中心向外」铺点。 */
+  ringTypes: Object.freeze(['railing']),
+});
+
+const DRESSING_CLEAR = DRESSING_SPEC.clearances;
+const inflateRect = (r, m) => b(r.minX - m, r.maxX + m, r.minZ - m, r.maxZ + m);
+const insideRect = (r, x, z) => x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ;
+
+const GARDEN_DRESSING_FACE = WALKABLE.find((w) => w.kind === 'gardenGround') ?? null;
+
+/** 陈设作用域：14 院 + 御花园地坪（`F-GARDEN`；花园不在 `COURTYARDS` 里，但同样要补景）。 */
+export const DRESSING_AREAS = deepFreeze({
+  'F-GARDEN': {
+    id: 'F-GARDEN', zone: 'F', name: '御花园地坪',
+    bounds: GARDEN_DRESSING_FACE ? { ...GARDEN_DRESSING_FACE.bounds } : b(-300, 300, 300, 420),
+  },
+});
+
+/** id → 作用域（院落优先，其次花园）。 */
+export function dressingArea(courtOrId) {
+  const id = typeof courtOrId === 'string' ? courtOrId : courtOrId?.id;
+  if (!id) return null;
+  return COURTYARD_BY_ID[id] ?? DRESSING_AREAS[id] ?? (typeof courtOrId === 'object' && courtOrId.bounds ? courtOrId : null);
+}
+
+/** 作用域的「禁摆清单」（锚点判据的唯一原料）。 */
+export function dressingHazards(courtOrId) {
+  const court = dressingArea(courtOrId);
+  if (!court) return [];
+  const list = [];
+  for (const s of SLOTS) list.push({ id: `SLOT:${s.id}`, bounds: inflateRect(s.bounds, DRESSING_CLEAR.obstacle) });
+  for (const o of OBSTACLES) if (o.bounds && o.sourceType !== 'wall') list.push({ id: `OB:${o.id}`, bounds: inflateRect(o.bounds, DRESSING_CLEAR.obstacle) });
+  for (const w of WATER_BODIES) if (w.bounds) list.push({ id: `WATER:${w.id}`, bounds: inflateRect(w.bounds, DRESSING_CLEAR.obstacle) });
+  for (const s of SCENIC_OBJECTS) if (s.bounds) list.push({ id: `SCENIC:${s.id}`, bounds: inflateRect(s.bounds, DRESSING_CLEAR.obstacle) });
+  for (const s of SLOTS) {
+    for (const key of ['facade', 'back']) {
+      const p = s.door?.[key];
+      if (!p) continue;
+      list.push({ id: `DOOR:${s.id}:${key}`, bounds: b(p.x - DRESSING_CLEAR.door, p.x + DRESSING_CLEAR.door, p.z - DRESSING_CLEAR.door, p.z + DRESSING_CLEAR.door) });
+    }
+  }
+  const cb = court.bounds;
+  if (cb.minX <= 0 && cb.maxX >= 0) {
+    const half = MODULES.corridorWidth / 2 + DRESSING_CLEAR.courtInset;
+    list.push({ id: 'AXIS:corridor', bounds: b(-half, half, cb.minZ, cb.maxZ) });
+  }
+  return list;
+}
+
+/** 单点是否可摆（净空 + 非禁摆 + **有可行走面**）。 */
+export function dressingPointOk(courtOrId, x, z, hazards) {
+  const court = dressingArea(courtOrId);
+  if (!court) return false;
+  if (!insideRect(inflateRect(court.bounds, -DRESSING_CLEAR.courtInset), x, z)) return false;
+  const list = hazards ?? dressingHazards(court);
+  for (const h of list) if (insideRect(h.bounds, x, z)) return false;
+  if (floorYAt(x, z) === null) return false;
+  return true;
+}
+
+/**
+ * 逐院锚点：按类型取「由院中心向外」或「沿院内净空成环」的确定性点位。
+ * @returns {{ courtId, type, count, requested, points: {x,z}[], gap, ring }}
+ */
+export function dressingAnchors(courtId, type, count, { gapScale = 1 } = {}) {
+  const court = dressingArea(courtId);
+  if (!court || !Number.isFinite(count) || count <= 0) return { courtId, type, count, requested: count, points: [], gap: 0, ring: false };
+  const hazards = dressingHazards(court);
+  const cb = court.bounds;
+  const cx = round((cb.minX + cb.maxX) / 2);
+  const cz = round((cb.minZ + cb.maxZ) / 2);
+  const halfW = (cb.maxX - cb.minX) / 2 - DRESSING_CLEAR.courtInset;
+  const halfD = (cb.maxZ - cb.minZ) / 2 - DRESSING_CLEAR.courtInset;
+  const foot = DRESSING_SPEC.footprint[type] ?? 2;
+  const minGap = Math.max(foot, DRESSING_CLEAR.minGap * gapScale);
+  const ring = DRESSING_SPEC.ringTypes.includes(type);
+  const points = [];
+
+  if (ring) {
+    /* 环形：半径由外向内收缩；每个半径只取**合法**角点，凑够 count 即采纳；
+       若所有半径都凑不够（院内有建筑/御道遮挡），退回「由中心向外」铺点（不静默丢弃）。 */
+    const n = Math.max(4, count * 2);
+    for (let step = 0; step <= 14; step += 1) {
+      const r = Math.max(2, Math.min(halfW, halfD) * (0.94 - step * 0.06));
+      const valid = [];
+      for (let i = 0; i < n; i += 1) {
+        const a = (2 * Math.PI * i) / n + Math.PI / 4;
+        const p = { x: round(cx + r * Math.cos(a)), z: round(cz + r * Math.sin(a)) };
+        if (!dressingPointOk(court, p.x, p.z, hazards)) continue;
+        if (valid.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < Math.max(foot, DRESSING_CLEAR.minGap) * 0.5)) continue;
+        valid.push(p);
+      }
+      if (valid.length >= count) {
+        points.push(...valid.slice(0, count));
+        return { courtId, type, count: points.length, requested: count, points, gap: minGap, ring: true };
+      }
+    }
+  }
+
+  /* 铺点：以院中心为原点、格边长 `lattice` 扫描，按到中心距离升序贪心（同院互不重叠）。 */
+  const lattice = DRESSING_CLEAR.lattice;
+  const cols = Math.max(1, Math.floor((halfW * 2) / lattice));
+  const rows = Math.max(1, Math.floor((halfD * 2) / lattice));
+  const candidates = [];
+  for (let iy = 0; iy <= rows; iy += 1) {
+    for (let ix = 0; ix <= cols; ix += 1) {
+      const x = round(cx - halfW + ix * lattice);
+      const z = round(cz - halfD + iy * lattice);
+      const d = Math.hypot(x - cx, z - cz);
+      if (dressingPointOk(court, x, z, hazards)) candidates.push({ x, z, d });
+    }
+  }
+  candidates.sort((p, q) => p.d - q.d || p.x - q.x || p.z - q.z);
+  for (let scale = 1; scale >= 0.25; scale -= 0.25) {
+    const gap = Math.max(foot, minGap * scale);
+    const picked = [];
+    for (const c of candidates) {
+      if (picked.length >= count) break;
+      if (picked.some((p) => Math.hypot(p.x - c.x, p.z - c.z) < gap)) continue;
+      picked.push({ x: c.x, z: c.z });
+    }
+    if (picked.length >= count) {
+      points.push(...picked);
+      return { courtId, type, count: points.length, requested: count, points, gap: round(gap), ring: false };
+    }
+    if (scale - 0.25 < 0.25 && picked.length > points.length) points.splice(0, points.length, ...picked);
+  }
+  return { courtId, type, count: points.length, requested: count, points, gap: minGap, ring: false };
+}
+
+/**
+ * 逐院陈设签名（构件类型 → 数量）。
+ * 设计语言（与用户原话「给每个小院子多加点物品」对齐，且**逐院不同**）：
+ *   B 前朝三院 = 铜器仪仗（鼎/狮/鼓）+ 石栏；C 内廷三院 = 宫灯 + 花树 + 石栏；
+ *   D 西四院 = 礼乐钟鼓 / 书院叠石 / 服务水钵 / 西后院石作；E 东四院 = 文华鼓栏 / 陈设叠石 / 生活水钵 / 东后院石作。
+ */
+export const COURTYARD_DRESSING = deepFreeze({
+  'CY-B-plaza': [{ type: 'censer', count: 4 }, { type: 'railing', count: 8 }],
+  'CY-B-throne': [{ type: 'lion', count: 2 }, { type: 'drum', count: 2 }, { type: 'railing', count: 4 }],
+  'CY-B-rear': [{ type: 'blossom', count: 4 }, { type: 'bed', count: 2 }],
+  'CY-C-front': [{ type: 'lantern', count: 8 }, { type: 'railing', count: 4 }],
+  'CY-C-main': [{ type: 'lantern', count: 4 }, { type: 'blossom', count: 2 }, { type: 'railing', count: 2 }],
+  'CY-C-rear': [{ type: 'blossom', count: 6 }, { type: 'railing', count: 2 }],
+  'CY-D-court1': [{ type: 'drum', count: 2 }, { type: 'bed', count: 1 }, { type: 'railing', count: 2 }],
+  'CY-D-court2': [{ type: 'rockery', count: 1 }, { type: 'bed', count: 2 }],
+  'CY-D-court3': [{ type: 'rockery', count: 1 }, { type: 'railing', count: 3 }, { type: 'bed', count: 1 }],
+  'CY-D-court4': [{ type: 'rockery', count: 2 }, { type: 'railing', count: 5 }],
+  'CY-E-court1': [{ type: 'drum', count: 2 }, { type: 'railing', count: 2 }],
+  'CY-E-court2': [{ type: 'rockery', count: 1 }, { type: 'railing', count: 3 }],
+  'CY-E-court3': [{ type: 'rockery', count: 1 }, { type: 'railing', count: 4 }],
+  'CY-E-court4': [{ type: 'rockery', count: 2 }, { type: 'railing', count: 6 }],
+});
+
+/**
+ * 御花园补景（F 区）：**只允许实测 Δ=0 的构件**（F 区 80/80 零余量）——
+ * 石作（`rockery`）/ 影壁（`screenWall`）/ 石栏（`railing`）/ 铜器（`vessel`），实测见
+ * `work/t44/report/cost-table.json`（F 列：rockery 0 / screenWall 0 / railing 0 / vessel 0）。
+ */
+export const GARDEN_DRESSING = deepFreeze([
+  { type: 'rockery', count: 2 },
+  { type: 'screenWall', count: 1 },
+  { type: 'railing', count: 2 },
+  { type: 'vessel', count: 1 },
+]);
+
+/** 塔上陈设（T-watchtower-3）：只落**顶层观景台**（踏步面 1.8×0.34m、净宽 1.1m ⇒ 一律不落件）。 */
+export const TOWER_DRESSING = deepFreeze([{ type: 'railing', count: 4 }, { type: 'drum', count: 1 }]);
+
+/** 塔顶锚点：deck 面四角内收（= 玩家直径 + 0.5）+ 台面中心偏南（避开塔顶机位视轴）。 */
+export function towerDressingAnchors() {
+  const tower = CLIMB_TOWERS[0];
+  if (!tower) return [];
+  const plan = climbTowerPlan(tower);
+  const deck = plan.faces.find((f) => f.kind === 'deck');
+  if (!deck) return [];
+  const inset = +(INTERACTION.player.radius * 2 + 0.5).toFixed(2);
+  const hw = deck.w / 2 - inset;
+  const hd = deck.d / 2 - inset;
+  const vp = (VIEWPOINTS ?? []).find((v) => v.towerId === tower.id);
+  const axisNorth = vp ? vp.target.z > vp.position.z : true;
+  const midZ = round(deck.z + (axisNorth ? -1 : 1) * (deck.d / 4));
+  return [
+    { type: 'railing', x: round(deck.x - hw), z: round(deck.z + hd), y: deck.y, note: 'deck-NW' },
+    { type: 'railing', x: round(deck.x + hw), z: round(deck.z + hd), y: deck.y, note: 'deck-NE' },
+    { type: 'railing', x: round(deck.x - hw), z: round(deck.z - hd), y: deck.y, note: 'deck-SW' },
+    { type: 'railing', x: round(deck.x + hw), z: round(deck.z - hd), y: deck.y, note: 'deck-SE' },
+    { type: 'drum', x: round(deck.x), z: midZ, y: deck.y, note: 'deck-mid' },
+  ];
+}
+
+/** 区域侧消费入口：本区各院（F 区 = 御花园）的陈设计划（含已解析锚点）。 */
+export function dressingPlanForZone(zoneId) {
+  const scopes = zoneId === 'F'
+    ? [DRESSING_AREAS['F-GARDEN']].filter(Boolean)
+    : COURTYARDS.filter((c) => c.zone === zoneId);
+  return scopes.map((court) => ({
+    courtId: court.id,
+    zone: court.zone,
+    items: ((court.id === 'F-GARDEN' ? GARDEN_DRESSING : COURTYARD_DRESSING[court.id]) ?? []).map((spec) => {
+      const resolved = dressingAnchors(court.id, spec.type, spec.count);
+      return { type: spec.type, count: resolved.count, requested: spec.count, points: resolved.points, gap: resolved.gap, ring: resolved.ring };
+    }),
+  }));
+}
+
+/** 逐院签名（稳定字符串）：`type:count|type:count` 升序。 */
+export function dressingSignature(courtOrId) {
+  const id = typeof courtOrId === 'string' ? courtOrId : courtOrId?.id;
+  const list = COURTYARD_DRESSING[id] ?? [];
+  return list.map((s) => `${s.type}:${s.count}`).sort().join('|');
+}
+
+/** 签名两两不同守卫：返回重复分组（空 = 全部互不相同）。 */
+export function dressingSignatureCollisions() {
+  const seen = new Map();
+  for (const c of COURTYARDS) {
+    const sig = dressingSignature(c.id);
+    if (!sig) continue;
+    if (!seen.has(sig)) seen.set(sig, []);
+    seen.get(sig).push(c.id);
+  }
+  return [...seen.entries()].filter(([, ids]) => ids.length > 1).map(([sig, ids]) => ({ sig, ids }));
+}
+
+export const DRESSING_SUMMARY = deepFreeze({
+  courtyardCount: Object.keys(COURTYARD_DRESSING).length,
+  itemCount: COURTYARDS.reduce((a, c) => a + (COURTYARD_DRESSING[c.id] ?? []).reduce((s, i) => s + i.count, 0), 0),
+  towerItemCount: TOWER_DRESSING.reduce((a, i) => a + i.count, 0),
+  signatureCount: new Set(COURTYARDS.map((c) => dressingSignature(c.id)).filter(Boolean)).size,
+  collisions: dressingSignatureCollisions(),
+  byType: COURTYARDS.reduce((acc, c) => {
+    for (const it of COURTYARD_DRESSING[c.id] ?? []) acc[it.type] = (acc[it.type] ?? 0) + it.count;
+    return acc;
+  }, {}),
+});
+
 export const LAYOUT_STATS = deepFreeze({
   layoutVersion: LAYOUT_VERSION,
   sceneSeed: SCENE_SEED,
