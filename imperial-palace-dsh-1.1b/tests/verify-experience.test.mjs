@@ -22,8 +22,8 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadModule, loadThree, makeSilentEvents, ROOT } from './harness.mjs';
 import { runWalkAudit } from '../scripts/verify-walk.mjs';
-/* t36：F5 用**同一个**判据函数做合成三态用例（不得另写一套替身判据；shot.mjs 已由 t41 保证 import 无副作用） */
-import { judgeShot } from '../scripts/shot.mjs';
+/* t36：F5/F6 用**同一个**判据函数与清单合并函数做合成用例（不得另写一套替身；shot.mjs 已由 t41 保证 import 无副作用） */
+import { judgeShot, mergeManifestRows, rowCompleteness } from '../scripts/shot.mjs';
 
 const RESULTS = [];
 let FAILS = 0;
@@ -657,6 +657,21 @@ if (existsSync(manifestPath)) {
     assert(lowMean.ok === false && lowMean.reasons.some((r) => r.includes('内容均值')), '均值低于下限必须 FAIL（阈值行为不变）');
     assert(holes.length === 0, `仍有静默通过/理由不明：${holes.join('；')}`);
     return `3 指标 × 3 三态 = 9 组合全部显式 FAIL；基线 PASS 与两条超限 FAIL 行为不变`;
+  });
+  /* ===== t36 护栏缝③：清单合并"完整优先"（合成用例，不依赖渲染是否抖动）===== */
+  await test('F6 合成用例：缺失统计的新条目不得顶替同键完整条目（清单合并完整优先）', async () => {
+    const full = (name) => ({ name, ok: true, contentMean: 0.3, contentDark: 0.01, contentClip: 0.01 });
+    const empty = (name) => ({ name, ok: false, contentMean: null, contentDark: null, contentClip: null });
+    assert(rowCompleteness(full('k')) === 3 && rowCompleteness(empty('k')) === 0, '完整度应为 3 / 0');
+    const kept = mergeManifestRows([full('k')], [empty('k')], { preferComplete: true });
+    assert(kept.length === 1 && kept[0].contentDark === 0.01, `旧完整条目必须保留（实际 ${JSON.stringify(kept)}）`);
+    const legacy = mergeManifestRows([full('k')], [empty('k')]);
+    assert(legacy.length === 1 && legacy[0].contentDark === null, '默认语义应为后写者胜出（该行仅用于对照，不需启用）');
+    const upgraded = mergeManifestRows([empty('k')], [full('k')], { preferComplete: true });
+    assert(upgraded.length === 1 && upgraded[0].contentDark === 0.01, '新完整条目必须能覆盖旧空条目（不得把空值永久钉死）');
+    const both = mergeManifestRows([{ ...full('k'), contentDark: 0.02 }], [full('k')], { preferComplete: true });
+    assert(both.length === 1 && both[0].contentDark === 0.01, '两者都完整时新条目胜出（重跑覆盖语义保持）');
+    return '旧完整+新空 ⇒ 保留完整；旧空+新完整 ⇒ 升级；都完整 ⇒ 新胜出；默认语义有对照';
   });
 } else {
   await test('F1 浏览器矩阵 manifest 存在', async () => {
