@@ -13,7 +13,7 @@
 
 ---
 
-## 一、 5 个版本横向评测总览表
+## 一、 8 个版本横向评测总览表
 
 | 目录与 Git 仓库 | 在线试玩 (GitHub Pages) | 所用 AI 工具 / 框架 | 驱动模型 | 消耗 Token 统计 | 交付建筑 / 院落规模 | 核心工程特色与交付评级 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -22,6 +22,9 @@
 | **`imperial-palace-commandcode-36m`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/commandcode-36m/) | **Command Code** (v1.66.0) | `deepseek-v4.1-flash` (High Effort · Taste-1) | **35,900,000** tokens<br>(35.9M) | 74 栋建筑<br>18 处院落 | • **主-子 Agent 协同与根因修复**（耗时 36m 32s）<br>• 主动修复 4 大图形学底层 Bug（NaN屋面、变换丢失等）<br>• 重构 CDP 无头浏览器截图管线，版本规范升至 v1.0 |
 | **`imperial-palace-dsh-1.1b`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/dsh-1.1b/) | **DeepSeek Harness** (DSH) | `deepseek-v4.1-flash` (Deep-Agent 架构) | **1,111,473,426** tokens<br>(1.11B) | 67 栋建筑<br>18 处院落 | • **超大规模纵深研发**：耗费 11 亿 Tokens<br>• 23 组严格的契约测试与真机环境探针<br>• 具有最严苛的工程交付回执与证据链 |
 | **`imperial-palace-gpt6luna`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/gpt6luna/) | **ChatGPT (Codex Work)** | `GPT-6 Luna` (多子 Agent 分区协作) | 独立会话推进 | **88 栋建筑**<br>20 处院落 | • 5 大区域（前朝/后廷/东西苑/御花园）子 Agent 分工并行<br>• `check.mjs` 自动化边界、顶点有限值与唯一连接校验<br>• 现代化 Vite 构建，内置小地图定位与御前漫游 (F 键) |
+| **`imperial gemini 3.8flash`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/gemini-3.8flash/) | **Gemini 3.8 Flash** | `gemini-3.8-flash` (7 专职子 Agent 协同) | 全程自主多智能体 | **96 栋建筑**<br>23 处院落 | • **160% 超额交付**：96 栋殿宇、23 处院落、**7 处可进殿堂**（金銮殿/东暖阁/三希堂/文渊阁等）<br>• 三大殿 y=4.5m 汉白玉基台，堆秀山御景亭 y=13.5m 极顶俯瞰<br>• 全程算法程序化，产物体积仅 216 KB |
+| **`imperial-palace`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/imperial-palace/) | **Codex Interactive** | 3D 导览交互沙盘 | 独立沙盘交互 | 88 栋建筑<br>20 处院落 | • 沉浸式中轴巡游沙盘，太和殿与乾清宫内景支持屋顶渐隐展示<br>• 支持昼/夕/夜三时辰光影与小地图定位 |
+| **`imperial-palace-2026-09-26-164358`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/palace-batch/) | **性能合批深度优化版** | 几何合批管线重构 | 静态网格合批优化 | 88 栋建筑<br>20 处院落 | • **网格数量削减 91.5%**（1372 → 116 组 Batch）<br>• 保留 88 栋建筑独立拾取与射线碰撞，帧率成倍提升 |
 
 ---
 
@@ -137,11 +140,38 @@ debug 然后接着完成 太多图片了
 
 ---
 
+### 6. Gemini 3.8 Flash 版本：`imperial gemini 3.8flash`
+* **工程路径**：`AI_Test/imperial gemini 3.8flash/`（同名快捷软链接 `imperial/`、`imperial-gemini-3.8flash/`）
+* **驱动模型**：`Gemini 3.8 Flash Autonomous Multi-Agent Team`（7 专职子 Agent 统辖协同）
+* **工程特色**：
+  - **交付达成率最高**：规制建筑达 **96 栋**（规划目标 ≥60，达成率 160%）；规整院落达 **23 处**（规划目标 ≥16，达成率 143%）；跨区连接 11 处全量契约对接；
+  - **室内内景可进入殿宇最多（7 处）**：太和殿金銮宝座、乾清宫、坤宁宫东暖阁、养心殿正殿、三希堂、皇极殿、文渊阁黑瓦藏书阁；
+  - **海拔严格分层**：三大殿坐落于 y = 4.5m 汉白玉台基之上，堆秀山顶御景亭拔高至 y = 13.5m 绝顶俯瞰，外城门门洞第一人称下物理真实可穿行；
+  - **几何极度稳健**：全城网格 100% 顶点数值有限、零 NaN，自动化脚本 `check.mjs` 秒级静态断言全绿；生产构建产物 Gzip 仅 **216 KB**。
+
+---
+
+### 7. Imperial Palace 3D 导览交互沙盘：`imperial-palace`
+* **工程路径**：`AI_Test/imperial-palace/`
+* **工程特色**：
+  - 聚焦中轴巡游与沉浸式沙盘交互，太和殿与乾清宫进入内景时屋顶支持优雅渐隐动画展示；
+  - 提供金辉、落霞与寒月三时辰光影切换、全局小地图及相机定位。
+
+---
+
+### 8. Palace Batch 164358 (性能合批深度优化版)：`imperial-palace-2026-09-26-164358`
+* **工程路径**：`AI_Test/imperial-palace-2026-09-26-164358/`
+* **工程特色**：
+  - **几何合批重构**：将全城 1372 块网格动态压缩合并为 20 组 116 个高效 Batch，Draw Call 锐减 91.5%；
+  - 保证 88 栋建筑独立拾取与射线碰撞的同时，在低配显卡与移动端实现 60 FPS 流畅满帧。
+
+---
+
 ## 三、 本地快速启动与对比指南
 
 所有项目均支持本地静态服务器或开发服务器访问：
 
-### 1. 启动命令（五个版本可同时在不同端口运行）
+### 1. 启动命令（八个版本可同时在不同端口运行）
 
 ```bash
 # 1. 启动 OpenCode 516k 版本 (端口 8121)
@@ -162,10 +192,19 @@ python3 -m http.server 8123 --bind 127.0.0.1
 
 # 5. 启动 GPT-6 Luna 版本 (端口 8126 或 Vite 开发服务器)
 cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-gpt6luna"
-# 方式 A (纯静态 dist 运行):
 python3 -m http.server 8126 --directory dist --bind 127.0.0.1
-# 方式 B (Vite 源码热更新运行):
-npm run dev -- --port 8126 --host 127.0.0.1
+
+# 6. 启动 Gemini 3.8 Flash 版本 (端口 8127，支持 cd "imperial gemini 3.8flash" 或 cd imperial)
+cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial gemini 3.8flash"
+python3 -m http.server 8127 --directory dist --bind 127.0.0.1
+
+# 7. 启动 Imperial Palace 导览沙盘版本 (端口 8128)
+cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace"
+python3 -m http.server 8128 --directory dist --bind 127.0.0.1
+
+# 8. 启动 Palace Batch 164358 静态合批版 (端口 8129)
+cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-2026-09-26-164358"
+python3 -m http.server 8129 --directory dist --bind 127.0.0.1
 ```
 
 ### 2. URL 调试参数快捷对照

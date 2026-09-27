@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'imperial-palace-*/**'
+      - 'imperial*/**'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [ main ]
@@ -32,6 +32,15 @@ jobs:
             command: "npm run build && node tests/layout.test.mjs && node tests/kit.test.mjs && node tests/core-registry.test.mjs"
           - name: "GPT-6 Luna"
             dir: "imperial-palace-gpt6luna"
+            command: "npm ci && npm run check && npm run build"
+          - name: "Gemini 3.8 Flash"
+            dir: "imperial gemini 3.8flash"
+            command: "npm ci && npm run check && npm run build"
+          - name: "Imperial Palace Tour"
+            dir: "imperial-palace"
+            command: "npm ci && npm run build"
+          - name: "Palace Batch 164358"
+            dir: "imperial-palace-2026-09-26-164358"
             command: "npm ci && npm run check && npm run build"
 
     steps:

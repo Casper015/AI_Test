@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101410" />
+    <meta name="description" content="紫禁天朝：一座可俯瞰、可漫游、可进入殿堂的 3D 皇家宫城。" />
+    <title>紫禁天朝 · 皇家宫城</title>
+  </head>
+  <body>
+    <div id="scene-root" aria-label="可交互的 3D 皇宫场景"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="wordmark" href="#" aria-label="返回全城">
+        <span class="seal">御</span>
+        <span><strong>紫禁天朝</strong><small>ROYAL PALACE · 3D ATLAS</small></span>
+      </a>
+      <div class="top-center"><span class="live-dot"></span><span>数字宫城 · 沉浸式导览</span><i></i><span id="location-label">全城鸟瞰</span></div>
+      <div class="top-actions">
+        <button class="icon-button" id="fullscreen" title="全屏" aria-label="全屏">⛶</button>
+        <span class="quality-tag"><span></span>REALTIME</span>
+      </div>
+    </header>
+
+    <aside class="left-rail glass-panel">
+      <div class="eyebrow">宫城导览 <span>PALACE GUIDE</span></div>
+      <nav id="zone-nav" aria-label="分区跳转">
+        <button class="zone-button active" data-zone="all"><span class="zone-glyph">◎</span><span>全城总览</span><kbd>01</kbd></button>
+        <button class="zone-button" data-zone="forecourt"><span class="zone-glyph">▤</span><span>中轴前朝</span><kbd>02</kbd></button>
+        <button class="zone-button" data-zone="hall"><span class="zone-glyph">⌂</span><span>金銮主殿</span><kbd>03</kbd></button>
+        <button class="zone-button" data-zone="inner"><span class="zone-glyph">◇</span><span>后宫内廷</span><kbd>04</kbd></button>
+        <button class="zone-button" data-zone="west"><span class="zone-glyph">◈</span><span>西侧宫苑</span><kbd>05</kbd></button>
+        <button class="zone-button" data-zone="east"><span class="zone-glyph">◈</span><span>东侧宫苑</span><kbd>06</kbd></button>
+        <button class="zone-button" data-zone="garden"><span class="zone-glyph">❋</span><span>御花园</span><kbd>07</kbd></button>
+      </nav>
+      <div class="rail-divider"></div>
+      <div class="stat-heading"><span>宫城志</span><span class="stat-mark">EST. · 01</span></div>
+      <div class="stats-grid">
+        <div><strong id="building-count">60</strong><small>独立建筑</small></div>
+        <div><strong id="courtyard-count">16</strong><small>围合院落</small></div>
+      </div>
+      <div class="axis-note"><span class="axis-line"></span><span><b>南北礼仪中轴</b><small>从正阳门至御花园</small></span></div>
+      <div class="rail-foot"><span class="compass">N</span><span>宫城布局参考图 · 沙盘演绎</span></div>
+    </aside>
+
+    <section class="time-panel glass-panel" aria-label="时辰预设">
+      <span class="eyebrow">时辰 <span>ATMOSPHERE</span></span>
+      <div class="time-options">
+        <button class="time-button active" data-time="day"><span>☼</span>金辉</button>
+        <button class="time-button" data-time="dusk"><span>◒</span>落霞</button>
+        <button class="time-button" data-time="night"><span>☾</span>寒月</button>
+      </div>
+    </section>
+
+    <aside class="detail-card glass-panel" id="detail-card" aria-live="polite">
+      <div class="detail-topline"><span class="eyebrow">建筑档案 <span>ARCHIVE</span></span><span class="detail-index" id="detail-index">— / 60</span></div>
+      <div id="empty-detail" class="empty-detail">
+        <span class="empty-seal">殿</span>
+        <h2>择一殿而观</h2>
+        <p>点击宫殿，即可查看建筑档案<br />与可进入状态。</p>
+      </div>
+      <div id="building-detail" class="building-detail hidden">
+        <div class="detail-category" id="detail-category">主殿</div>
+        <h2 id="detail-name">太和殿</h2>
+        <p class="detail-desc" id="detail-description"></p>
+        <div class="detail-meta"><span class="meta-dot"></span><span id="detail-access">外观可观</span><span class="meta-line"></span><span id="detail-zone">中轴前朝</span></div>
+        <button class="visit-button" id="visit-building"><span>进入殿内</span><span>↗</span></button>
+      </div>
+      <div class="card-footer"><span>建筑依布局参考进行艺术化演绎</span><span class="footer-seal">御制</span></div>
+    </aside>
+
+    <div class="bottom-left">
+      <div class="minimap glass-panel"><canvas id="minimap" width="220" height="180"></canvas><span class="map-label">宫城图</span></div>
+      <div class="coordinate-chip"><span class="coord-dot"></span><span id="coordinate-label">宫城 · 中心</span></div>
+    </div>
+
+    <div class="bottom-center glass-panel">
+      <button id="tour-button" class="tour-button"><span class="play-icon">▶</span><span>沿中轴巡游</span></button>
+      <span class="bottom-divider"></span>
+      <button id="walk-button" class="plain-action"><span>♙</span>第一人称漫游 <kbd>F</kbd></button>
+      <button id="reset-button" class="plain-action"><span>↺</span>回到全城</button>
+    </div>
+
+    <div class="hint-chip"><span class="mouse-glyph">⌖</span>拖拽旋转 <i>·</i> 滚轮缩放 <i>·</i> 点击建筑查看</div>
+    <div id="toast" class="toast" role="status"></div>
+    <div id="loader" class="loader"><div class="loader-mark">御</div><div class="loader-title">宫门将启</div><div class="loader-subtitle">正在铺展千重宫阙</div><div class="loader-track"><span></span></div></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

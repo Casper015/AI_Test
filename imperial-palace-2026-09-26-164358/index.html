@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#141713" />
+    <meta name="description" content="紫禁天朝 · 一座可漫游的东方皇家宫城" />
+    <title>紫禁天朝 · 皇家宫城</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="scene" aria-label="可交互的 3D 皇宫场景"></div>
+      <div class="vignette" aria-hidden="true"></div>
+      <header class="brand panel">
+        <div class="seal" aria-hidden="true">御</div>
+        <div class="brand-copy"><p class="eyebrow">IMPERIAL PALACE · EST. 1420</p><h1>紫禁天朝</h1><p class="subtitle">一座可漫游的皇家宫城</p></div>
+      </header>
+      <nav class="timebar panel" aria-label="时辰">
+        <button class="time-button active" data-time="noon">盛世金辉</button>
+        <button class="time-button" data-time="sunset">落霞夕照</button>
+        <button class="time-button" data-time="night">寒月宫灯</button>
+      </nav>
+      <aside class="map-card panel">
+        <div class="section-label">宫城导览 <span>PALACE MAP · 北 ↑</span></div>
+        <p class="map-instruction">循中轴而行，亦可漫游东西宫苑</p>
+        <div id="minimap" class="minimap" role="group" aria-label="宫城区域导航">
+          <div class="map-axis"></div>
+          <button class="map-node south" data-view="south" title="南城门">南门</button>
+          <button class="map-node forecourt" data-view="forecourt" title="前朝">前朝</button>
+          <button class="map-node hall" data-view="hall" title="主殿">太和殿</button>
+          <button class="map-node inner" data-view="inner" title="后宫">后宫</button>
+          <button class="map-node garden" data-view="garden" title="御花园">御花园</button>
+          <button class="map-node west" data-view="west" title="西宫苑">西苑</button>
+          <button class="map-node east" data-view="east" title="东宫苑">东苑</button>
+          <span id="map-player" class="map-player" title="当前位置" aria-label="当前位置"></span>
+        </div>
+        <div class="map-legend"><i></i>中轴御道 <span>点击宫苑定位</span></div>
+      </aside>
+      <section class="building-card panel" id="building-card" aria-live="polite">
+        <p class="eyebrow" id="building-category">PALACE REGISTER</p>
+        <h2 id="building-name">欢迎来到紫禁天朝</h2>
+        <p id="building-description">沿着中轴，由南门步入这座层层展开的皇家宫城。</p>
+        <button id="visit-button" type="button" hidden>入内观赏 <span aria-hidden="true">↗</span></button>
+        <div class="card-meta"><span id="building-access">宫城建筑与庭院</span><span id="loading-status">正在点亮宫城</span></div>
+      </section>
+      <div class="actionbar panel" role="group" aria-label="游览操作">
+        <button id="tour-button" class="primary-button"><span aria-hidden="true">▷</span> 中轴导览</button>
+        <button id="walk-button"><span aria-hidden="true">⌖</span> 御前漫步 <kbd>F</kbd></button>
+        <button id="home-button" aria-label="回到全城" title="回到全城">⌂</button>
+      </div>
+      <div class="viewbar" role="group" aria-label="场景画质">
+        <span id="render-stat">宫城总览</span><span class="quality-label">画质</span><button id="quality-button" title="切换画质">高清</button>
+      </div>
+      <div class="help-tip"><span class="desktop-help">拖拽环视 <b>·</b> 滚轮缩放 <b>·</b> 点击宫殿查看 <b>·</b> F 键漫游</span><span class="touch-help">单指环视 · 双指缩放 · 点按宫殿 · 漫游需键鼠</span></div>
+      <div class="toast" id="toast" role="status"></div>
+      <div class="loading" id="loading" role="status" aria-live="polite"><div class="loading-mark" aria-hidden="true">御</div><div class="loading-title">紫禁天朝</div><div class="loading-caption" id="loading-caption">宫门正启 · 请稍候</div><div class="loading-track" aria-hidden="true"><i></i></div><button id="retry-button" class="retry-button" hidden>重新加载</button></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -369,16 +369,16 @@
 
       <div class="stat-banner">
         <div class="stat-item">
-          <div class="stat-val">5</div>
-          <div class="stat-lbl">独立模型架构</div>
+          <div class="stat-val">8</div>
+          <div class="stat-lbl">独立模型与架构分支</div>
         </div>
         <div class="stat-item">
           <div class="stat-val">1.14B+</div>
           <div class="stat-lbl">累计消耗 Tokens</div>
         </div>
         <div class="stat-item">
-          <div class="stat-val">88 / 20</div>
-          <div class="stat-lbl">最高殿宇 / 规制院落</div>
+          <div class="stat-val">96 / 7</div>
+          <div class="stat-lbl">最多独立殿宇 / 可进内景殿堂</div>
         </div>
         <div class="stat-item">
           <div class="stat-val">100%</div>
@@ -480,6 +480,61 @@
         </div>
         <a class="btn-launch" href="./gpt6luna/" target="_blank">进入 3D 漫游 ➔</a>
       </div>
+
+      <!-- 6. Gemini 3.8 Flash -->
+      <div class="card" style="--card-accent: #38bdf8;">
+        <div class="card-top">
+          <span class="card-tag" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8;">Gemini 3.8 Flash 团队</span>
+          <h2 class="card-title">Gemini 3.8 Flash</h2>
+          <div class="card-tokens">7 专职子 Agent · 160% 超额交付</div>
+          <p class="card-desc">
+            全城算法程序化极致构建，交付 96 栋殿宇、23 处庭院、7 处可进内景（含养心殿、三希堂、文渊阁），打包体积仅 216 KB！
+          </p>
+          <ul class="feature-list">
+            <li>96 栋独立殿宇 · 23 处规制院落</li>
+            <li>7 处可进殿堂（金銮宝座/东暖阁/三希堂）</li>
+            <li>三大殿 y=4.5m 白石基台 · 御景亭 y=13.5m 堆秀山</li>
+            <li>100% 顶点有限值 · 零 NaN · 秒开加载</li>
+          </ul>
+        </div>
+        <a class="btn-launch" href="./gemini-3.8flash/" target="_blank">进入 3D 漫游 ➔</a>
+      </div>
+
+      <!-- 7. Imperial Palace Tour -->
+      <div class="card" style="--card-accent: #eab308;">
+        <div class="card-top">
+          <span class="card-tag" style="background: rgba(234, 179, 8, 0.2); color: #fde047;">交互沙盘巡游</span>
+          <h2 class="card-title">Imperial Palace Tour</h2>
+          <div class="card-tokens">中轴巡游 · 室内屋顶渐隐</div>
+          <p class="card-desc">
+            完整护城河、金水桥与中轴御道，进入太和殿与乾清宫时屋顶自动渐隐退入展示，沉浸式艺术化宫殿导览沙盘。
+          </p>
+          <ul class="feature-list">
+            <li>中轴自动巡游与路线漫步</li>
+            <li>太和殿/乾清宫内景屋顶渐隐交互</li>
+            <li>多时辰光影（金辉/夕照/寒月）实时切换</li>
+          </ul>
+        </div>
+        <a class="btn-launch" href="./imperial-palace/" target="_blank">进入 3D 漫游 ➔</a>
+      </div>
+
+      <!-- 8. Palace Batch 164358 -->
+      <div class="card" style="--card-accent: #ec4899;">
+        <div class="card-top">
+          <span class="card-tag" style="background: rgba(236, 72, 153, 0.2); color: #f472b6;">几何合批优化</span>
+          <h2 class="card-title">Palace Batch 164358</h2>
+          <div class="card-tokens">静态网格合批 (1372 → 116)</div>
+          <p class="card-desc">
+            针对复杂宫殿场景进行极致几何合批优化，将 1372 块网格合成为 20 组 116 个高效 Batch，保证 88 栋建筑拾取的同时帧率翻倍。
+          </p>
+          <ul class="feature-list">
+            <li>网格数量缩减 91.5%（1372 → 116）</li>
+            <li>保留 88 栋建筑独立拾取与射线碰撞</li>
+            <li>通过 check-batch.mjs 自动化性能断言</li>
+          </ul>
+        </div>
+        <a class="btn-launch" href="./palace-batch/" target="_blank">进入 3D 漫游 ➔</a>
+      </div>
     </div>
 
     <!-- Controls Cheat Sheet -->
@@ -571,6 +626,30 @@
             <td>88 栋 / 20 院</td>
             <td>check.mjs 自动化边界与唯一连接校验</td>
             <td>小地图导航 + 御前漫游 (F 键) + 时辰切换</td>
+          </tr>
+          <tr>
+            <td><strong>Gemini 3.8 Flash</strong></td>
+            <td>Gemini 3.8 Flash Autonomous Team</td>
+            <td>7 专职子 Agent 协同</td>
+            <td><strong>96 栋 / 23 院</strong></td>
+            <td>check.mjs 几何有限值、海拔与机位断言</td>
+            <td><strong>7 处可进内景</strong> + 第一人称门洞穿行 + 堆秀山顶机位</td>
+          </tr>
+          <tr>
+            <td><strong>Imperial Palace Tour</strong></td>
+            <td>Codex 交互沙盘团队</td>
+            <td>多区域拆分</td>
+            <td>88 栋 / 20 院</td>
+            <td>check-layout.js 布局校验</td>
+            <td>中轴巡游沙盘 + 室内屋顶渐隐展示</td>
+          </tr>
+          <tr>
+            <td><strong>Palace Batch 164358</strong></td>
+            <td>性能工程优化分支</td>
+            <td>合批管线深度重构</td>
+            <td>88 栋 / 20 院</td>
+            <td>check-batch.mjs 几何与拾取双重校验</td>
+            <td>1372 → 116 网格合并 + 高帧率流畅体验</td>
           </tr>
         </tbody>
       </table>
