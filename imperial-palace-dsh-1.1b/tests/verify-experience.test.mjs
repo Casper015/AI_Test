@@ -547,6 +547,12 @@ if (existsSync(manifestPath)) {
 
 section('H 真实路径灯位池核对（t94：真实锚点 + 生产排序函数 + 浏览器实测预算）');
 {
+  // F16 基线（t94 12 组实测，内景机位；§8.2 不为其设门禁，仅登记 + 增长哨兵）
+  const F16 = {
+    callsBase: '1142–1160', callsMax: 1450,          // 基线最大 1160 +25%：可容纳合理新增（内景陈设/多一盏灯），但抓住 t13→t94 那种翻倍（506→1158）
+    triBase: '1,189,758–1,191,390', triMax: 1430000, // 基线最大 1.191M +20%，仍 < §8.2 上限 1.5M
+    objBase: '374', objMax: 450,                     // 基线 374 +20%：对象数增长通常伴生调用增长
+  };
   const { createEnvironment } = await loadModule('src/core/environment.js');
   const { createStateStore } = await loadModule('src/core/state.js');
   const { createCameraRig } = await loadModule('src/core/camera.js');
@@ -673,10 +679,25 @@ section('H 真实路径灯位池核对（t94：真实锚点 + 生产排序函数
         if (name === 'oblique') assert(active === 0, `oblique/${preset} 应有 0 盏实时灯，实际 ${active}`);
         else assert(realtime === BUDGETS[preset], `${name}/${preset} 容量 ${realtime} ≠ 实测基线 ${BUDGETS[preset]}`);
         const judge = /可读性判据 (PASS|FAIL)[^\n]*/.exec(out)?.[0] ?? '(未找到判定行)';
-        rows.push(`${name}/${preset} ${active}/${realtime} anchor=${anch} · ${judge}`);
+        // F16 增长哨兵（基线登记见 H7；§8.2 不约束内景机位，此处只防"结构性增长"）
+        const frame = /整帧调用 (\d+)/.exec(out);
+        const tris = /可见三角面 ([\d]+)/.exec(out);
+        const objs = /主场景可绘制对象 (\d+)/.exec(out);
+        if (frame) { const v = Number(frame[1]); assert(v <= F16.callsMax, `${name}/${preset} 整帧调用 ${v} > 哨兵 ${F16.callsMax}（基线 ${F16.callsBase}）`); }
+        if (tris) { const v = Number(tris[1]); assert(v <= F16.triMax, `${name}/${preset} 可见三角面 ${v} > 哨兵 ${F16.triMax}（基线 ${F16.triBase}）`); }
+        if (objs) { const v = Number(objs[1]); assert(v <= F16.objMax, `${name}/${preset} 主场景可绘制对象 ${v} > 哨兵 ${F16.objMax}（基线 ${F16.objBase}）`); }
+        rows.push(`${name}/${preset} ${active}/${realtime} anchor=${anch}${frame ? ` 调用${frame[1]}` : ''}${tris ? ` tri${tris[1]}` : ''}${objs ? ` obj${objs[1]}` : ''} · ${judge}`);
       }
     }
     return rows.join(' | ');
+  });
+  await test('H7 F16 基线登记 + 增长哨兵自检（不新设 §8.2 门禁，只防结构性增长）', () => {
+    assert(F16.callsMax >= 1160 && F16.triMax >= 1191390 && F16.objMax >= 374,
+      `哨兵阈值不得低于已登记基线：${JSON.stringify(F16)}`);
+    assert(F16.triMax < CONFIG.BUDGET.triangles.visibleMax, '三角面哨兵必须仍落在 §8.2 的 1.5M 上限内');
+    const audit = readFileSync(join(ROOT, 'docs', 'report-experience.md'), 'utf8');
+    assert(/§14|## 14\./.test(audit) && /1142/.test(audit), '报告缺少 F16 基线登记（§14）');
+    return `基线 调用 ${F16.callsBase} / 三角面 ${F16.triBase} / 对象 ${F16.objBase}；哨兵 ≤${F16.callsMax} 调用、≤${F16.triMax} 三角面（<§8.2 1.5M）、≤${F16.objMax} 对象；理由：+20–25% 容纳合理新增，低于该幅度不足以掩盖 506→1158 级别的翻倍`;
   });
 }
 

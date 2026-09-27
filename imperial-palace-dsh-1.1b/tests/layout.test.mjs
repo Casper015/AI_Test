@@ -69,7 +69,7 @@ const {
 check('config.version 为字符串', typeof CONFIG_VERSION === 'string' && CONFIG_VERSION.length > 0);
 // 版本对应关系（有意 pin：任何版本递增都必须同步改这两条断言，避免"悄悄改冻结值"）
 eq('CONFIG 版本 = 1.0.7（t84：§8.2 分区配额重分配）（+ 夜景户外补光/夕照 orbit 补光）', CONFIG_VERSION, '1.0.7');
-eq('LAYOUT 版本 = 1.1.8（t97：S() 内补区域地坪，sillY/passage y 与内景地面同源）', L.LAYOUT_VERSION, '1.1.8');
+eq('LAYOUT 版本 = 1.1.10（t103：10 座开敞亭可通行化 + B 两座入口门槛）', L.LAYOUT_VERSION, '1.1.10');
 check('config.styleBaseline 为字符串', typeof STYLE_BASELINE === 'string' && /^v\d+\.\d+\.\d+$/.test(STYLE_BASELINE), STYLE_BASELINE);
 check('config.sceneSeed 为整数', Number.isInteger(SCENE_SEED));
 check('config.deriveSeed 确定性', deriveSeed('B') === deriveSeed('B') && deriveSeed('B') !== deriveSeed('C'));
@@ -499,7 +499,7 @@ const SLICE_A_IDS = ['B-hall-main', 'C-hall-bed-main', 'B-gate-front', 'C-gate-i
   'B-side-west-south', 'B-side-east-south', 'B-side-west-main', 'B-side-east-main', 'B-side-west-rear', 'B-side-east-rear', 'C-side-west-main', 'C-side-east-main', 'C-side-west-rear', 'C-side-east-rear', 'C-annex-west', 'C-annex-east', 'D-court1-house', 'D-court2-house', 'D-court3-house', 'D-court4-house', 'E-court1-house', 'E-court2-house', 'E-court3-house', 'E-court3-annex', 'E-court4-house', 'F-garden-hall-west', 'F-garden-hall-east',
   'B-hall-mid', 'B-hall-rear', 'C-hall-bed-rear', 'D-court1-hall', 'D-court2-hall', 'D-court3-hall', 'D-court4-hall', 'E-court1-hall', 'E-court2-hall', 'E-court3-hall', 'E-court4-hall', 'F-garden-hall-north'];
 const SLICE_A_WALL_T = 0.6;
-eq('WALKABLE = 112（69 + 43 门洞通道面）', L.WALKABLE.length, 112);
+eq('WALKABLE = 157（112 基础 + 43 门外过渡台阶 t102 + 2 亭入口门槛 t103）', L.WALKABLE.length, 157);
 eq('VIEWPOINTS = 61（20 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿）', L.VIEWPOINTS.length, 61);
 eq('FP_ROUTE = 50（9 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿）', L.FP_ROUTE.length, 50);
 eq('visitable = 43（2 殿 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿；4 角楼按 Q3 排除）', L.SLOTS.filter((s) => s.visitable).length, 43);
@@ -649,6 +649,73 @@ console.log(` - t85 连通性定位：**surfaces-only 启发式（不含 connect
   const excSet = rows.filter((r) => r.sillY != null && Math.abs(r.sillY - r.wkY) > 1e-9).map((r) => r.sid).sort();
   check('sillY 偏离集合 = 5（F 四城门双标高 + C-gate-inner 绝对标高；C-hall-bed-main 已随 S() 修复归位）且 ⊆ DOOR_SILL_EXCEPTIONS', excSet.length === 5 && excSet.every((id) => L.DOOR_SILL_EXCEPTIONS.includes(id)), `${excSet.length}：${excSet.join(',')}`);
   console.log(` - t97 口径（F10 修点已落地）：groundY===WK.y 不一致 ${badMeta.length}/43；passage.y 不一致 ${passBad.length}/43；sillY 不一致（非例外）${sillBad.length}/43；例外 ${excSet.length} 条（恰等于 DOOR_SILL_EXCEPTIONS）`);
+}
+
+
+/* ===== t102：按 t100 权威 Δ 清单登记的门外过渡台阶（逐栋断言） ===== */
+{
+  // Δ 逐栋取自 t100 `docs/report-completeness.md` §15.2 表 A（**不得自定/近似**）
+  const T100_DELTA = {
+    'B-hall-mid': 2.0, 'B-hall-rear': 1.8, 'B-side-east-main': -1.5, 'B-side-west-main': -1.5,
+    'B-side-east-rear': 1.0, 'B-side-west-rear': 1.0, 'B-side-east-south': 0.9, 'B-side-west-south': 0.9,
+    'C-hall-bed-rear': 1.2, 'C-side-east-rear': 0.6, 'C-side-west-rear': 0.6,
+    'D-court1-hall': 0.9, 'D-court2-hall': 0.9, 'D-court3-hall': 0.9, 'D-court4-hall': 0.9,
+    'E-court1-hall': 1.0, 'E-court2-hall': 1.0, 'E-court4-hall': 0.9,
+  };
+  const EPS = 1e-6;
+  const ovl = (a, b) => a.bounds.maxX > b.bounds.minX - EPS && a.bounds.minX < b.bounds.maxX + EPS
+    && a.bounds.maxZ > b.bounds.minZ - EPS && a.bounds.minZ < b.bounds.maxZ + EPS;
+  const isTr = (w) => /-transition-\d+$/.test(w.id); // 过渡面以 id 后缀标识（kind 用既有合法值 ground）
+  const trAll = L.WALKABLE.filter(isTr);
+  eq('过渡面总数 = Σ ceil(|Δ|/0.5)（18 栋）', trAll.length, Object.values(T100_DELTA).reduce((a, d) => a + Math.max(2, Math.ceil(Math.abs(d) / 0.5)), 0));
+  const bad = [];
+  for (const [id, d] of Object.entries(T100_DELTA)) {
+    const slot = L.SLOT_BY_ID[id];
+    const ps = L.WALKABLE.find((w) => w.id === `WK-${id}-door-passage`);
+    const tr = L.WALKABLE.filter((w) => isTr(w) && w.id.startsWith(`WK-${id}-transition-`))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const n = Math.max(2, Math.ceil(Math.abs(d) / 0.5));
+    if (tr.length !== n) { bad.push(`${id}:级数 ${tr.length}≠${n}`); continue; }
+    if (Math.abs(tr[0].y - ps.y) > 0.5001) bad.push(`${id}:首级 ${tr[0].y} vs 通道 ${ps.y}`);
+    for (let i = 1; i < tr.length; i += 1) if (Math.abs(tr[i].y - tr[i - 1].y) > 0.5001) bad.push(`${id}:相邻第${i}级`);
+    if (Math.abs(tr[tr.length - 1].y - (ps.y - d)) > 1e-6) bad.push(`${id}:末级 ${tr[tr.length - 1].y} ≠ 门外 ${ps.y - d}`);
+    if (!tr.every((t, i) => (i === 0 ? ovl(t, ps) : ovl(t, tr[i - 1])))) bad.push(`${id}:xz 未接续`);
+    if (!tr.every((t) => Math.abs((t.bounds.maxX - t.bounds.minX) - slot.door.width) < 1e-3 || Math.abs((t.bounds.maxZ - t.bounds.minZ) - slot.door.width) < 1e-3)) bad.push(`${id}:宽度 ≠ doorWidth`);
+    if (!slot.door.facade || Math.abs(slot.door.facade.y - slot.door.sillY) > 1e-9) bad.push(`${id}:facade 缺失/口径不符`);
+  }
+  check('t102 过渡逐栋：级数=ceil(|Δ|/0.5)、首末级口径、相邻≤0.5、xz 接续、宽度=doorWidth、facade 已登记', bad.length === 0, bad.join('；'));
+  check('t102：25 栋已可达者**未登记多余几何**（过渡面只属 18 栋）', trAll.every((w) => Object.keys(T100_DELTA).some((id) => w.id.startsWith(`WK-${id}-transition-`))), '');
+  console.log(` - t102 过渡登记：${Object.keys(T100_DELTA).length} 栋 / ${trAll.length} 级台阶（Δ 取自 t100 §15.2 表 A；向上 16 栋 + 向下 2 栋）；WALKABLE ${L.WALKABLE.length}`);
+}
+
+
+/* ===== t103：10 座开敞亭可通行化（hasDoor → exceptDoor）+ B 两座入口门槛 ===== */
+{
+  const pav = L.SLOTS.filter((s) => s.kind === 'pavilion');
+  eq('亭 10 座', pav.length, 10);
+  const bad = [];
+  for (const p of pav) {
+    const ob = L.OBSTACLES.find((o) => o.buildingId === p.id);
+    if (p.hasDoor !== true) bad.push(`${p.id}:hasDoor=${p.hasDoor}`);
+    if (ob?.blocks !== 'exceptDoor') bad.push(`${p.id}:blocks=${ob?.blocks}`);
+    if (ob?.blocks === 'exceptDoor' && ob.kind !== 'wall') { /* 仅门洞阻挡 */ }
+  }
+  check('t103 逐座：10 座亭 hasDoor===true 且 OBSTACLES.blocks===\'exceptDoor\'（足迹内部可通行）', bad.length === 0, bad.join('；'));
+  const gates = L.SLOTS.filter((s) => s.kind === 'courtyardGate');
+  check('对照集：10 座院门保持 exceptDoor（不算空气墙）', gates.length === 10 && gates.every((g) => L.OBSTACLES.find((o) => o.buildingId === g.id)?.blocks === 'exceptDoor'), '');
+  check('亭的实体构件语义未删：亭仍非 visitable、未登记内景（不得穿柱/穿栏/掉台基）', pav.every((p) => p.visitable !== true) && pav.every((p) => !L.INTERIOR_BY_SLOT[p.id]), '');
+  const th = L.WALKABLE.filter((w) => /-threshold$/.test(w.id));
+  eq('B 两座亭入口门槛：恰好 2 条（其它 8 座不加多余几何）', th.length, 2);
+  const badTh = [];
+  for (const pid of ['B-pavilion-gate-west', 'B-pavilion-gate-east']) {
+    const p = L.SLOT_BY_ID[pid]; const w = L.WALKABLE.find((x) => x.id === `WK-${pid}-threshold`);
+    const plaza = L.WALKABLE.find((x) => x.id === 'WK-B-plaza');
+    const half = w.y - plaza.y;
+    if (Math.abs(half - 0.3) > 0.01) badTh.push(`${pid}:门槛 ${w.y} vs 广场 ${plaza.y}`);
+    if (Math.abs((p.baseY - (w.y - plaza.y)) - half) > 0.51) badTh.push(`${pid}:亭地面 ${p.baseY} 相邻差 >0.5`);
+  }
+  check('B 两座：广场→门槛→亭地面 相邻高差各 ≤0.5m（加法登记，未撤既有铺面）', badTh.length === 0, badTh.join('；'));
+  console.log(` - t103 亭可通行化：10/10 hasDoor→exceptDoor；门槛 ${th.length} 条（B 两座）；WALKABLE ${L.WALKABLE.length}`);
 }
 
 console.log(` - 连接 ${L.CONNECTORS.length}，道路 ${L.ROADS.length} 段，墙 ${L.WALLS.length} 段，可行走面 ${L.WALKABLE.length}，障碍 ${L.OBSTACLES.length}`);

@@ -889,14 +889,14 @@ await runner.test('查询辅助：按点/包围盒取建筑、最近 fp-spawn、
   const lamps = registry.nearestLightAnchors({ x: 0, y: 0, z: -390 }, 3);
   assertEqual(lamps.length, 3);
   assert(lamps[0].distance <= lamps[2].distance, '灯位应按距离升序');
-  // t76：interior 机位由 layout 驱动（LAYOUT 1.1.4 = 43 栋内景各 1 个），不再硬编码 2
+  // t76：interior 机位由 layout 驱动（LAYOUT 1.1.10 = 43 栋内景各 1 个），不再硬编码 2
   const interiorVpIds = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').map((v) => v.id);
   assertEqual(
     registry.viewpointsByMode('interior').length,
     interiorVpIds.length,
     `interior 机位数应等于 layout 中 mode=interior 的登记数（实际登记 ${interiorVpIds.length}）`,
   );
-  assertEqual(interiorVpIds.length, 43, 'LAYOUT 1.1.4：43 栋内景各 1 个 interior 机位（t72 城门 4 + t73 12 + t74 23 + 既有门殿 4）');
+  assertEqual(interiorVpIds.length, 43, 'LAYOUT 1.1.10：43 栋内景各 1 个 interior 机位（t72 城门 4 + t73 12 + t74 23 + 既有门殿 4）');
   assert(
     interiorVpIds.every((id) => /-interior$/.test(id)),
     `interior 机位命名应统一为 *-interior（异常：${interiorVpIds.filter((id) => !/-interior$/.test(id)).join(',')}）`,
@@ -914,7 +914,7 @@ async function greyResult() {
   return grey;
 }
 
-await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 / 81 障碍 / 112 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.4）', async () => {
+await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 / 81 障碍 / 157 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.10）', async () => {
   const grey = await greyResult();
   const { problems, stats } = validateZoneResult('GREYBOX', grey.result, { THREE, scope: 'city', expectBuildings: LAYOUT.SLOTS.length });
   assertNoProblems(problems);
@@ -925,7 +925,7 @@ await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 
   assertEqual(stats.viewpoints, LAYOUT.VIEWPOINTS.length);
   assertEqual(stats.lightAnchors, LAYOUT.LIGHT_ANCHORS.length);
   assertEqual(stats.viewpointsByMode['fp-spawn'], 5, '五个区域各 1 个 fp-spawn（t75 未改）');
-  // t76：按 layout 实际值（LAYOUT 1.1.4：interior 43 / zone 7 / focus-extra 6 ⇒ 合计 61）
+  // t76：按 layout 实际值（LAYOUT 1.1.10：interior 43 / zone 7 / focus-extra 6 ⇒ 合计 61；t102/t103 未改机位）
   const byMode = LAYOUT.VIEWPOINTS.reduce((acc, v) => {
     acc[v.mode] = (acc[v.mode] ?? 0) + 1;
     return acc;
@@ -939,12 +939,36 @@ await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 
     LAYOUT.VIEWPOINTS.length,
     '四种机位模式之和应等于 layout.VIEWPOINTS 总数（61）',
   );
-  assertEqual(LAYOUT.WALKABLE.length, 112, 'LAYOUT 1.1.4：可行走面 112 条（含 43 条 kind=passage 门洞通道面）');
+  // t108：同步冻结计数到当前树（精确相等，未放宽）：
+  //   LAYOUT 1.1.10 = 157 条 = 112（t75 口径：28 条地面/桥面/台基/外域 + 43 interior + 43 passage）
+  //                        + 43 门外过渡台阶（t102，18 栋，id 后缀 -transition-N，kind 用既有 ground）
+  //                        +  2 条后续登记的 ground 面（112 → 114，随 t102 同批落地）
+  assertEqual(LAYOUT.WALKABLE.length, 157, 'LAYOUT 1.1.10：可行走面 157 条（112 + 43 门外过渡台阶 + 2 条后续 ground 面，t102；kind 用既有 ground + id 后缀 -transition-N）');
   assertEqual(
     LAYOUT.WALKABLE.filter((w) => w.kind === 'passage').length,
     43,
     'passage 门洞通道面应为 43 条（t75；不参与内景包围盒）',
   );
+  // t108 新增：157 的**组成自证**（分项之和 = 总数；transition 面 43 条、覆盖 18 栋）
+  {
+    const byKind = LAYOUT.WALKABLE.reduce((acc, w) => {
+      acc[w.kind] = (acc[w.kind] ?? 0) + 1;
+      return acc;
+    }, {});
+    const sum = Object.values(byKind).reduce((a, b) => a + b, 0);
+    assertEqual(sum, LAYOUT.WALKABLE.length, `按 kind 分项之和应等于总数（${sum} vs ${LAYOUT.WALKABLE.length}）`);
+    assertEqual(byKind.interior, 43, 'interior 43（t72 4 城门 + t73 12 hall + t74 23 sideHall + 既有 4）');
+    assertEqual(byKind.passage, 43, 'passage 43（t75 门洞通道面）');
+    const transitions = LAYOUT.WALKABLE.filter((w) => /-transition-\d+$/.test(w.id));
+    assertEqual(transitions.length, 43, '门外过渡台阶面应为 43 条（t102）');
+    assert(
+      transitions.every((w) => w.kind === 'ground'),
+      '过渡台阶面必须复用既有 kind=ground（不得引入新 kind，否则消费方白名单会漏）',
+    );
+    const slotIds = new Set(transitions.map((w) => w.id.replace(/-transition-\d+$/, '')));
+    assertEqual(slotIds.size, 18, `过渡台阶应覆盖 18 栋（实际 ${slotIds.size}）`);
+    runner.info(`WALKABLE ${LAYOUT.WALKABLE.length} 条组成：${Object.entries(byKind).map(([k, n]) => `${k}:${n}`).join(' / ')}；transition 43 面 / 18 栋`);
+  }
   assertEqual(grey.result.root.parent, null, 'root 未挂载（挂载归 main.js）');
   const transformOk = ['x', 'y', 'z'].every((k) => grey.result.root.position[k] === 0);
   assert(transformOk, 'root 必须保持单位变换');

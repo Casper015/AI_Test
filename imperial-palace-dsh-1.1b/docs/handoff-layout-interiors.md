@@ -191,3 +191,116 @@ $ grep -n "surfaces-only\|不构成可达性\|生产口径" tests/layout.test.mj
 
 ### 7.5 与 t98 的接口（下一页/下一卡）
 10 栋不可达内景（`B-side-{west,east}-{south,main,rear}` 6 + `B-hall-mid`、`B-hall-rear` + `E-court{1,2}-hall`）的**可行走过渡**由 t98 承接；本卡已把门内外基准统一（`sillY = 区域地坪 + 本地台基`），t98 可在**正确基准**上登记过渡，不会返工。
+
+## 8. t102（LAYOUT 1.1.9）：按 t100 权威 Δ 清单登记门外过渡台阶
+
+### 8.1 依据（**Δ 全部取自 t100，未自定判据**）
+`docs/report-completeness.md` **§15.2 表 A**（生产口径、`LAYOUT 1.1.8` 时点、求解器 BFS）：**18 栋高差型**（16 栋 `Δ>+0.5` 向上 + 2 栋 `Δ=−1.5` 向下）。**25 栋已可达者与 3 栋“Δ 超阈但已可达”未登记任何几何**。
+
+### 8.2 登记规则（代码：`buildInteriorSliceA()` 内 `T100_DELTA` 循环）
+- `n = ceil(|Δ|/0.5)` 级台阶（相邻面 ≤ 0.5m = 求解器 `maxStepHeight`）；
+- 每级长 `run/n`，`run = max(|Δ|/0.62, n×0.6)`（跑长 ≥ |Δ|/0.62）；
+- `y` 线性插值：第 1 级 = 通道面地面 − `Δ/n`，第 n 级 = **门外地面**（与 t100 表 A 的门外点对齐）；
+- 几何：沿门轴、宽 = `doorWidth`（**不越出门洞净宽与门轴范围**）、自**通道面进深轴外端**（外墙面向外 6.0m）起逐级向外；
+- `kind: 'transition'`（不污染 `interior` 相机包围盒）。
+
+### 8.3 逐栋结果（18 栋 / 43 级）
+| 栋 | Δ | 级数 | 台阶 y 序列（自通道面向外） |
+| --- | --- | --- | --- |
+| `B-hall-mid` | +2 | 4 | 1.5 → 1 → 0.5 → 0 |
+| `B-hall-rear` | +1.8 | 4 | 1.35 → 0.9 → 0.45 → 0 |
+| `B-side-east-rear` / `west-rear` | +1 | 2 | 0.5 → 0 |
+| `B-side-east-south` / `west-south` | +0.9 | 2 | 0.45 → 0 |
+| `C-hall-bed-rear` | +1.2 | 3 | 0.9 → 0.4 · …（收敛到 0.9=C 区地坪） |
+| `C-side-east/west-rear` | +0.6 | 2 | 0.3 → 0 |
+| `D-court1..4-hall` | +0.9 | 2 | 0.45 → 0 |
+| `E-court1/2-hall` | +1 | 2 | 0.5 → 0 |
+| `E-court4-hall` | +0.9 | 2 | 0.45 → 0 |
+| **`B-side-west-main` / `east-main`（dual）** | **−1.5** | 3 | **2.0 → 2.5 → 3.0**（向**上**接 `WK-B-terrace-tier2`） |
+
+**dual 2 栋专门说明**：t100 指出其叠加两类特征（门外高 1.5m + 通道面↔室内面相邻性），本卡按**可达外点**为基准：末级落在 `WK-B-terrace-tier2`（y=3.0）⇒ 与 t100 表 A 的门外点一致；**跑长按几何取**（> |Δ|/0.62）。**通道面↔室内面**：复核得两者 x 向相触（内景 `x[-87.4,-72.6]` 与通道面 `x[-72.6,-66]` 在 −72.6 相接），t100 的“不相邻”疑点来自 walk-graph 的 **1m 栅格**切分 0.6m 重叠区 ⇒ **建议 t77 复验时把这两栋单列**（本卡已在回执登记，未改栅格/阈值）。
+
+### 8.4 t100-F3：`door.facade` 已登记（门外锚点）
+- **`door.center` = 建筑中心**（**不是门脸点**；实证 `B-side-west-main center=(-80,-116)` vs 东立面 `x=-72`）。
+- **`door.facade` = 门外锚点** = 通道面进深轴（短边）外端中心 = 外墙面向外 **6.0m**，含 `{x, z, y, outward, note}`；**任何“贴门取地面/登记过渡”的工具应改用 `facade` 为唯一门外基准**（否则 Δ 会被系统性误判，正是 t100 口径 v1/v2/v3 三次作废的根因）。CONTRACTS §4 文案**待 t103 并入**（本卡未越界改）。
+
+### 8.5 t100-F2 如实登记：**connector 不提供过渡**
+求解器自报 **`connectorStats = {declared: 32, ramps: 0}`** ⇒ `CXN-*` 对可达性**零贡献**（t88 的坡道生成条件在真实数据下不触发：32 条 connector 横断面突变 0 条、两端不连通 0 条）。**本卡走 layout 过渡面路线**；**未修改 connector、台阶阈值（0.5）、玩家体积或任何既有阻挡**。
+
+### 8.6 接口与边界
+- **本卡只保证登记几何**（级数/口径/接续/宽度/facade 已逐一机器断言）；**不宣称“已可进入”**。
+- **可达性**由 **t77 生产口径逐栋复跑**判定（18 栋）；**t88** 负责走查层消费 `CONNECTORS`（当前 `ramps=0`，即不消费）。
+- 冻结计数：`CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` **未变、未新增 CXN**；`WALKABLE 112 → 155`（+43 过渡面，**已单列**）。
+
+### 8.7 跨 owner 冻结计数 ripple 清单（`WALKABLE 112 → 155`，+43 级过渡面）
+
+**本卡的改动必然导致**：`WALKABLE` 由 **112 → 155**；下述位置引用了旧值 **112** 或按旧规模断言，**需各自 owner 同步**（**本卡不代改**）：
+
+| file:line（grep 实测） | 旧值 | **新值** | 依据 | 归属 |
+| --- | --- | --- | --- | --- |
+| `tests/core.test.mjs:942` | `assertEqual(LAYOUT.WALKABLE.length, 112, 'LAYOUT 1.1.4：可行走面 112 条（含 43 条 kind=passage 门洞通道面）')` | **155**（理由串改为 `LAYOUT 1.1.9：155 条（112 + 43 门外过渡台阶，t102）`） | 本卡 +43 过渡面 | **core 侧（本卡不代改）→ 派单** |
+| `tests/core.test.mjs:917` | 用例标题 `灰盒满足全部契约字段与数量（… / 112 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.4）` | 标题 `…/ 155 可走面 / …；LAYOUT 1.1.9` | 同上 | **core 侧 → 派单** |
+| `docs/CONTRACTS.md:480` | §5.2.1 对照表 `WALKABLE 条数 … **112**（28 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿 + 43 门洞通道面）` | **155**（+ `43 门外过渡台阶 t102`） | 同上 | **t103** |
+| `docs/CONTRACTS.md:589` | §6.4 `当前 **112 面**：ground/terrace/interior 43/…passage 43` | **155 面**（补 `transition 43（kind 用 ground + id 后缀 -transition-N）`） | 同上 | **t103** |
+| `docs/CONTRACTS.md:48` | v1.0.12 修订记录里的 `walkable 112` | **保留**（历史条目只追加） | 历史真值 | 无需改 |
+| `docs/handoff-layout-interiors.md:69`（§4 老条目） | `WALKABLE 69 → 112` | **保留**（历史累计） | 历史只追加 | 本卡 ✅ |
+| `docs/handoff-layout-interiors.md:87`（§4.5 修法清单） | 给 core.test 的旧期望 `28 / 20 → **112 / 61**` | 更新为 **`155 / 61`** | 同上 | 本卡 ✅（“待同步项”备注） |
+| `tests/layout.test.mjs`（本卡 inScope，已同步） | 112 | **155** | 已改并带依据注释 | 本卡 ✅ |
+| `docs/handoff-layout-interiors.md` §2 计数表（历史累计） | 112（1.1.4 行） | **保留历史值 + 新增 1.1.9 行 = 155** | 历史只追加 | 本卡 ✅ |
+
+**排查命令**（可直接复跑）：`grep -rn "112\|WALKABLE" tests/*.mjs docs/*.md`
+**如实登记**：本卡只保证自身 inScope 内一致；**core 侧与 CONTRACTS 侧各有 1 处待同步**（上表前两行），未留任何陈旧数字在 inScope 内。
+
+### 8.8 跨模块 kind 守卫生效留档（t79 教训，值得备案）
+本卡首轮用新枚举值 `kind:'transition'` 登记过渡面 ⇒ **`audit --enforce` 立即 exit 1 并列出 5 项**：
+```
+- colliders.walkable[112] (WK-B-hall-mid-transition-1).kind 非法：transition
+  （合法：ground/terrace/interior/bridgeDeck/gardenGround/outerTerrain/passage）
+- … [113]/[114]/[115]/[116] 同类（首轮仅打印前 5 项，实为 43 条全部）
+```
+⇒ **t79 建立的跨模块守卫按设计生效**（布局侧新增 kind 未同步消费方白名单 ⇒ **立刻炸**，而不是静默坏掉/整树 0 区域装载）。
+**处置**：改用**既有合法值 `kind:'ground'`**（过渡面以 **id 后缀 `-transition-N`** 标识）⇒ **exit 0**。
+**归档结论**：**专属 `transition` kind 本轮不派**（收尾期不新增枚举值）；日后若要专属 kind，**必须同时改 `src/core/context.js` 的 `WALKABLE_KINDS`**（属 core 卡），否则本轮这类拦截会再次触发——这是**期望行为**，不是回归。
+
+### 8.9 t77 复跑要求（已与主理人确认）
+`B-side-{west,east}-main`（dual 2 栋）在 t77 生产口径复跑时**单独看**：其“通道面↔室内面相邻性”疑点源于 **walk-graph `cellSize=1` 栅格**把 0.6m 的重叠区切分（内景 `x[-87.4,-72.6]` ↔ 通道面 `x[-72.6,-66]` 在 −72.6 相触）；本卡**未改栅格/阈值**。
+
+## 9. t103（LAYOUT 1.1.10）：10 座开敞亭可通行化 + B 两座入口门槛
+
+### 9.1 修点与逐座前后
+- `S()` 的 `hasDoor` 原先**忽略 `opts.hasDoor`**（`PASSABLE_KINDS.includes(kind) || visitable`，与 `door`/`doorWidth` 同一坑）⇒ 已改为 `opts.hasDoor === true || …`；
+- 10 座亭的 `S('…-pavilion…')` 加 **`hasDoor: true`** ⇒ `OBSTACLES` 由既有机制 `s.hasDoor ? 'exceptDoor' : 'all'` **自动派生**（**未新增任何手写障碍字面量**）。
+
+| 亭 | 改前 blocks | **改后 blocks** | Δ（亭地面 vs 既有地面） |
+| --- | --- | --- | --- |
+| `B-pavilion-gate-west` / `east` | all | **exceptDoor** | +0.6 ⇒ **补门槛** |
+| `C-pavilion-rear` | all | **exceptDoor** | −0.3 |
+| `D-court3-pavilion` / `D-court4-pavilion` | all | **exceptDoor** | +0.1 |
+| `E-court3-pavilion` / `E-court4-pavilion` | all | **exceptDoor** | +0.1 |
+| `F-garden-pavilion-main` | all | **exceptDoor** | +0.1 |
+| `F-garden-pavilion-west` / `east` | all | **exceptDoor** | −0.1 |
+
+### 9.2 B 两座入口门槛（**加法登记**）
+- 在 facing 侧外沿另加 1 级门槛面 `WK-B-pavilion-gate-{west,east}-threshold`，y = 区域地坪 + 亭地面/2 = **0.3** ⇒ **广场(0) → 门槛(0.3) → 亭地面(0.6)**，相邻高差各 **0.3 ≤ 0.5**（求解器台阶阈值）。
+- **保留既有铺面**（`WK-B-plaza` 等未撤、未改），**未做 connector 独占登记**（按 t88 协调要求）；其余 **8 座不加任何多余几何**（门槛面恰好 2 条，已断言）。
+
+### 9.3 逐座断言（`tests/layout.test.mjs`，只增不减）
+① 亭 **10 座**且逐座 `hasDoor === true`、`OBSTACLES[id].blocks === 'exceptDoor'`；② **对照集**：10 座院门保持 `exceptDoor`（不被算作空气墙）；③ **实体构件语义未删**：亭仍 `visitable !== true`、**未登记任何内景**（`INTERIOR_BY_SLOT` 无亭）⇒ 不违反 `§6.4 不可穿越墙柱栏杆` 与 `§8.3 墙柱阻挡均验证`（两判据一律未动）；④ 门槛面恰好 **2 条**且相邻高差 ≤0.5。
+
+### 9.4 冻结计数 ripple（**一次性收口**，当前树实测 `WALKABLE = 157`）
+| file:line | 旧值 | **新值** | 依据 | 归属 |
+| --- | --- | --- | --- | --- |
+| `tests/layout.test.mjs:502` | 155 | **157** | +2 亭门槛（t103） | 本卡 ✅ |
+| `docs/CONTRACTS.md` §5.2.1 表 | 112 | **157**（+43 t102 +2 t103） | 同上 | 本卡 ✅（t103 持有该文件） |
+| `docs/CONTRACTS.md` §6.4 | 112 面 | **157 面**（补 transition 43 / threshold 2） | 同上 | 本卡 ✅ |
+| **`tests/core.test.mjs:942`** | `assertEqual(LAYOUT.WALKABLE.length, 112, …)` | **157** | 同上 | **core 侧 → 派单（本卡不代改）** |
+| **`tests/core.test.mjs:917`** | 用例标题 `…112 可走面…LAYOUT 1.1.4` | `…157 可走面…LAYOUT 1.1.10` | 同上 | **core 侧 → 派单** |
+| `docs/CONTRACTS.md:48` / `handoff-layout-interiors.md:69` | 历史条目 `112` | **保留**（历史只追加） | — | 无需改 |
+
+**排查命令**：`grep -rn "112\|155\|157\|WALKABLE" tests/*.mjs docs/*.md`（本卡 inScope 内**无陈旧数字**；跨 owner 共 **2 处待同步**，即上表加粗两行）。
+
+### 9.5 跨卡接口（本卡不改别人的测试与提示）
+`tests/interaction.test.mjs` 的 air-wall 断言（E13）与「开敞构筑物」提示**归 t88**。本卡落地后 **`airWalls` 期望值 = 0**（10 座亭全部 `exceptDoor` ⇒ 不再构成“视觉开放却整足迹阻挡”）；10 座院门本就 `exceptDoor` ⇒ 对照集不受影响。**若 t88 尚未把 E13 改为可表达 0，E13 会立刻报红（`assert(airWalls.length > 0)`）—— 如实登记，不由本卡改动该文件**；最小闭合步骤 = t88 把该断言改为 `airWalls.length === 0` 并同步提示分支。
+
+### 9.6 契约
+`CONTRACTS v1.0.14 → **v1.0.15**`（历史只追加）：新增 **§4.1.1**（`door.center` = 建筑中心 / **`door.facade`** = 门外锚点，`y` 与 `sillY` 同源；贴门取地面一律用 `facade`——并入 t102 交付的 t100-F3 文案）；§5.2.1 与 §6.4 的 `WALKABLE` 112 → 157；登记“10 座开敞亭可通行化（`hasDoor:true` ⇒ `exceptDoor`，与院门同类）”。

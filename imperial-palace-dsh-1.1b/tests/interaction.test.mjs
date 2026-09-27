@@ -2226,11 +2226,36 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   for (const gate of dooredOpen) {
     assert(!airWalls.some((row) => row.buildingId === gate.id), `${gate.id} 有门洞可通过，不应被算作空气墙`);
   }
-  // 亭：四面开敞且无门洞 ⇒ 必须全部在册
+  // 亭：t103 前应全部在册（整足迹阻挡）；t103 后应全部可通行（hasDoor ⇒ exceptDoor）⇒ airWalls 清零。
+  // 两种状态都必须**整体一致**（不允许"一半在册一半可通行"的混合），且提示语义随之切换（见下）。
   const pavilionSlots = LAYOUT.SLOTS.filter((slot) => slot.kind === 'pavilion');
-  assertEqual(airWalls.length, pavilionSlots.length, `亭必须全部登记为空气墙（实际 ${airWalls.length}/${pavilionSlots.length}）`);
-  const pavilionHint = buildCatalog({ layout: LAYOUT, config: CONFIG }).hintFor(airWalls[0].id);
-  assert(/开敞构筑物/.test(pavilionHint.title), `亭的撞墙提示必须说明"开敞构筑物"，实际「${pavilionHint.title}」`);
+  const pavilionObstacles = pavilionSlots.map((slot) => obstacleByBuilding.get(slot.id)).filter(Boolean);
+  const pavilionsBlocked = pavilionObstacles.filter((o) => o.blocks === 'all');
+  const pavilionsPassable = pavilionObstacles.filter((o) => o.blocks === 'exceptDoor');
+  assertEqual(pavilionObstacles.length, pavilionSlots.length, '10 座亭都必须有障碍条目');
+  assertEqual(
+    pavilionsBlocked.length + pavilionsPassable.length,
+    pavilionSlots.length,
+    '亭的通行语义必须整体一致：要么全部整足迹阻挡（t103 前），要么全部门洞可通行（t103 后）',
+  );
+  if (pavilionsPassable.length > 0) {
+    assertEqual(airWalls.length, 0, `亭已可通行（t103 落地）⇒ 空气墙必须清零，实际 ${airWalls.length}`);
+    assertEqual(blockedOpen.length, 0, 't103 落地后不得再有整足迹阻挡的开敞构筑物');
+  } else {
+    assertEqual(airWalls.length, pavilionSlots.length, `亭必须全部登记为空气墙（实际 ${airWalls.length}/${pavilionSlots.length}）`);
+  }
+  // 提示联动（两种状态各自的正确语义）
+  const pavilionHintFor = (slot) => buildCatalog({ layout: LAYOUT, config: CONFIG }).hintFor(`OB-${slot.id}`);
+  for (const slot of pavilionSlots) {
+    const obstacle = obstacleByBuilding.get(slot.id);
+    const hint = pavilionHintFor(slot);
+    if (obstacle?.blocks === 'all') {
+      assert(/开敞构筑物/.test(hint.title), `${slot.id} 整足迹阻挡 ⇒ 必须给「开敞构筑物」可见提示，实际「${hint.title}」`);
+    } else {
+      assert(!/开敞构筑物/.test(hint.title), `${slot.id} 已可通行 ⇒ 不得再弹「开敞构筑物」，实际「${hint.title}」`);
+      assert(/墙体阻挡/.test(hint.title), `${slot.id} 已可通行 ⇒ 应按"仅门洞可通行"提示，实际「${hint.title}」`);
+    }
+  }
 
   // ④ 单向高差：上下阈值不对称造成的有向边（|Δy| ∈ (maxStepHeight, snapDownDistance]）
   const oneWay = report.oneWayHeight;
@@ -2465,9 +2490,16 @@ await runner.test('F21 t87 UI 与按键：G 键映射脱困、亭的撞墙提示
   const pavilionObstacle = createWalkSolver({}).obstacles().find((o) => LAYOUT.SLOTS.find((s2) => s2.id === o.buildingId)?.kind === 'pavilion');
   assert(pavilionObstacle, '应能找到一个亭的障碍条目');
   const hint = catalog.hintFor(pavilionObstacle.id);
-  assert(/开敞构筑物/.test(hint.title), `亭的提示标题应说明"开敞构筑物"：${hint.title}`);
-  assert(/四面开敞/.test(hint.detail) && /绕行/.test(hint.detail), `提示正文应解释"为什么进不去 + 怎么办"：${hint.detail}`);
-  assertEqual(hint.tone, 'info', '亭的提示是解释性信息（不是错误）');
+  if (pavilionObstacle.blocks === 'all') {
+    // t103 前：整足迹阻挡 ⇒ 必须给解释性可见提示（不能只留一堵看不见的墙）
+    assert(/开敞构筑物/.test(hint.title), `亭（整足迹阻挡）的提示标题应说明"开敞构筑物"：${hint.title}`);
+    assert(/四面开敞/.test(hint.detail) && /绕行/.test(hint.detail), `提示正文应解释"为什么进不去 + 怎么办"：${hint.detail}`);
+    assertEqual(hint.tone, 'info', '亭的提示是解释性信息（不是错误）');
+  } else {
+    // t103 后：亭已可通行（hasDoor ⇒ exceptDoor）⇒ 提示必须**收窄**为"仅门洞可通行"，不得再弹"开敞构筑物"
+    assert(!/开敞构筑物/.test(hint.title), `亭已可通行 ⇒ 不得再弹「开敞构筑物」：${hint.title}`);
+    assert(/墙体阻挡/.test(hint.title), `亭已可通行 ⇒ 应按"仅门洞可通行"提示：${hint.title}`);
+  }
 
   // 卡死条默认隐藏；setVisible(false)（?ui=0&shot=1 的路径）下仍保持隐藏
   const app = await makeApp();

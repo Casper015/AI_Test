@@ -74,3 +74,55 @@ $ node scripts/audit.mjs          → exit=0  · 主场景 331/350 批次 ✓、
 3. `core-interior` 的 `CORE_INTERIOR_LIVE=1` 浏览器重拍未跑（默认快模式；系数/剂量/记录值已由 13 项覆盖）。
 4. 期望更新以**当前 LAYOUT 1.1.4** 为准；若布局侧再扩容（例如 4 座角楼纳入），`core.test` 的 `43/112/61` 与 `core-interior` 的 `5/43` 需同步（已在断言里尽量改成"派生 + 绝对值"双保险，减少二次改动）。
 5. 三套件在运行期间撞到过 `src/zones/forecourt.js` 的**并发编辑瞬时崩**（`Cannot access 'interiorLampAnchors' before initialization`，14:58–14:59 的两次运行），重跑即绿；已确认为外部在飞，未改 zones。
+
+
+---
+
+## t108（T2.26）core 侧冻结计数同步：`WALKABLE` pin → **157（LAYOUT 1.1.10）**
+
+**任务目标**：把 `tests/core.test.mjs` 的冻结计数同步到当前树（卡面预期 `LAYOUT 1.1.9 / WALKABLE 155`），**只同步数字与理由串、不放宽/不删除断言**。
+
+### 1. 实测：执行时树上已是 **1.1.10 / 157**（卡面的 155 已过时）
+
+```text
+$ node --input-type=module -e "…loadModule('src/shared/layout.js')…"
+LAYOUT_VERSION 1.1.10 | WALKABLE 157 | -transition 面 43 | 覆盖槽位 18
+SLOTS 67 · CONNECTORS 32 · OBSTACLES 81 · VIEWPOINTS 61 · LIGHT_ANCHORS 49 · COURTYARDS 14
+按 kind：outerTerrain:4 / ground:58 / bridgeDeck:4 / gardenGround:1 / terrace:4 / interior:43 / passage:43   （4+58+4+1+4+43+43 = 157）
+```
+- **155 → 157 的 Δ+2**：`ground` 基础面由 13 → 15（两条后续登记的 `ground` 面），与 43 条 `-transition-` 台阶面同批落地；`interior 43 / passage 43` 未变。
+- ⇒ **本卡把 pin 钉到实测的 157，而不是卡面写的 155**。理由：该用例的语义就是"冻结计数 == 当前树"，钉 155 会让本卡交付后立刻红（`期望 155，实际 157`），等于**留下一个陈旧数字**；判据本身（精确相等）一字未放宽。**这是一次如实的口径修正，不是放宽。**
+
+### 2. 改动（仅 `tests/core.test.mjs`，断言只增不减）
+
+| 位置 | 改动 |
+| --- | --- |
+| `:917` 用例标题 | `112 可走面 … LAYOUT 1.1.4` → **`157 可走面 … LAYOUT 1.1.10`** |
+| `:942` 唯一红项 | `assertEqual(LAYOUT.WALKABLE.length, 112, 'LAYOUT 1.1.4：…')` → **`assertEqual(LAYOUT.WALKABLE.length, 157, 'LAYOUT 1.1.10：可行走面 157 条（112 + 43 门外过渡台阶 + 2 条后续 ground 面，t102；kind 用既有 ground + id 后缀 -transition-N）')`**（**仍是精确相等**，未改成 `>=`、未改成"包含"式宽断言） |
+| **新增** 组成自证块 | ① 按 `kind` 分项之和 == `WALKABLE.length`；② `interior === 43`、`passage === 43`；③ `/-transition-\d+$/` 面 == **43**；④ 这些面必须 `kind === 'ground'`（**不得引入新 kind**，否则消费方白名单会漏——t79 的教训）；⑤ 覆盖槽位去重 == **18**；并 `runner.info` 打印分项 |
+| `:892/:899/:928` 版本标签 | `LAYOUT 1.1.4` → `LAYOUT 1.1.10`（数值 43 / 61 经实测**未变**，只同步标签） |
+
+### 3. 为何其余数字不变（逐项）
+
+`buildings = SLOTS 67`、`connectors = CONNECTORS 32`、`obstacles = OBSTACLES 81`、`viewpoints = VIEWPOINTS 61`、`lightAnchors = LIGHT_ANCHORS 49` —— 这五条都**直接从 layout 读出后与该数组长度精确比对**（不是硬编码常量），本卡实测其数组长度与卡面所列一致；t102 只登记**可行走面**（`WALKABLE`），未改建筑/连接/障碍/机位/灯位 ⇒ 这五项不受影响，故无需改动（也不需要"改数字"，它们本就不是字面量）。`interior 43` 与 `passage 43` 同样实测未变。
+
+### 4. grep 排查（`tests/core*.mjs` 全部 `112` / `WALKABLE` 引用）
+
+| 文件:行 | 内容 | 处置 |
+| --- | --- | --- |
+| `tests/core.test.mjs:917/928/942/892/899` | `112` 字面量 + `LAYOUT 1.1.4` 标签 | **本卡同步**（见 §2） |
+| `tests/core-collision.test.mjs:230` | `LAYOUT.WALKABLE.filter(w => w.kind === 'interior')` | 按 kind 过滤、**不按规模断言** ⇒ 无需改（且 43 未变） |
+| `tests/core-interior.test.mjs:92/97` | 同上 + `assertEqual(interiors.length, 43, 'LAYOUT 1.1.4：…')` | 数值 43 **实测未变**（不是陈旧数字）；仅**版本标签** `1.1.4` 为历史快照 ⇒ **不在本卡 inScope**（该文件归 t103/t98 线），已在报告里点名，建议顺手把标签更新为 1.1.10 |
+| `tests/core-kinds.test.mjs:6/52` | 注释/断言串里的 `LAYOUT 1.1.4`（值 43 未变） | 同上：历史标签，非陈旧数字；不在 inScope，已在报告点名 |
+| `tests/core.test.mjs:1000+`（其余） | 无 `112` 字面量残留 | ✓（`grep -rn "112" tests/core*.mjs` 仅剩上述 §2 已改项） |
+
+**结论：`tests/core*.mjs` 中已无"按旧规模 112 断言"的位置**；两处版本标签在他人文件里，值与语义仍正确。
+
+### 5. verify（原样）
+
+```text
+$ node tests/core.test.mjs → exit=0 · 通过 43 / 43（本卡前 42/43，唯一红项即该 pin）
+   · WALKABLE 157 条组成：outerTerrain:4 / ground:58 / bridgeDeck:4 / gardenGround:1 / terrace:4 / interior:43 / passage:43；transition 43 面 / 18 栋
+$ node scripts/audit.mjs --enforce → exit=0 · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）
+```
+项目级 `run.mjs` 未列入本卡 verify；未触碰 `src/**`、`tests/layout.test.mjs`、`tests/interaction.test.mjs`、`tests/core-collision.test.mjs`、`tests/verify-*.mjs`、`docs/CONTRACTS.md`。

@@ -25,7 +25,7 @@ import {
   deepFreeze,
 } from './config.js';
 
-export const LAYOUT_VERSION = '1.1.8'; // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
+export const LAYOUT_VERSION = '1.1.10'; // t103：10 座开敞亭可通行化（hasDoor→exceptDoor）+ B 两座入口门槛 // t102：按 t100 权威 Δ 清单登记门外过渡台阶（仅登记几何，不宣称可达） // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
 
 /* =============================================================================
  * 一、包络、区域边界与外墙（§2.3）
@@ -302,7 +302,7 @@ function S(id, name, kind, zone, x, z, w, d, opts = {}) {
   const doubleEaveLift = roof.doubleEave ? +(MODULES.eaveHeight * 0.35).toFixed(2) : 0;
   const totalHeight = +(eave + roofRise + doubleEaveLift).toFixed(2);
   const vec = DIR_VEC[facing];
-  const hasDoor = PASSABLE_KINDS.includes(kind) || visitable;
+  const hasDoor = opts.hasDoor === true || PASSABLE_KINDS.includes(kind) || visitable; // t103：显式 opts.hasDoor（亭可通行化）
   const doorWidth = hasDoor ? passageWidth({ facing, w, d }) : 0;
   const entrance = {
     x: +(x + (vec.x * w) / 2).toFixed(2),
@@ -335,7 +335,23 @@ function S(id, name, kind, zone, x, z, w, d, opts = {}) {
     hasDoor,
     doorWidth,
     door: hasDoor
-      ? { axis: facing === 'south' || facing === 'north' ? 'z' : 'x', center: { x, z }, width: doorWidth, height: Math.min(9, +(MODULES.eaveHeight * 0.7).toFixed(2)), sillY: +(zoneGroundY(zone) + baseY).toFixed(2) } // t97/F10：sillY = 区域地坪 + 本地台基（门外门槛面），原实现漏加区域地坪
+      ? {
+          /* `center` = **建筑中心**（不是门脸点！t100-F3 实证：B-side-west-main center=(-80,-116) vs 东立面 x=-72）；
+             `facade` = **门外锚点** = 通道面进深轴（短边）外端中心 = 外墙面向外 6.0m 处（与 `WK-*-door-passage` 外端一致），
+             供"贴门取地面/登记过渡"的工具作为**唯一门外基准**使用。 */
+          axis: facing === 'south' || facing === 'north' ? 'z' : 'x',
+          center: { x, z },
+          facade: {
+            x: +(x + (DIR_VEC[facing].x * (w / 2 + 6.0))).toFixed(2),
+            z: +(z + (DIR_VEC[facing].z * (d / 2 + 6.0))).toFixed(2),
+            y: +(zoneGroundY(zone) + baseY).toFixed(2),
+            outward: facing,
+            note: '门外锚点 = 通道面进深轴外端中心（外墙面向外 6.0m）',
+          },
+          width: doorWidth,
+          height: Math.min(9, +(MODULES.eaveHeight * 0.7).toFixed(2)),
+          sillY: +(zoneGroundY(zone) + baseY).toFixed(2),
+        } // t97/F10：sillY = 区域地坪 + 本地台基（门外门槛面）；t102/F3：新增 facade 门外锚点
       : null,
     bounds: b(+(x - w / 2).toFixed(2), +(x + w / 2).toFixed(2), +(z - d / 2).toFixed(2), +(z + d / 2).toFixed(2)),
     entrance,
@@ -356,8 +372,8 @@ export const SLOTS = deepFreeze([
   S('B-side-east-south', '广场东配殿', 'sideHall', 'B', 76, -300, 22, 54, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'x', center: { x: 76, z: -300 }, width: 4.2, height: 2.47, sillY: 0.9 }, bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 1, facing: 'west', usage: '礼仪广场东侧围合配殿', courtyard: 'CY-B-plaza' }),
   S('B-side-west-main', '主殿西配殿', 'sideHall', 'B', -80, -116, 16, 60, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: -80, z: -116 }, width: 6.0, height: 3.2, sillY: 1.5 }, bays: 4, terraceH: 1.5, roofType: 'gableHip', grade: 2, facing: 'east', usage: '主殿院西配殿', courtyard: 'CY-B-throne' }),
   S('B-side-east-main', '主殿东配殿', 'sideHall', 'B', 80, -116, 16, 60, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: 80, z: -116 }, width: 6.0, height: 3.2, sillY: 1.5 }, bays: 4, terraceH: 1.5, roofType: 'gableHip', grade: 2, facing: 'west', usage: '主殿院东配殿', courtyard: 'CY-B-throne' }),
-  S('B-pavilion-gate-west', '门殿西翼亭', 'pavilion', 'B', -58, -386, 16, 16, { bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 1, usage: '门殿两侧翼亭', courtyard: 'CY-B-plaza' }),
-  S('B-pavilion-gate-east', '门殿东翼亭', 'pavilion', 'B', 58, -386, 16, 16, { bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 1, usage: '门殿两侧翼亭', courtyard: 'CY-B-plaza' }),
+  S('B-pavilion-gate-west', '门殿西翼亭', 'pavilion', 'B', -58, -386, 16, 16, { hasDoor: true, bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 1, usage: '门殿两侧翼亭', courtyard: 'CY-B-plaza' }),
+  S('B-pavilion-gate-east', '门殿东翼亭', 'pavilion', 'B', 58, -386, 16, 16, { hasDoor: true, bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 1, usage: '门殿两侧翼亭', courtyard: 'CY-B-plaza' }),
   S('B-side-west-rear', '后殿西庑殿', 'sideHall', 'B', -70, 44, 20, 36, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'x', center: { x: -70, z: 44 }, width: 4.2, height: 2.52, sillY: 1 }, bays: 3, terraceH: 1.0, roofType: 'gableHip', grade: 1, facing: 'east', usage: '后殿西侧围合庑殿', courtyard: 'CY-B-rear' }),
   S('B-side-east-rear', '后殿东庑殿', 'sideHall', 'B', 70, 44, 20, 36, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'x', center: { x: 70, z: 44 }, width: 4.2, height: 2.52, sillY: 1 }, bays: 3, terraceH: 1.0, roofType: 'gableHip', grade: 1, facing: 'west', usage: '后殿东侧围合庑殿', courtyard: 'CY-B-rear' }),
 
@@ -373,7 +389,7 @@ export const SLOTS = deepFreeze([
   S('C-gate-east', '内廷门东侧门', 'courtyardGate', 'C', 90, 124, 12, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '通东宫苑的侧门（通道口）', courtyard: 'CY-C-front' }),
   S('C-annex-west', '西后院值房', 'sideHall', 'C', -70, 288, 18, 20, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'x', center: { x: -70, z: 288 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 3, terraceH: 0.5, roofType: 'gable', grade: 1, facing: 'east', usage: '后寝院西值房', courtyard: 'CY-C-rear' }),
   S('C-annex-east', '东后院值房', 'sideHall', 'C', 70, 288, 18, 20, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'x', center: { x: 70, z: 288 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 3, terraceH: 0.5, roofType: 'gable', grade: 1, facing: 'west', usage: '后寝院东值房', courtyard: 'CY-C-rear' }),
-  S('C-pavilion-rear', '后庭院亭', 'pavilion', 'C', 0, 288, 16, 16, { bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 1, usage: '后庭院中心亭', courtyard: 'CY-C-rear' }),
+  S('C-pavilion-rear', '后庭院亭', 'pavilion', 'C', 0, 288, 16, 16, { hasDoor: true, bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 1, usage: '后庭院中心亭', courtyard: 'CY-C-rear' }),
 
   /* ---------------- D 西侧宫苑（14） ---------------- */
   S('D-court1-hall', '礼乐殿', 'hall', 'D', -262, -318, 24, 56, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: -262, z: -318 }, width: 6.0, height: 3.03, sillY: 0.9 }, bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'east', usage: '礼乐院正堂', courtyard: 'CY-D-court1' }),
@@ -385,11 +401,11 @@ export const SLOTS = deepFreeze([
   S('D-court3-hall', '服务院主屋', 'hall', 'D', -262, 2, 24, 56, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: -262, z: 2 }, width: 6.0, height: 3.03, sillY: 0.9 }, bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'east', usage: '服务院主屋', courtyard: 'CY-D-court3' }),
   S('D-court3-house', '服务院南房', 'sideHall', 'D', -176, -38, 40, 18, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: -176, z: -38 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '服务院配房', courtyard: 'CY-D-court3' }),
   S('D-court3-gate', '服务院院门', 'courtyardGate', 'D', -118, 2, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '服务院院门（通道口）', courtyard: 'CY-D-court3' }),
-  S('D-court3-pavilion', '水池亭', 'pavilion', 'D', -150, 58, 14, 14, { bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '服务院水池上的亭子', courtyard: 'CY-D-court3' }),
+  S('D-court3-pavilion', '水池亭', 'pavilion', 'D', -150, 58, 14, 14, { hasDoor: true, bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '服务院水池上的亭子', courtyard: 'CY-D-court3' }),
   S('D-court4-hall', '西后殿', 'hall', 'D', -262, 188, 24, 56, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: -262, z: 188 }, width: 6.0, height: 3.03, sillY: 0.9 }, bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'east', usage: '西后院正堂', courtyard: 'CY-D-court4' }),
   S('D-court4-house', '西后南配房', 'sideHall', 'D', -176, 148, 40, 18, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: -176, z: 148 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '西后院配房', courtyard: 'CY-D-court4' }),
   S('D-court4-gate', '西后院院门', 'courtyardGate', 'D', -118, 188, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '西后院院门（通道口）', courtyard: 'CY-D-court4' }),
-  S('D-court4-pavilion', '西后小亭', 'pavilion', 'D', -150, 258, 14, 14, { bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '西后院角亭', courtyard: 'CY-D-court4' }),
+  S('D-court4-pavilion', '西后小亭', 'pavilion', 'D', -150, 258, 14, 14, { hasDoor: true, bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '西后院角亭', courtyard: 'CY-D-court4' }),
 
   /* ---------------- E 东侧宫苑（15） ---------------- */
   S('E-court1-hall', '文华殿', 'hall', 'E', 258, -320, 28, 60, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: 258, z: -320 }, width: 6.0, height: 3.08, sillY: 1.0 }, bays: 7, terraceH: 1.0, roofType: 'gableHip', grade: 2, facing: 'west', usage: '文华院正殿', courtyard: 'CY-E-court1' }),
@@ -402,11 +418,11 @@ export const SLOTS = deepFreeze([
   S('E-court3-house', '生活南房', 'sideHall', 'E', 176, -24, 40, 18, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: 176, z: -24 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '生活院南房', courtyard: 'CY-E-court3' }),
   S('E-court3-gate', '生活院门', 'courtyardGate', 'E', 118, 20, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'west', usage: '生活院院门（通道口）', courtyard: 'CY-E-court3' }),
   S('E-court3-annex', '生活院东耳房', 'sideHall', 'E', 280, 20, 16, 40, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'x', center: { x: 280, z: 20 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 3, terraceH: 0.5, roofType: 'gable', grade: 1, facing: 'west', usage: '生活院东侧耳房', courtyard: 'CY-E-court3' }),
-  S('E-court3-pavilion', '生活院水榭', 'pavilion', 'E', 150, 42, 14, 14, { bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '生活院水池水榭', courtyard: 'CY-E-court3' }),
+  S('E-court3-pavilion', '生活院水榭', 'pavilion', 'E', 150, 42, 14, 14, { hasDoor: true, bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '生活院水池水榭', courtyard: 'CY-E-court3' }),
   S('E-court4-hall', '东后殿', 'hall', 'E', 260, 200, 26, 56, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: 260, z: 200 }, width: 6.0, height: 3.03, sillY: 0.9 }, bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'west', usage: '东后院正堂', courtyard: 'CY-E-court4' }),
   S('E-court4-house', '东后南厢', 'sideHall', 'E', 180, 150, 44, 18, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: 180, z: 150 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '东后院厢房', courtyard: 'CY-E-court4' }),
   S('E-court4-gate', '东后院院门', 'courtyardGate', 'E', 118, 200, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'west', usage: '东后院院门（通道口）', courtyard: 'CY-E-court4' }),
-  S('E-court4-pavilion', '东后小亭', 'pavilion', 'E', 150, 275, 14, 14, { bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '东后院角亭', courtyard: 'CY-E-court4' }),
+  S('E-court4-pavilion', '东后小亭', 'pavilion', 'E', 150, 275, 14, 14, { hasDoor: true, bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '东后院角亭', courtyard: 'CY-E-court4' }),
 
   /* ---------------- F 御花园与边界（14） ---------------- */
   S('F-tower-corner-nw', '西北角楼', 'cornerTower', 'F', -304, 454, 26, 26, { bays: 2, terraceH: 0, roofType: 'gableHip', grade: 2, facing: 'north', onWall: true, usage: '宫城西北角楼（三层重檐）' }),
@@ -417,10 +433,10 @@ export const SLOTS = deepFreeze([
   S('F-gate-north', '北城门', 'gateHall', 'F', 0, 454, 76, 26, { visitable: true, bays: 5, terraceH: 0.4, roofType: 'doubleEaveHip', grade: 3, facing: 'north', onWall: true, usage: '宫城正北门（城楼 + 门洞），外接北桥' }),
   S('F-gate-west', '西侧城门', 'gateHall', 'F', -304, 0, 26, 64, { visitable: true, bays: 3, terraceH: 0.4, roofType: 'gableHip', grade: 2, facing: 'west', onWall: true, usage: '宫城西侧门（城楼 + 门洞），通西侧宫苑' }),
   S('F-gate-east', '东侧城门', 'gateHall', 'F', 304, 0, 26, 64, { visitable: true, bays: 3, terraceH: 0.4, roofType: 'gableHip', grade: 2, facing: 'east', onWall: true, usage: '宫城东侧门（城楼 + 门洞），通东侧宫苑' }),
-  S('F-garden-pavilion-main', '御花园·中央亭阁', 'pavilion', 'F', 0, 360, 28, 28, { bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 2, usage: '御花园中心亭阁（重檐攒尖）' }),
+  S('F-garden-pavilion-main', '御花园·中央亭阁', 'pavilion', 'F', 0, 360, 28, 28, { hasDoor: true, bays: 3, terraceH: 0.6, roofType: 'pyramidal', grade: 2, usage: '御花园中心亭阁（重檐攒尖）' }),
   S('F-garden-hall-north', '御花园·北殿', 'hall', 'F', 0, 404, 44, 22, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'z', center: { x: 0, z: 404 }, width: 6.0, height: 2.97, sillY: 0.8 }, bays: 5, terraceH: 0.8, roofType: 'hip', grade: 2, usage: '御花园北端殿堂' }),
-  S('F-garden-pavilion-west', '御花园·西亭', 'pavilion', 'F', -140, 355, 18, 18, { bays: 3, terraceH: 0.4, roofType: 'pyramidal', grade: 1, usage: '御花园西水池畔亭' }),
-  S('F-garden-pavilion-east', '御花园·东亭', 'pavilion', 'F', 140, 355, 18, 18, { bays: 3, terraceH: 0.4, roofType: 'pyramidal', grade: 1, usage: '御花园东水池畔亭' }),
+  S('F-garden-pavilion-west', '御花园·西亭', 'pavilion', 'F', -140, 355, 18, 18, { hasDoor: true, bays: 3, terraceH: 0.4, roofType: 'pyramidal', grade: 1, usage: '御花园西水池畔亭' }),
+  S('F-garden-pavilion-east', '御花园·东亭', 'pavilion', 'F', 140, 355, 18, 18, { hasDoor: true, bays: 3, terraceH: 0.4, roofType: 'pyramidal', grade: 1, usage: '御花园东水池畔亭' }),
   S('F-garden-hall-west', '御花园·西配殿', 'sideHall', 'F', -235, 404, 26, 22, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: -235, z: 404 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 3, terraceH: 0.5, roofType: 'gableHip', grade: 1, facing: 'south', usage: '御花园西侧配殿' }),
   S('F-garden-hall-east', '御花园·东配殿', 'sideHall', 'F', 235, 404, 26, 22, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: 235, z: 404 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 3, terraceH: 0.5, roofType: 'gableHip', grade: 1, facing: 'south', usage: '御花园东侧配殿' }),
 ]);
@@ -954,8 +970,78 @@ function buildInteriorSliceA() {
     }
     walkables.push(WK(`WK-${id}-door-passage`, slot.zone, 'passage', `${slot.name}门洞通道`, minX, maxX, minZ, maxZ, groundY));
   }
+  for (const pid of PAVILION_THRESHOLDS) {
+    const slot = SLOT_BY_ID[pid]; const b = slot.bounds; const t = slot.baseY; // 亭地面（相对本区）
+    const zoneG = zoneGroundY(slot.zone);
+    const w = slot.w; const d = slot.d;
+    // 门在 facing 侧；门槛铺在该侧外沿 1.2m（加法，不撤既有铺面）
+    const v = DIR_VEC[slot.facing];
+    const cx = slot.x + (v.x * (w / 2)) + (v.x * 0.6);
+    const cz = slot.z + (v.z * (d / 2)) + (v.z * 0.6);
+    const halfW = (slot.facing === 'south' || slot.facing === 'north') ? w / 2 : 0.6;
+    const halfD = (slot.facing === 'south' || slot.facing === 'north') ? 0.6 : d / 2;
+    walkables.push(WK(`WK-${pid}-threshold`, slot.zone, 'ground', `${slot.name}入口门槛`,
+      cx - halfW, cx + halfW, cz - halfD, cz + halfD, +(zoneG + t / 2).toFixed(3)));
+  }
+  /* t102：按 **t100 权威 Δ 清单**（docs/report-completeness.md §15.2 表 A）为 18 栋不可达内景登记
+     门外→门内过渡台阶（**仅登记几何**；可达性由 t77 生产口径复验、t88 消费 connector）。
+     参数：n = ceil(|Δ|/0.5)（相邻面 |Δy| ≤ 0.5，求解器台阶阈值）；每级长 = run/n，run = max(|Δ|/0.62, n*0.6)；
+     几何：沿门轴、宽 = doorWidth、从**通道面外端**起逐级向外（Δ>0 递降 / Δ<0 递升）；y 线性插值。
+     Δ 值逐栋取自 t100 表 A，**未自行定义判据**。 */
+  const T100_DELTA = Object.freeze({
+    'B-hall-mid': 2.0, 'B-hall-rear': 1.8, 'B-side-east-main': -1.5, 'B-side-west-main': -1.5,
+    'B-side-east-rear': 1.0, 'B-side-west-rear': 1.0, 'B-side-east-south': 0.9, 'B-side-west-south': 0.9,
+    'C-hall-bed-rear': 1.2, 'C-side-east-rear': 0.6, 'C-side-west-rear': 0.6,
+    'D-court1-hall': 0.9, 'D-court2-hall': 0.9, 'D-court3-hall': 0.9, 'D-court4-hall': 0.9,
+    'E-court1-hall': 1.0, 'E-court2-hall': 1.0, 'E-court4-hall': 0.9,
+  });
+  for (const [id, delta] of Object.entries(T100_DELTA)) {
+    const slot = SLOT_BY_ID[id];
+    if (!slot?.door) continue;
+    const groundY = INTERIOR_PASSAGE_FLOOR[id] ?? INTERIOR_LEGACY_FLOOR[id] ?? (zoneGroundY(slot.zone) + slot.baseY);
+    const n = Math.max(2, Math.ceil(Math.abs(delta) / 0.5));
+    const run = Math.max(Math.abs(delta) / 0.62, n * 0.6);
+    const stepLen = run / n;
+    const halfW = (slot.door.width ?? slot.doorWidth) / 2;
+    const outward = DIR_VEC[slot.facing]; // 门外方向
+    const ax = slot.door.axis; // 'x' | 'z'
+    for (let i = 0; i < n; i += 1) {
+      const face = passageEdgeBySlot(slot);
+      const near = stepLen * i;      // 距通道面外端的偏移
+      const far = near + stepLen;
+      const y = groundY - delta * ((i + 1) / n); // t102：i=0 贴通道面（低于内景地面一个台阶），最外级落在门外地面
+      let minX; let maxX; let minZ; let maxZ;
+      if (ax === 'z') {
+        const base = face;
+        const a = outward.z < 0 ? base - far : base + near;
+        const bnd = outward.z < 0 ? base - near : base + far;
+        minZ = Math.min(a, bnd); maxZ = Math.max(a, bnd);
+        minX = slot.x - halfW; maxX = slot.x + halfW;
+      } else {
+        const base = face;
+        const a = outward.x < 0 ? base - far : base + near;
+        const bnd = outward.x < 0 ? base - near : base + far;
+        minX = Math.min(a, bnd); maxX = Math.max(a, bnd);
+        minZ = slot.z - halfW; maxZ = slot.z + halfW;
+      }
+      /* kind 用既有合法值 `ground`（台阶本就是地面级可行走面）；**不复用新 kind** —— `WALKABLE_KINDS`
+         白名单在 core（t79 教训），新增 kind 需同步 core（属 core 卡）。过渡面以 **id 后缀 `-transition-N`** 标识。 */
+      walkables.push(WK(`WK-${id}-transition-${i + 1}`, slot.zone, 'ground', `${slot.name}门外过渡 ${i + 1}/${n}`,
+        minX, maxX, minZ, maxZ, +y.toFixed(3)));
+    }
+  }
   return { walkables, viewpoints, fps };
 }
+/* t102 辅助：门洞通道面的几何端点（用于把过渡台阶接在通道面外端） */
+function passageEdgeBySlot(slot) {
+  /* t102：门外基准 = t100 的「通道面进深轴**外端**」= 外墙面向外 6.0m（与 INTERIOR 通道面 OUT 一致） */
+  const b = SLOT_BY_ID[slot.id].bounds; const f = slot.facing; const OUT = 6.0;
+  return f === 'south' ? b.minZ - OUT : f === 'north' ? b.maxZ + OUT : f === 'west' ? b.minX - OUT : b.maxX + OUT;
+}
+/* t103：B 两座亭（Δ0.6 > 0.5m 台阶阈值）的**加法门槛**——保留既有铺面，另加一级 0.3m 门槛，
+   使 广场(0) → 门槛(0.3) → 亭地面(0.6) 相邻高差各 0.3 ≤ 0.5。 */
+const PAVILION_THRESHOLDS = Object.freeze(['B-pavilion-gate-west', 'B-pavilion-gate-east']);
+
 const INTERIOR_SLICE_A = buildInteriorSliceA();
 
 export const WALKABLE = deepFreeze([

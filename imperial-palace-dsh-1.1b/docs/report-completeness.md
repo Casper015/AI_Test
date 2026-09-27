@@ -254,3 +254,141 @@
 ### 12.6 过程记录（在飞状态，已恢复）
 
 本轮期间观察到两次瞬时装配失败并已恢复：`src/zones/forecourt.js:693 config.deriveSeed is not a function`（B 区）与 `garden-boundary.js ZONE is not defined`（F 区）——两者均在随后复跑中恢复（本次最终复跑 5 区全部装配成功）。如实记录，供 owner 参考是否仍有残留。
+
+---
+
+## 15. t100：门外权威 Δ 清单（生产口径逐栋，供过渡登记）
+
+> attempt `1fcde648-713e-43eb-a192-bb49f44ce26f` · 测量脚本 `/tmp/t100-delta4.mjs`（**只读**，未改 `src/**`）· 原始读数 `/tmp/t100-delta4.json`
+> **测量时点树状态**：`LAYOUT_VERSION = 1.1.8`（t97「`door.sillY = 区域地坪 + 本地台基`」已落地）；走查层已引用 `layout.CONNECTORS`，但求解器自报 **`connectorStats = {"declared": 32, "ramps": 0, "disabled": false, "ids": []}`**（声明 32 条、**ramps 0**）。
+> **时点不可比声明（主理人已采纳）**：t77 的「33/43 可达、10 不可达」测于 **LAYOUT 1.1.4**（t97/t88 之前）；t88 的「25/18」测于其各自时点；本卡测于 **1.1.8 + t88/t97 之后**。**三方数字不可直接比较**，本表全部为本时点实测。
+> **并集覆盖**：t77 的 10 栋（`B-side-west/east-south|main|rear`、`B-hall-mid`、`B-hall-rear`、`E-court1-hall`、`E-court2-hall`）**∪ t87 报的 13 台** ⇒ 本时点不可达内景 **18 栋**（t77 的 10 栋全部在内，按现状超集逐栋给出）。总览：43 处内景 **25 可达 / 18 不可达**。
+
+### 15.1 口径与方法（可复现，全部只读）
+
+| 项 | 实现 |
+| --- | --- |
+| 装配 | `scripts/verify-walk.mjs → assembleCity()`（真 kit + registry 5 区） |
+| 可行走图 | `createWalkGraph(solver, { cellSize: 1 })` — **生产求解器**（t86 子步进 / t88 connector 引用 / t97 基准统一），**不是采样估计** |
+| 可达性 | `graph.connected([起点, …候选点])`（**单次 BFS**）；起点 = `FP_ROUTE[0]` = 南桥北端；内景可达 = `graph.path(起点 → 内景机位)` |
+| 地面高度 | `layout.floorYAt(x,z)`；覆盖面 = `layout.walkableAt(x,z)[0]`；室内地面 = `INTERIOR_BY_SLOT[slot].walkableId` 面高 |
+| **门外基准** | t75 通道面 `WK-<slotId>-door-passage` 的**进深轴**（= 通道面较短的一边，实测 6.6m）**外端**（两端中离室内面中心更远者）；候选点＝外端沿外法向 **+0.5 / 1 / 2 / 3 / 5 / 8 m** |
+| 门外地面（主口径） | 候选中**从起点可达**的**最近**一个的 `floorYAt`；无可达候选 ⇒ 用几何口径并标注 |
+| 门外地面（并列口径） | 候选中**首个「非 interior、非 passage」面**的 `floorYAt`（不看可达性） |
+| 过渡参数 | `ceil(|Δ|/0.5)`（`maxStepHeight=0.5`）、最小跑长 `|Δ|/0.62`（`rampMaxSlope=0.62`）；`Δ<0` = 需**向下**过渡 |
+
+> **为什么以「通道面进深轴外端」为基准**：① `SLOT.door.center` **不是门脸点**（`B-side-west-main`：door.center=(−80,−116)，建筑 x[−88,−72] 的东立面在 x=−72，通道面 x[−72.6,−66] ⇒ 从 door.center 沿 facing 取样会从建筑内部往外穿）；② 通道面的**长边 = 门宽（沿墙 26m）**、**短边 = 进深（6.6m）**，后者才是门外法向。v1/v2（door.center 起算）与 v3（误把长边当法向轴）的口径错误均已作废，最终以本节 v4 为准。
+
+### 15.2 表 A：不可达内景 18 栋（t77 的 10 栋全部在内）
+
+| slotId | 区 | 室内地面 y | **门前地面 y（可达外点）** | **归属面（id/kind）** | **门外点 (x, z)** | **Δ（可达口径）** | Δ（几何口径） | `ceil(|Δ|/0.5)` | 最小跑长 \|Δ\|/0.62 | t77 | 类型 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `B-hall-mid` | B | 2 | 0 | `ground:WK-B-ground-north` | (0, -40.5) | **2** | 2 | 4 | 3.23 | t77 | a-gap |
+| `B-hall-rear` | B | 1.8 | 0 | `ground:WK-B-ground-north` | (0, 22.5) | **1.8** | 1.8 | 4 | 2.9 | t77 | a-gap |
+| `B-side-east-main` | B | 1.5 | 3 | `terrace:WK-B-terrace-tier2` | (65.5, -116) | **-1.5** | -1.5 | 3 | 2.42 | t77 | a-gap(neg) |
+| `B-side-east-rear` | B | 1 | 0 | `ground:WK-B-ground-north` | (53.5, 44) | **1** | 1 | 2 | 1.61 | t77 | a-gap |
+| `B-side-east-south` | B | 0.9 | 0 | `ground:WK-B-plaza` | (58.5, -300) | **0.9** | 0.9 | 2 | 1.45 | t77 | a-gap |
+| `B-side-west-main` | B | 1.5 | 3 | `terrace:WK-B-terrace-tier2` | (-65.5, -116) | **-1.5** | -1.5 | 3 | 2.42 | t77 | a-gap(neg) |
+| `B-side-west-rear` | B | 1 | 0 | `ground:WK-B-ground-north` | (-53, 44) | **1** | 1 | 2 | 1.61 | t77 | a-gap |
+| `B-side-west-south` | B | 0.9 | 0 | `ground:WK-B-plaza` | (-58, -300) | **0.9** | 0.9 | 2 | 1.45 | t77 | a-gap |
+| `C-hall-bed-rear` | C | 2.1 | 0.9 | `ground:WK-C-ground` | (0, 236.5) | **1.2** | 1.2 | 3 | 1.94 |  | a-gap |
+| `C-side-east-rear` | C | 1.5 | 0.9 | `ground:WK-C-ground` | (47.5, 250) | **0.6** | 0.6 | 2 | 0.97 |  | a-gap |
+| `C-side-west-rear` | C | 1.5 | 0.9 | `ground:WK-C-ground` | (-47, 250) | **0.6** | 0.6 | 2 | 0.97 |  | a-gap |
+| `D-court1-hall` | D | 1.3 | 0.4 | `ground:WK-D-ground` | (-243, -318) | **0.9** | 0.9 | 2 | 1.45 |  | a-gap |
+| `D-court2-hall` | D | 1.3 | 0.4 | `ground:WK-D-ground` | (-243, -158) | **0.9** | 0.9 | 2 | 1.45 |  | a-gap |
+| `D-court3-hall` | D | 1.3 | 0.4 | `ground:WK-D-ground` | (-243, 2) | **0.9** | 0.9 | 2 | 1.45 |  | a-gap |
+| `D-court4-hall` | D | 1.3 | 0.4 | `ground:WK-D-ground` | (-243, 188) | **0.9** | 0.9 | 2 | 1.45 |  | a-gap |
+| `E-court1-hall` | E | 1.4 | 0.4 | `ground:WK-E-ground` | (237.5, -320) | **1** | 1 | 2 | 1.61 | t77 | a-gap |
+| `E-court2-hall` | E | 1.4 | 0.4 | `ground:WK-E-ground` | (242.5, -150) | **1** | 1 | 2 | 1.61 | t77 | a-gap |
+| `E-court4-hall` | E | 1.3 | 0.4 | `ground:WK-E-ground` | (240.5, 200) | **0.9** | 0.9 | 2 | 1.45 |  | a-gap |
+
+> 说明：`Δ<0` 表示门外基准点**比室内高**（需**向下**过渡），过渡参数按 `|Δ|` 给出（表中两处 `a-gap(neg)` 行：Δ=−1.5 ⇒ 3 级 / 跑长 2.42m）。
+
+### 15.2b 表 A 的**全部门外候选点**（每栋 6 个，沿通道面进深轴外端向外；✓=该点从起点可达）
+
+| slotId | 通道面 y | d=0.5 | d=1 | d=2 | d=3 | d=5 | d=8 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `B-hall-mid` | 2 | (0,-40.5) y0 `ground` ✓ | (0,-41) y0 `ground` ✓ | (0,-42) y0 `ground` ✓ | (0,-43) y0 `ground` ✓ | (0,-45) y0 `ground` ✓ | (0,-48) y0 `ground` ✓ |
+| `B-hall-rear` | 1.8 | (0,22.5) y0 `ground` ✓ | (0,22) y0 `ground` ✓ | (0,21) y0 `ground` ✓ | (0,20) y0 `ground` ✓ | (0,18) y0 `ground` ✓ | (0,15) y0 `ground` ✓ |
+| `B-side-east-main` | 1.5 | (65.5,-116) y3 `terrace` ✓ | (65,-116) y3 `terrace` ✓ | (64,-116) y3 `terrace` ✓ | (63,-116) y3 `terrace` ✓ | (61,-116) y3 `terrace` ✓ | (58,-116) y3 `terrace` ✓ |
+| `B-side-east-rear` | 1 | (53.5,44) y0 `ground` ✓ | (53,44) y0 `ground` ✓ | (52,44) y0 `ground` ✓ | (51,44) y0 `ground` ✓ | (49,44) y0 `ground` ✓ | (46,44) y0 `ground` ✓ |
+| `B-side-east-south` | 0.9 | (58.5,-300) y0 `ground` ✓ | (58,-300) y0 `ground` ✓ | (57,-300) y0 `ground` ✓ | (56,-300) y0 `ground` ✓ | (54,-300) y0 `ground` ✓ | (51,-300) y0 `ground` ✓ |
+| `B-side-west-main` | 1.5 | (-65.5,-116) y3 `terrace` ✓ | (-65,-116) y3 `terrace` ✓ | (-64,-116) y3 `terrace` ✓ | (-63,-116) y3 `terrace` ✓ | (-61,-116) y3 `terrace` ✓ | (-58,-116) y3 `terrace` ✓ |
+| `B-side-west-rear` | 1 | (-53.5,44) y0 `ground` ✗ | (-53,44) y0 `ground` ✓ | (-52,44) y0 `ground` ✓ | (-51,44) y0 `ground` ✓ | (-49,44) y0 `ground` ✓ | (-46,44) y0 `ground` ✓ |
+| `B-side-west-south` | 0.9 | (-58.5,-300) y0 `ground` ✗ | (-58,-300) y0 `ground` ✓ | (-57,-300) y0 `ground` ✓ | (-56,-300) y0 `ground` ✓ | (-54,-300) y0 `ground` ✓ | (-51,-300) y0 `ground` ✓ |
+| `C-hall-bed-rear` | 2.1 | (0,236.5) y0.9 `ground` ✓ | (0,236) y0.9 `ground` ✓ | (0,235) y0.9 `ground` ✓ | (0,234) y0.9 `ground` ✓ | (0,232) y0.9 `ground` ✓ | (0,229) y0.9 `ground` ✓ |
+| `C-side-east-rear` | 1.5 | (47.5,250) y0.9 `ground` ✓ | (47,250) y0.9 `ground` ✓ | (46,250) y0.9 `ground` ✓ | (45,250) y0.9 `ground` ✓ | (43,250) y0.9 `ground` ✓ | (40,250) y0.9 `ground` ✓ |
+| `C-side-west-rear` | 1.5 | (-47.5,250) y0.9 `ground` ✗ | (-47,250) y0.9 `ground` ✓ | (-46,250) y0.9 `ground` ✓ | (-45,250) y0.9 `ground` ✓ | (-43,250) y0.9 `ground` ✓ | (-40,250) y0.9 `ground` ✓ |
+| `D-court1-hall` | 1.3 | (-243.5,-318) y0.4 `ground` ✗ | (-243,-318) y0.4 `ground` ✓ | (-242,-318) y0.4 `ground` ✓ | (-241,-318) y0.4 `ground` ✓ | (-239,-318) y0.4 `ground` ✓ | (-236,-318) y0.4 `ground` ✓ |
+| `D-court2-hall` | 1.3 | (-243.5,-158) y0.4 `ground` ✗ | (-243,-158) y0.4 `ground` ✓ | (-242,-158) y0.4 `ground` ✓ | (-241,-158) y0.4 `ground` ✓ | (-239,-158) y0.4 `ground` ✓ | (-236,-158) y0.4 `ground` ✓ |
+| `D-court3-hall` | 1.3 | (-243.5,2) y0.4 `ground` ✗ | (-243,2) y0.4 `ground` ✓ | (-242,2) y0.4 `ground` ✓ | (-241,2) y0.4 `ground` ✓ | (-239,2) y0.4 `ground` ✓ | (-236,2) y0.4 `ground` ✓ |
+| `D-court4-hall` | 1.3 | (-243.5,188) y0.4 `ground` ✗ | (-243,188) y0.4 `ground` ✓ | (-242,188) y0.4 `ground` ✓ | (-241,188) y0.4 `ground` ✓ | (-239,188) y0.4 `ground` ✓ | (-236,188) y0.4 `ground` ✓ |
+| `E-court1-hall` | 1.4 | (237.5,-320) y0.4 `ground` ✓ | (237,-320) y0.4 `ground` ✓ | (236,-320) y0.4 `ground` ✓ | (235,-320) y0.4 `ground` ✓ | (233,-320) y0.4 `ground` ✓ | (230,-320) y0.4 `ground` ✓ |
+| `E-court2-hall` | 1.4 | (242.5,-150) y0.4 `ground` ✓ | (242,-150) y0.4 `ground` ✓ | (241,-150) y0.4 `ground` ✓ | (240,-150) y0.4 `ground` ✓ | (238,-150) y0.4 `ground` ✓ | (235,-150) y0.4 `ground` ✓ |
+| `E-court4-hall` | 1.3 | (240.5,200) y0.4 `ground` ✓ | (240,200) y0.4 `ground` ✓ | (239,200) y0.4 `ground` ✓ | (238,200) y0.4 `ground` ✓ | (236,200) y0.4 `ground` ✓ | (233,200) y0.4 `ground` ✓ |
+
+### 15.3 表 B：已可达内景 25 栋（**Δ≈0 / |Δ|≤0.5 ⇒ 无需过渡**，明确标出）
+
+| slotId | 区 | 室内地面 y | 门前地面 y（可达外点） | 归属面（id/kind） | 门外点 (x, z) | Δ（可达口径） | 备注 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `B-gate-front` | B | 0.45 | 0.005555555555555536 | `ground:WK-F-belt-south` | (0, -404.5) | 0.444 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `B-hall-main` | B | 4.5 | 4.5 | `terrace:WK-B-terrace-tier3` | (0, -146.5) | 0 | **Δ=0（门外同高，已可达，无需过渡）** |
+| `C-annex-east` | C | 1.4 | 0.9 | `ground:WK-C-ground` | (54.5, 288) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `C-annex-west` | C | 1.4 | 0.9 | `ground:WK-C-ground` | (-54.5, 288) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `C-gate-inner` | C | 0.9 | 0.7676470588235293 | `ground:WK-B-ground-north` | (0, 75.5) | 0.132 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `C-hall-bed-main` | C | 2.4 | 2.4 | `terrace:WK-C-bed-terrace` | (0, 142.5) | 0 | **Δ=0（门外同高，已可达，无需过渡）** |
+| `C-side-east-main` | C | 1.7000000000000002 | 2.4 | `terrace:WK-C-bed-terrace` | (49.5, 168) | -0.7 | Δ 超阈但**已可达**（经其它侧/上层路线，见 §15.5-3） |
+| `C-side-west-main` | C | 1.7000000000000002 | 2.4 | `terrace:WK-C-bed-terrace` | (-49.5, 168) | -0.7 | Δ 超阈但**已可达**（经其它侧/上层路线，见 §15.5-3） |
+| `D-court1-house` | D | 0.9 | 0.4 | `ground:WK-D-ground` | (-176, -373.5) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `D-court2-house` | D | 0.9 | 0.4 | `ground:WK-D-ground` | (-176, -213.5) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `D-court3-house` | D | 0.9 | 0.4 | `ground:WK-D-ground` | (-176, -53.5) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `D-court4-house` | D | 0.9 | 0.4 | `ground:WK-D-ground` | (-176, 132.5) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `E-court1-house` | E | 0.9 | 0.4 | `ground:WK-E-ground` | (180.5, -364) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `E-court2-house` | E | 0.9 | 0.4 | `ground:WK-E-ground` | (180, -111.5) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `E-court3-annex` | E | 0.9 | 1.3 | `interior:WK-E-court3-hall-interior` | (265.5, 20) | -0.4 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `E-court3-hall` | E | 1.3 | 0.4 | `ground:WK-E-ground` | (237.5, 20) | 0.9 | Δ 超阈但**已可达**（经其它侧/上层路线，见 §15.5-3） |
+| `E-court3-house` | E | 0.9 | 0.4 | `ground:WK-E-ground` | (176, -39.5) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `E-court4-house` | E | 0.9 | 0.4 | `ground:WK-E-ground` | (180, 134.5) | 0.5 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `F-garden-hall-east` | F | 0.5 | — | — | — | None | 门外候选全在室内/通道面内（几何 Δ=0）⇒ 门内外同高 |
+| `F-garden-hall-north` | F | 0.8 | 0.5 | `gardenGround:WK-F-garden` | (0, 386.5) | 0.3 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `F-garden-hall-west` | F | 0.5 | — | — | — | None | 门外候选全在室内/通道面内（几何 Δ=0）⇒ 门内外同高 |
+| `F-gate-east` | F | 0.4 | 0.5733333333333334 | `ground:WK-F-berm-east` | (323.5, 0) | -0.173 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `F-gate-north` | F | 0.4 | 0.8 | `bridgeDeck:WK-F-bridge-north` | (0, 473.5) | -0.4 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `F-gate-south` | F | 0.4 | 0.8 | `bridgeDeck:WK-F-bridge-south` | (0, -473.5) | -0.4 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+| `F-gate-west` | F | 0.4 | 0.5733333333333334 | `ground:WK-F-berm-west` | (-323.5, 0) | -0.173 | |Δ|≤0.5：一步内（已可达，无需过渡） |
+
+### 15.4 分类：(a) 高差型 / (b) 口袋-通道型 / (c) 其它
+
+**判据（精确、可复算；只对不可达内景分类）**：
+
+- **(a) 高差型**：`|Δ(可达门外点)|` 超过求解器可跨阈值（`Δ>+0.5` 上台阶阈值 / `Δ<−0.6` 下台阶阈值）⇒ 需要过渡面（含**向下**过渡）。
+- **(b) 口袋/通道型**：`|Δ|` 在可跨区间内 **但**内景仍不可达（门口同高却进不去 = 封闭/无口/单向）。
+- **(c) 其它**：通道面外端 0.5–8m 内**找不到任何可达候选**（无法支撑该测量）。
+- **同栋可属多类**：`gap` 与 `pocket` 两布尔**独立计算** ⇒ 理论可 `gap ∧ pocket`；**本时点 dual = 2**（两处 `a-gap(neg)`：门前高差 1.5m **且**通道面↔室内面不可跨，见表 A 与 §15.5-4）。
+
+**每类栋数（本时点）**：(a) 高差型 **18 栋**（Δ>+0.5 的 **16** 栋、Δ=−1.5 的 **2** 栋）· (b) 口袋/通道型 **0 栋** · (c) 其它 **0 栋** · 双类 **2 栋**。
+
+**Δ 范围**：不可达 18 栋 Δ ∈ [-1.5, 2] m。**16 栋需要向上过渡（Δ 0.6–2.0）· 2 栋需要向下过渡（Δ=−1.5）**。
+
+**与 t88「封团者内/外地面同高」的分歧并列（不选边）**：
+- 本表**几何口径**列（不看可达性、取首个非 interior/passage 面）在本时点也不产生 Δ≈0 的不可达行（射线自通道面外端起算，第一站就在室外地面/台基上）。
+- t88 的“同高”若指**门内通道面与门外台基面**同高：`B-side-west-main/east-main` 的门内通道面 y=1.5，而通道面外端之外即 `WK-B-terrace-tier2`（y=**3.0**）⇒ 外面反而**高 1.5m**；真正与室内同高（1.5）的是 `WK-B-terrace-tier1`（中心 (0,−116)，实测**从起点可达 ✓**）——但它**不与门洞通道面相邻**（两处实测：通道面↔室内面不可跨、tier1 在另一侧）。这正是“两人都不完全对”的情形：**既不是单纯高差、也不是单纯口袋，而是两者叠加**（本卡按 dual 标注）。
+- **两套口径的读数都给出**，裁定（过渡登记以谁为基准）交主理人；我不选边。
+
+### 15.5 实测发现（交回派单，本卡不改 `src/**`）
+
+1. **`connectorStats.ramps = 0`（声明 32 条）**：走查层已引用 `layout.CONNECTORS`，但求解器**未把任何 connector 变成坡道/台阶过渡面** ⇒ `CXN-*` 对可达性**零贡献**；“门已通、人进不去”的直接机制之一。
+2. **`SLOT.door.center` 不是门脸点**（`B-side-west-main`：door.center=(−80,−116) vs 建筑东立面 x=−72 / 通道面 x[−72.6,−66]）⇒ 任何“沿 facing 从 door.center 取样”的工具都会从建筑内部往外穿、并可能取到室内/通道面而误判 Δ。**最小修法**：登记 `door.facade` 或在 CONTRACTS §4 写明“门外基准 = 通道面进深轴外端”，并补 `door.center` 的既有语义说明。
+3. **Δ 不是可达性的充分条件**：`C-side-west-main`/`C-side-east-main`（Δ=−0.7）、`E-court3-hall`（Δ=0.9）**Δ 超阈但已可达**（经其它侧/上层路线）⇒ 过渡登记应以 **“内景不可达” ∧ “门级 Δ”** 共同判定。
+4. **通道面 ↔ 室内面的跨越缺失**：v2 对 `B-side-west-main` 的逐点实测「通道面中心 可达(pathLen 434) / 室内面中心 probe ✓ 但 path ✗ / VP ✗」⇒ 两者之间缺乏可跨越的相邻格（通道面内伸 0.6m 与 1m 栅格的相对关系需 layout/core 复核）。
+
+### 15.6 无法支撑的测量点 + 最小改法
+
+- **口径迭代如实登记**：v1/v2 以 `door.center` 为基准（穿过建筑进深 14–21m）→ 作废；v3 误把通道面**长边**（门宽 26m）当门外法向 → 作废；**v4 以通道面进深轴（短边 6.6m）外端**为基准 ⇒ 43 栋全部得到可解释读数（本节表 A/B/15.2b 均为 v4）。
+- **仍无法支撑的**：`B-hall-main`、`C-hall-bed-main`、`F-garden-hall-west/east/north` 的外端 0.5–8m 内候选点全部落在室内/通道面内 ⇒ 主口径无“可达门外点”，本表以**几何口径 Δ=0** 记录并标注（这几栋均已可达，不影响过渡清单）。**最小改法**：为每栋有门建筑登记**门外锚点**（或 `door.facade`），使门外点 ≤3m 内可确定。
+
+### 15.7 sanity
+
+- `node scripts/audit.mjs` → **exit 0**：`主场景绘制调用 333 / 上限 350 ✓`、`可见三角面 306269 / 上限 1500000 ✓`、`结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`。
+- 原始读数（逐栋全字段 + 6 个候选点的 x/z/y/面/可达）：`/tmp/t100-delta4.json`。
+

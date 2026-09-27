@@ -412,7 +412,7 @@ function assertFocusInvariants(spec, label) {
 await runner.test('全部有门槽位：focus 取景规格均不落空/不退化（相机在盒外、距离 ≥ 入镜距离、数值有限）', () => {
   const { registry } = makeCore();
   const doorSlots = LAYOUT.SLOTS.filter((s) => s.hasDoor);
-  assertEqual(doorSlots.length, 53, `有门槽位应为 53 个（实际 ${doorSlots.length}）`);
+  assertEqual(doorSlots.length, 63, `有门槽位应为 63 个（实际 ${doorSlots.length}）`);
   const rows = [];
   for (const slot of doorSlots) {
     const building = registry.getBuilding(slot.id);
@@ -422,7 +422,7 @@ await runner.test('全部有门槽位：focus 取景规格均不落空/不退化
     rows.push({ id: slot.id, kind: slot.kind, degenerate: info.degenerate, dist: info.dist });
   }
   const degenerate = rows.filter((r) => r.degenerate);
-  runner.info(`53 槽位 focus 取景：距离 ${Math.min(...rows.map((r) => r.dist)).toFixed(1)}–${Math.max(...rows.map((r) => r.dist)).toFixed(1)}m；退化包围盒 ${degenerate.length} 个${degenerate.length ? '（' + degenerate.map((r) => r.id).join(',') + '）' : ''}`);
+  runner.info(`63 槽位 focus 取景：距离 ${Math.min(...rows.map((r) => r.dist)).toFixed(1)}–${Math.max(...rows.map((r) => r.dist)).toFixed(1)}m；退化包围盒 ${degenerate.length} 个${degenerate.length ? '（' + degenerate.map((r) => r.id).join(',') + '）' : ''}`);
 });
 
 await runner.test('退化包围盒防护（突变证明）：零厚度/NaN 体量不得让相机落进建筑（旧公式在此类输入上会塌缩）', () => {

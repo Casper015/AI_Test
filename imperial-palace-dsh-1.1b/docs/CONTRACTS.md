@@ -4,14 +4,14 @@
 >
 > | 项目 | 版本 |
 > | --- | --- |
-> | 契约版本 | `CONTRACTS v1.0.14` |
+> | 契约版本 | `CONTRACTS v1.0.15` |
 > | 风格基线 | `STYLE_BASELINE v1.0.0`（见 `docs/STYLE_GUIDE.md`） |
 > | `src/shared/config.js` | `CONFIG_VERSION 1.0.6` |
 > | `src/shared/layout.js` | `LAYOUT_VERSION 1.0.0` |
 > | `src/kit/index.js` | `KIT_VERSION 1.0.1` |
 > | 参考 | `imperial-palace-plan.md` §2.3 §3.1 §6.1 §6.2 §6.3 §6.4 §7.1 §8.2 |
 >
-> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.14` ⇄ `CONFIG_VERSION 1.0.6` ⇄ `LAYOUT_VERSION 1.0.0` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
+> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.15` ⇄ `CONFIG_VERSION 1.0.6` ⇄ `LAYOUT_VERSION 1.0.0` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
 > 以上四项均以**运行时读出值**为准并用命令核对（见 §3.4.8 末尾与 `docs/handoff-contracts-fix.md`）：
 > `node -e "Promise.all([import('./src/shared/config.js'),import('./src/shared/layout.js'),import('./src/kit/index.js')]).then(([c,l,k])=>console.log(c.CONFIG_VERSION,l.LAYOUT_VERSION,k.KIT_VERSION))"` → `1.0.3 1.0.0 1.0.1`。
 > 下游回报必须写明这组版本；不匹配即视为旧版产物。
@@ -47,6 +47,7 @@
 > - `CONTRACTS v1.0.9`（2026-09-26，t49）：**背景引用改为「实际落屏天空带」**（`backgroundDisplayedTopHex ↔ HorizonHex`），配置清屏色降为仅参考并纳入 **Δ 监控**（Δ > `--content-tol` ⇒ 告警）；§12.1.1 更新优先级表；**关闭 t46 开放项**；复算 `fp`（夜）26.52% → **5.95%**（PASS）、`axis`（夜）走“无天空视角”**15.10%**（PASS）。阈值与分类未动。
 > - **v1.0.12（t81 / T1.28；F6 裁定 (a)）**：§5.2 内景机位口径递增为「**每栋可进入建筑 1 个 `interior` 机位**」（集合 43 栋 = 殿 14 + 配殿/配房 23 + 门殿 6；排除 4 角楼 / 10 亭 / 10 院门），映射由 `INTERIOR_BY_SLOT` 显式给出；新增 §5.2.1「与 `LAYOUT 1.1.4` 实际值对照」表（interior 43 / walkable 112 / viewpoints 61 / FP_ROUTE 50 / CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14）并写明取代关系；**历史条目只追加、旧口径保留并附时点声明**；连通性归 t77、几何开门归 t69/三区/t66，**本版本不宣称“均已可进入”**。
 > - **v1.0.14（t97 / T1.34）**：新增 §5.2.2 —— `door.sillY` = **门外门槛面标高**（`sillY = zoneGroundY(zone) + 本地台基`）；修复 24 栋 C/D/E 漏加区域地坪；`WK-*-interior.y` / `WK-*-door-passage.y` / `INTERIOR_BY_SLOT.groundY` 三者逐栋相等（43/43）；例外表 `DOOR_SILL_EXCEPTIONS` 3 类 6 条（F 四城门双标高 + `C-hall-bed-main` + `C-gate-inner` 绝对标高 wart）。LAYOUT 1.1.8。
+> - **v1.0.15（t103 / T1.38）**：新增 §4.1.1（`door.center` 为建筑中心 / **`door.facade` 为门外锚点**，`y` 与 `sillY` 同源；贴门取地面一律用 `facade`）；§5.2.1 与 §6.4 的 `WALKABLE` 由 **112 → 157**（+43 门外过渡台阶 t102 + 2 亭入口门槛 t103）；**10 座开敞亭可通行化**（`hasDoor:true` ⇒ `OBSTACLES.blocks='exceptDoor'`，与院门同类）。
 > **数值唯一来源**：所有色板、模数、间距、时长、标高、预算、种子只能取自 `src/shared/config.js`；
 > 所有建筑槽位、院落、连接、道路、可行走面、障碍、视角只能取自 `src/shared/layout.js`。
 > 禁止在区域/核心/UI 代码里散落硬编码数值；需要新数值时先登记（递增版本）再消费。
@@ -421,6 +422,13 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 - `layout.totalHeight` 只可用于：障碍盒高度初值、LOD 分档粗估计、预算估算；差异不由测试断言约束（测试只断言它是有限正数）。
 - 若某处确实需要"精确到米"的高度（例如门洞净高、台基高），请从 `terraceH`、`door.height`、`MODULES` 取值，而不是 `totalHeight`。
 
+### 4.1.1 `door.center` 与 `door.facade` 的区别（t102/F3，`CONTRACTS v1.0.15`）
+
+- **`door.center` = 建筑中心**（**不是门脸点**）——实证：`B-side-west-main` 的 `door.center = (-80,-116)`，而其东立面在 `x = -72`、门洞通道面 `x ∈ [-72.6, -66]`。
+- **`door.facade` = 门外锚点**（唯一门外基准）= **通道面进深轴（短边）外端中心** = 外墙面向外 **6.0m**，字段 `{ x, z, y, outward, note }`；`y` 与 `door.sillY` 同源（= 区域地坪 + 本地台基）。
+- **纪律**：任何“贴门取地面 / 测量门外 Δ / 登记过渡”的工具**必须以 `facade` 为基准**；以 `center` 起算会穿过建筑进深 14–21m（t100 口径 v1/v2/v3 三次作废的根因，详见 `docs/report-completeness.md §15.6`）。
+- **历史只追加**：本语义在 `LAYOUT ≤1.1.8` 不存在此字段，自 `1.1.9`（t102）起登记。
+
 ### 4.2 等级-屋顶白名单（机器守卫，`CONFIG 1.0.1` 起）
 
 每个槽位必须同时满足：
@@ -477,7 +485,7 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 | 量 | 旧文本口径 | **当前实测（`LAYOUT 1.1.4`）** | 取代关系 |
 | --- | --- | --- | --- |
 | `interior` 机位 | B/C 各 1（共 2） | **43**（每栋可进入建筑 1 个） | §5.2 已改，旧口径降为历史真值 |
-| `WALKABLE` 条数 | 28 | **112**（28 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿 + 43 门洞通道面） | §6.4 已按实测更新（t79），本条再确认 |
+| `WALKABLE` 条数 | 28 | **157**（112 + **43 门外过渡台阶 t102** + **2 亭入口门槛 t103**） | t103 按当前树实测更新（旧值 112 降为历史真值） |
 | `VIEWPOINTS` | 20 | **61**（zone 7 / fp-spawn 5 / interior 43 / focus-extra 6） | 取代旧普查值 |
 | `FP_ROUTE` | 9 | **50**（9 基础 + 41 门内走查点 + …由派生统一给出） | 取代旧普查值 |
 | `CONNECTORS` | 32 | **32**（未变；**建筑自身的门不是 connector**） | 不变 |
@@ -586,7 +594,7 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 - 跳跃：**禁用**（`config.INTERACTION.jump.enabled = false`），避免掉出宫城；`clampToEnvelope = true`，玩家不得离开 `[±420, ±560]` 外侧地形范围，也不得越过城墙。
 - 第一人称/相机：`camera.near` 不是碰撞替代品。
 
-### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，当前 **112 面**：ground/terrace/interior 43/bridgeDeck/gardenGround/outerTerrain/**passage 43**）
+### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，当前 **157 面**：ground/terrace/interior 43/bridgeDeck/gardenGround/outerTerrain/**passage 43**/**过渡台阶 43（t102）**/**亭门槛 2（t103）**）
 
 外侧地形 4 段 + 墙外岸台 4 段 + 四桥桥面 + 南/北门内侧带 + 御花园地坪 + B 广场/主殿侧地面/三层台基顶/金銮殿内景地面/主殿北地面 + C 后宫地面/寝殿台基顶/寝殿内景地面 + D/E 侧院地坪。
 

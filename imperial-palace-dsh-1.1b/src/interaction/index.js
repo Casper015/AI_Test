@@ -110,6 +110,7 @@ export function createInteraction({
     stuckSeconds: 0,
     stuckIntent: false,
     stuckMoved: 0,
+    stuckSpeed: 0,
     stuckIntentSource: 'internal',
     inputEvents: 0,
     traversalGuarded: false,
@@ -149,6 +150,15 @@ export function createInteraction({
     start: options.traversalStart ?? null,
   });
   const STUCK_SECONDS = options.stuckSeconds ?? 1.5;
+  /**
+   * t104：单帧"实得位移"灵敏度 —— 低于该值视为**没有移动**。
+   * 取 1cm/帧（≈0.6 m/s @60fps）的依据：正常步行 3–6 m/s ⇒ 每帧 5–10cm，远大于阈值；
+   * 而被墙顶住时的**数值蠕动**（求解器滑动衰减残差，实测 ~0.05cm/帧）远小于阈值。
+   * 注意：这是"检测灵敏度"，`STUCK_SECONDS=1.5s` 判定阈值与其它判据一概未动。
+   */
+  const STUCK_MIN_MOVED = options.stuckMinMoved ?? 0.01;
+  /** t104：帧率无关的"没在移动"分界（m/s）。步行 3–6 m/s ⇔ 顶墙蠕动 <0.1 m/s。 */
+  const STUCK_MIN_SPEED = options.stuckMinSpeed ?? 0.6;
   const warmupRowsPerTick = options.traversalWarmupRows ?? 6;
   let stuckFlag = false;
   let traversalProblems = null;
@@ -647,9 +657,10 @@ export function createInteraction({
       const moved = lastStuckPos ? Math.hypot(pos.x - lastStuckPos.x, pos.z - lastStuckPos.z) : 0;
       lastStuckPos = { x: pos.x, z: pos.z };
       const intent = movementKeys.size > 0;
-      const stuck = solver.noteStuckTick(dt, { intent, moved, threshold: STUCK_SECONDS });
+      const stuck = solver.noteStuckTick(dt, { intent, moved, threshold: STUCK_SECONDS, minMoved: STUCK_MIN_MOVED, minSpeed: STUCK_MIN_SPEED });
       stats.stuckIntent = stuck.intent;
       stats.stuckMoved = stuck.moved;
+      stats.stuckSpeed = stuck.speed;
       stats.stuckIntentSource = stuck.source;
       stats.stuckSeconds = stuck.seconds;
       if (stuck.stuck && !stuckFlag) {
@@ -806,11 +817,14 @@ export function createInteraction({
         stuckSeconds: solver.traversalState().stuckSeconds,
         stuck: stuckFlag,
         stuckThreshold: STUCK_SECONDS,
+        stuckMinMoved: STUCK_MIN_MOVED,
+        stuckMinSpeed: STUCK_MIN_SPEED,
         nearestSafePoint: traversal.ready && lastEscapeProbe ? traversal.nearestSafePoint(lastEscapeProbe.x, lastEscapeProbe.z) : null,
         lastEscape: stats.lastEscape,
         // t104：卡死检测的真实路径输入（浏览器 ?stats=1 / __PALACE_UI__.stats().traversal 可核对）
         stuckIntent: stats.stuckIntent,
         stuckMoved: stats.stuckMoved,
+        stuckSpeed: stats.stuckSpeed,
         stuckIntentSource: stats.stuckIntentSource,
         movementKeysDown: [...movementKeys],
         solverStepAttempts: solver.traversalState().attempts,

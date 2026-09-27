@@ -31,7 +31,7 @@
       },
       "executionPrompt": "项目：紫禁天朝·完整皇宫 3D 交互项目。\n根目录（含空格，命令必须加引号）：\"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3\"（下称 ROOT）。产物只能写在 ROOT 内；严禁修改同级 imperial-palace/、imperial-palace copy/、imperial-palace copy 2/ 及 AI_Test 其他任何文件（仅可只读参考）。\n必读：ROOT/imperial-palace-plan.md（§2 坐标与连接、§3 风格与光照、§6.1 契约、§6.3 光照、§6.4 八视角与第一人称、§7.2 批次、§8.2 性能预算）、ROOT/docs/CONTRACTS.md、ROOT/src/shared/*。\n开工前在 ROOT/docs/handoffs/<task-id>.md 写开工回执（已读版本/可写范围/依赖/冲突），完成后写交付回执（文件清单、接口、实测命令与真实输出、未验证项）。\n技术约束：Node v26；唯一依赖是本地内置 ROOT/public/vendor/three（three r169，含 OrbitControls、BufferGeometryUtils、postprocessing）。禁止 npm install；不得要求必需的网络资源。渲染必须可用 file:// 之外的方式通过 HTTP 预览，禁止绝对路径引用。\n纪律：只改任务 inScope 内文件；index.html、src/shared/*、tests/run.mjs、tests/harness.mjs 不归你，需要改动先报告主理人；完成前必须自己跑通 verify 命令并粘贴真实输出；不得伪造截图/性能数据；无法验证的项写“未验证”。\n你是唯一拥有 scene 挂载、renderer/composer、全局光照、相机装置与动画循环的人；其他区域只提供 createZone(ctx) 返回的未挂载 Group。注意：本机文件沙箱会阻止 headless Chrome 生成截图（报 Failed to create a unique user data directory for headless），截图脚本必须写清失败诊断，并且不能把截图当作唯一验证手段。",
       "joinedAt": 1790416546657,
-      "status": "idle"
+      "status": "working"
     },
     {
       "id": "bdf6ff33-fac9-472f-afe2-9979c49d2278",
@@ -45,7 +45,7 @@
       },
       "executionPrompt": "项目：紫禁天朝·完整皇宫 3D 交互项目。\n根目录（含空格，命令必须加引号）：\"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3\"（下称 ROOT）。产物只能写在 ROOT 内；严禁修改同级 imperial-palace/、imperial-palace copy/、imperial-palace copy 2/ 及 AI_Test 其他任何文件（仅可只读参考）。\n必读：ROOT/imperial-palace-plan.md（§3 共同风格基线、§4 资源流程、§5.1 构件库、§6.1 契约、§8.2 预算）、ROOT/docs/CONTRACTS.md、ROOT/src/shared/config.js、ROOT/src/shared/layout.js。\n开工前在 ROOT/docs/handoffs/<task-id>.md 写开工回执（已读版本/可写范围/依赖/冲突），完成后写交付回执（文件清单、接口、实测命令与真实输出、未验证项）。\n技术约束：Node v26；唯一依赖是本地内置 ROOT/public/vendor/three（three r169 + addons）。禁止 npm install；不得引入必需的网络资源或来源不明素材。优先程序化建模；如确需第三方素材，只能使用许可允许且可离线交付的资源，并在 docs/ASSET_CREDITS.md 记录来源/作者/许可/处理方式。\n纪律：只改任务 inScope 内文件；src/shared/* 不归你（缺参数先报告主理人）；完成前必须自己跑通 verify 命令并粘贴真实输出；不得伪造数据；无法验证的项写“未验证”。\n你的构件库是 B/C/D/E/F 五个区域唯一的建模语言，形制一致性（庑殿顶长正脊+四面坡、飞檐、斗栱、金瓦、朱柱、青绿彩画、白石台基栏杆）比单件精美更重要。你同时负责 tests/harness.mjs：它要能在 Node 里为任意区域构造 createZone 所需的 ctx，让区域作者不依赖浏览器即可自测。",
       "joinedAt": 1790416546686,
-      "status": "idle"
+      "status": "working"
     },
     {
       "id": "c3475d1b-61de-404e-8f9e-aeebc511f506",
@@ -59,7 +59,7 @@
       },
       "executionPrompt": "项目：紫禁天朝·完整皇宫 3D 交互项目。\n根目录（含空格，命令必须加引号）：\"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3\"（下称 ROOT）。产物只能写在 ROOT 内；严禁修改同级 imperial-palace/、imperial-palace copy/、imperial-palace copy 2/ 及 AI_Test 其他任何文件（仅可只读参考）。\n必读：ROOT/imperial-palace-plan.md（§2.3 边界与连接规则、§3 风格、§5.2 中轴前朝、§6.1 契约、§6.4 机位登记、§7.1、§8.3）、ROOT/docs/CONTRACTS.md、ROOT/docs/STYLE_GUIDE.md、ROOT/src/shared/layout.js（你的区域边界与槽位以此为准，不得自行扩张）、ROOT/src/kit/*、ROOT/tests/harness.mjs。\n开工前在 ROOT/docs/handoffs/<task-id>.md 写开工回执（已读版本/可写范围/依赖/冲突），完成后写交付回执（文件清单、接口、实测命令与真实输出、未验证项）。\n技术约束：Node v26；唯一依赖是本地内置 ROOT/public/vendor/three（three r169）。禁止 npm install；不得引入必需的网络资源。只能使用 kit 提供的构件与材质，缺构件向 kit-engineer 提需求，不自建私有素材或私有坐标。\n纪律：只写 src/zones/forecourt.js 与 tests/zone-forecourt.test.mjs 及自己的 handoff；src/shared/*、main.js、kit 不归你。完成前必须跑通 verify 命令并粘贴真实输出；不得伪造数据；无法验证的项写“未验证”。",
       "joinedAt": 1790416546753,
-      "status": "idle"
+      "status": "working"
     },
     {
       "id": "6041af0d-4a8c-4e3e-9453-a2a7dad86dc3",
@@ -2274,11 +2274,12 @@
         "t102",
         "t103",
         "t104",
-        "t105"
+        "t105",
+        "t106"
       ],
       "attempt": 0,
       "createdAt": 1790416796886,
-      "updatedAt": 1790466156726,
+      "updatedAt": 1790466945742,
       "kind": "integration",
       "objective": "把五个区域、构件库、核心与 UI 集成为一整座可运行的皇宫：main.js 装配真实区域、构建 dist 并验证资源路径、README 命令实测可用、§8.3 清单逐条给出结论，形成可交付的独立项目文件夹。",
       "inScope": [
@@ -9129,14 +9130,14 @@
       "id": "t65",
       "subject": "T2.17 内核多内景支持：interiorBoundsFor 按机位解析 + interiorViewpointId 全链路",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t60（layout 为 47 栋注册 `WK-<slotId>-interior` / `VP-<slotId>-interior` / `WP-fp` / `visitable` 与建筑→机位映射）。\n\n来源：**用户新增需求**（47 栋可进入内景）引发的**内核缺口**：现有 `interiorBoundsFor(area)` 只按 `zone` 过滤 `WALKABLE(kind:'interior')`——**一个区只有一个内景时可用**；47 栋落地后同区会有多个内景，按区夹取会把相机夹到**并集**（错误包围盒）。这是本卡的核心。\n\n必做：\n1. `interiorBoundsFor` 改为按**机位/室内地面**解析；同一区两个内景必须得到**不同且各自正确**的包围盒；给出\\\"旧按区实现下该用例失败\\\"的证据（突变证明）。\n2. `store.view.interiorViewpointId` 全链路生效（不按 area 猜）；与 t60 的建筑→机位映射一致；缺失时明确回退+告警。\n3. FP 从门洞进出任意内景可走、不穿墙、不掉出；进出恢复语义与既有 FP 一致（<1e-6）。\n4. 不变量：唯一 renderer/scene/camera/循环；core 五套测试全绿、断言只增不减；audit exit 0。\n5. verify 两条；只改 inScope。",
-      "status": "failed",
-      "assignee": "core-engineer",
+      "status": "in_progress",
+      "assignee": "zone-forecourt",
       "dependencies": [
         "t74"
       ],
-      "attempt": 1,
+      "attempt": 2,
       "createdAt": 1790457559266,
-      "updatedAt": 1790459350162,
+      "updatedAt": 1790469368986,
       "kind": "repair",
       "objective": "让内核支持一区多内景：interiorBoundsFor 按机位/室内地面解析（同区多内景各自正确夹取），interiorViewpointId 全链路生效，FP 可从门洞进出任意内景并正确恢复。",
       "inScope": [
@@ -9184,7 +9185,6 @@
         "计划 §6.4 内景固定验收机位",
         "CONTRACTS §5.3 内景相机夹取"
       ],
-      "attemptId": "b4d61303-f573-4c3a-9a7a-0c0178842d77",
       "reassigning": false,
       "revisions": [
         {
@@ -9202,90 +9202,6 @@
           }
         }
       ],
-      "output": "t65 **内核多内景支持已完成并通过本卡 inScope 全部断言**（core-camera 14/14、core-collision 新增两条通过、突变证明旧实现必失败），但**verify（`node tests/run.mjs`）因全树阻断而红（exit=1，7/20）⇒ 按工具规则本卡必须计为 failed**。\n\n**阻断根因（非本卡代码路径，已由主理人确认并开 t79）**：t75 新增 LAYOUT 1.1.4 的 `kind:'passage'`（43 条门洞通道面）未同步消费方白名单 `src/core/context.js:71 WALKABLE_KINDS` ⇒ 区域契约校验全失败 ⇒ 浏览器 `[palace] 装配完成：区域 [] · 注册建筑 0 栋` ⇒ core.test / core-collision / core-interior / core-walls / interaction / zone-* 同因失败。**`context.js` 不在 t65 inScope**，我未改（避免越界）。\n\n**本卡实际交付（inScope 6 文件，均已落盘）**：\n- `interiorBoundsFor` 由按 zone 改为显式寻址 `{viewpointId|surfaceId|slotId}` / `'WK-…'`/`'VP-…'`；无效 id → null；legacy 区名保留但 warn + ambiguous（`layout-slice.js` 新增只读解析层，`INTERIOR_SURFACE_COUNT=43`）；\n- 实测：金銮殿 → `WK-B-hall-main-interior`，**同区** B-hall-mid → `WK-B-hall-mid-interior`，两盒不同、各自机位在自己盒内、不串栋；四种寻址等价；\n- **突变证明**：换回旧\"按 zone 取第一面\"→ 同套用例 **10/14**（关键红：同区两内景实际都得到 `WK-B-hall-main-interior`）；还原后 14/14；\n- `interiorViewpointId` 全链路（请求携带标识符 → `store.view` → 相机唯一权威；缺失/无效回退 + warn + `INTERIOR_ADDRESS_STATS` 计数；`rig.describe()` 暴露 `interiorViewpointId/interiorSlotId/interiorResolvedBy`，exitFp 一并恢复）；`slotId` 次优来源按 layout 映射解析；\n- FP 进出同区两内景：`mode`/机位/`position`/`target`/`fov` **<1e-6 逐值恢复**；四向共 160 步真实碰撞：掉出 0 次、越出室内盒的点全部落在门洞净空内；\n- 不变量与零渲染影响：只改 core camera/layout-slice/state；audit 预算项 293/350 批次、288,789 三角面（与 t58 逐值相同）。\n\n**待 t79 落地后即可复验**：`'passage'` 加入 `WALKABLE_KINDS` 后，本卡的两套 inScope 测试无需改动即可保持绿，全树红项应随之消退（run.mjs 的 7/20 由同一根因主导）。回执 `docs/handoff-t2-interiors.md` 已写明交付、突变证明、回退链、FP 证据与外部归因。",
-      "findings": [
-        {
-          "id": "t65-F1",
-          "severity": "blocker",
-          "problem": "全树阻断：LAYOUT 1.1.4（t75）新增的 `kind:'passage'`（43 条门洞通道面）不在 `src/core/context.js:71` 的 `WALKABLE_KINDS` 白名单内 ⇒ 区域契约校验全部失败 ⇒ 浏览器装配出 `区域 [] · 注册建筑 0 栋`（截图空白），`node tests/run.mjs` 仅 7/20（core.test / core-collision / core-interior / core-walls / interaction / zone-* 同因失败）。这也使 t65 的 verify 无法通过。",
-          "requiredFix": "由 t79（T2.20）在 `WALKABLE_KINDS` 增补 `'passage'`，并加常驻跨模块守卫（layout 的所有 `WALKABLE[].kind` ⊆ core 白名单）+ 突变证明 + CONTRACTS §6.1 语义与版本递增。`src/core/context.js` 不在 t65 inScope，本卡未改。",
-          "file": "imperial-palace-dsh-1.1b/src/core/context.js",
-          "line": 71,
-          "resolved": false
-        },
-        {
-          "id": "t65-F2",
-          "severity": "medium",
-          "problem": "`tests/core.test.mjs` 内存在与 1.1.3（43 内景）冲突的旧硬编码期望：`B/C 各 1 个 interior 机位：期望 2，实际 43`。该测试文件不在 t65 inScope，未改。",
-          "requiredFix": "由该测试文件的负责人把期望改为与 `INTERIOR_BY_SLOT`（43 条）一致的动态断言（或按区计数），不得为迁就旧期望而回退 layout。",
-          "file": "imperial-palace-dsh-1.1b/tests/core.test.mjs",
-          "line": 483,
-          "resolved": false
-        },
-        {
-          "id": "t65-F3",
-          "severity": "medium",
-          "problem": "`tests/core-walls.test.mjs` 与 `tests/core-audit.test.mjs` 直接 `MODULE_NOT_FOUND`（import 的模块在并发重构中被改名/删除）⇒ 无法作为本卡的回归基线。",
-          "requiredFix": "由对应测试/模块的负责人修正 import 路径或恢复模块；属于并发重构的收尾。",
-          "resolved": false
-        },
-        {
-          "id": "t65-F4",
-          "severity": "low",
-          "problem": "`node scripts/audit.mjs` exit=0 但结论行 `6 项未通过`，日志可见失败集中在 LOD/质量档族（相机距 60m/260m 激活档与单档逐值相等 ✗、单档 near/mid/far=264/252/72 批次）。本卡不触及 LOD/质量档代码路径，未改。",
-          "requiredFix": "由质量档/LOD 卡的负责人对齐“激活档 vs 单档”口径或修正断言；t65 仅如实上报。",
-          "resolved": false
-        }
-      ],
-      "changedPaths": [
-        "imperial-palace-dsh-1.1b/src/core/camera.js",
-        "imperial-palace-dsh-1.1b/src/core/layout-slice.js",
-        "imperial-palace-dsh-1.1b/src/core/state.js",
-        "imperial-palace-dsh-1.1b/tests/core-camera.test.mjs",
-        "imperial-palace-dsh-1.1b/tests/core-collision.test.mjs",
-        "imperial-palace-dsh-1.1b/docs/handoff-t2-interiors.md"
-      ],
-      "acceptanceResults": [
-        {
-          "criterion": "多内景寻址：interiorBoundsFor 按机位/地面解析；同区两内景各自正确；回归用例 + 旧实现必失败证据",
-          "status": "passed",
-          "evidence": "node tests/core-camera.test.mjs → **通过 14/14**（t65 前 9/9，断言只增不减）；金銮殿盒 WK-B-hall-main-interior（x −36..36/z −134..−98/y 4.5） vs 同区 B-hall-mid 盒 WK-B-hall-mid-interior（x −25.4..25.4/z −33.4..−6.6/y 2）不同且各自机位在自己盒内；四种寻址等价；无效 id → null。**突变证明**：换回旧按区实现 → 同套用例 10/14（实际两者都是 WK-B-hall-main-interior）；还原后 14/14。"
-        },
-        {
-          "criterion": "store.view.interiorViewpointId 全链路（不按 area 猜；与 layout 映射一致；缺失时回退+告警）",
-          "status": "passed",
-          "evidence": "请求携带 viewpointId/slotId → store.view.interiorViewpointId/interiorSlotId → 相机唯一权威；缺失 ⇒ fallbackNoId+1 且 resolvedBy='fallback(area=B,legacy-alias)'；无效 id ⇒ fallbackBadId+1 且实际机位为已登记机位；仅给 slotId=C-hall-bed-main ⇒ 解析出 VP-C-interior（盒 WK-C-bed-interior）；describe() 暴露 interiorViewpointId/interiorSlotId/interiorResolvedBy（exitFp 一并恢复）。"
-        },
-        {
-          "criterion": "第一人称进出内景（<1e-6 逐值恢复；不穿墙不掉出）",
-          "status": "passed",
-          "evidence": "core-collision 两条新增用例均通过：同区两内景各自 enterFp→exitFp 后 mode/机位/position/target/fov 均 assertClose(…,1e-6)；四向共 160 步真实碰撞求解：floorYAt 为空 0 次，越出室内盒的采样点全部落在门洞净空内（insideObstacleDoor）。"
-        },
-        {
-          "criterion": "不退化不变量；core 五套全绿；audit exit 0 且数字如实",
-          "status": "failed",
-          "evidence": "**未达成**：run.mjs 的红项来自全树阻断（kind:'passage' 不在 src/core/context.js 的 WALKABLE_KINDS 白名单 ⇒ 区域契约校验失败 ⇒ 注册 0 栋）。本卡 inScope 内：core-camera 14/14、core-collision 新增两用例 ✓；不变量未动（零 new Scene/相机/renderer/循环）；audit 预算项 293/350 批次、288,789 三角面（与 t58 逐值相同）。详见 findings t65-F1…F4。"
-        },
-        {
-          "criterion": "run.mjs 与 audit 全绿或如实列出仍红项与非本卡归因；只改 inScope",
-          "status": "passed",
-          "evidence": "`node tests/run.mjs` → **exit=1，通过 7/20**；`node scripts/audit.mjs` → exit=0 但结论“6 项未通过”（LOD/质量档族）。仍红项均为非本卡归因（findings t65-F1…F4）。changedPaths 仅 6 个 inScope 文件；未触碰 src/shared/**、src/kit/**、src/zones/**、src/ui/**、src/interaction/**、src/main.js、src/core/context.js。"
-        }
-      ],
-      "commandsRun": [
-        {
-          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/run.mjs",
-          "status": "failed",
-          "exitCode": 1,
-          "evidence": "exit=1；`通过 7 / 20，失败 13`。主导原因：LAYOUT 1.1.4 的 kind:'passage' 未被 src/core/context.js 的 WALKABLE_KINDS 接受 ⇒ 区域契约校验全失败、浏览器装配 0 区域/0 建筑。本卡 inScope 内：core-camera 14/14 ✓、core-collision 新增两用例 ✓。"
-        },
-        {
-          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs",
-          "status": "passed",
-          "exitCode": 0,
-          "evidence": "exit=0；主场景绘制调用 293/350 ✓；可见三角面 288,789/1,500,000 ✓（与 t58 逐值相同）；但结论行“6 项未通过”，日志可见集中于 LOD/质量档族。"
-        }
-      ],
       "supplementalEvidence": [
         {
           "at": 1790459398790,
@@ -9294,7 +9210,8 @@
           "attemptId": "b4d61303-f573-4c3a-9a7a-0c0178842d77",
           "note": "[captain 复核与裁定 · t65] 1) **实质交付成立且证明充分**：`interiorBoundsFor` 由\"按 zone 取第一个面\"改为**显式寻址**（`{viewpointId|surfaceId|slotId}` / 直接 `WK-…`/`VP-…`；无效 id → `null`；legacy 区名保留但 `warn + ambiguous`），`layout-slice.js` 增只读解析层（`INTERIOR_SURFACE_COUNT=43`）。**突变证明是这份交付最有价值的部分**：换回旧按区实现 → 同套用例 **10/14**，关键红为\"**同区两内景实际都得到 `WK-B-hall-main-interior`**\"（正是我在派卡时预判的并集夹取缺陷），还原后 **14/14**；`core-camera` 断言 9→14 只增不减。`interiorViewpointId` 全链路 + 降级计数（`fallbackNoId`/`fallbackBadId` 绝不把无效 id 当实际机位）+ `describe()` 暴露 `interiorResolvedBy`；FP 进出同区两内景 `mode/position/target/fov` **<1e-6 逐值恢复**、四向 160 步真实碰撞**掉出 0 次**；audit 与 t58 **逐值相同**（293/350、288,789）。2) **计 failed 的归因完全在外部**：`run.mjs 7/20` 的主导根因是 **t75 引入的 `kind:'passage'` 未被 `src/core/context.js:71` 的 `WALKABLE_KINDS` 接受**（⇒ 区域契约全败 ⇒ `区域 [] · 注册建筑 0 栋`）；`context.js` **不在 t65 的 inScope**，它按纪律**未越界修改**，只登记为 finding `t65-F1`（另 F2=旧硬编码期望、F3=core-walls/core-audit `MODULE_NOT_FOUND`、F4=audit 的 LOD/质量档族 6 项）。**我确认这个处置正确**——若它当时顺手改 `context.js`，\"谁改了冻结契约\"就会失去可追溯性。3) **责任认定在我**：`kind:'passage'` 是**我在 t75 卡里建议的**，却只派成布局卡（verify 仅 `layout.test.mjs`，自洽却看不到下游）；共享枚举新增取值必须同时改消费方白名单与契约，这一步我漏了（同 t21/t26/t14/t45/t13 的 inScope/口径漏项，已是第六次同类）。4) **裁定**：本卡维持 failed 但**其实质交付被接受**（如 t33/t40/t21 的处理：结论不回退、记录可追溯）；`t79`（白名单 + **跨模块 kind 守卫**：断言 layout 所有 `WALKABLE[].kind` ⊆ core 白名单 + 突变证明）与 `t76`（core 侧期望同步）**在台账上取代其门禁状态**。**依赖重排**：t76 由 [t65,t75] 改为 [t75,t79]（其 verify 需 t79 先落地）、t78（focus 空白）由 [t65] 改为 [t79]（否则测到的空白是 F5 造成的、不是真因）、t66（V3 端到端）由 [t62,t63,t64,t65] 改为 [t62,t63,t64]（t65 实现已在盘上）、t14 依赖中移除 t65——以免终态失败阻塞发布。5) 它提出\"若要一个绿版 t65，请派独立复验卡\"——**暂不派**：其实现已被 `core-camera 14/14` + 突变证明覆盖，且 `t79`/`t76` 落地后 `core-collision`/`core-camera` 会自动转绿；如最终交付需要一张绿的实现卡，我届时再以独立复验卡补（不用新 attempt 给终态卡追加证据，符合 append-only 纪律）。"
         }
-      ]
+      ],
+      "attemptId": "93a05d5f-a88b-477a-a0eb-19f2b6598dbd"
     },
     {
       "id": "t66",
@@ -9314,11 +9231,12 @@
         "t100",
         "t101",
         "t102",
-        "t103"
+        "t103",
+        "t106"
       ],
       "attempt": 0,
       "createdAt": 1790457588759,
-      "updatedAt": 1790465851225,
+      "updatedAt": 1790466945742,
       "kind": "work",
       "objective": "第三方独立验证用户新增需求：47 栋封闭建筑\"点击→左上角详情面板→按 F 进入该建筑内景\"，含逐栋判定、不可进入项反馈、内景三时辰可读性（真天空掩码口径）、性能预算与碰撞抽查。",
       "inScope": [
@@ -10616,14 +10534,14 @@
       "id": "t77",
       "subject": "V1.1 验收套件期望同步 + 43 处内景连通性独立复验",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t75（门洞通道面：使 43 处内景与室外连通）。\n\n来源：t68 全量回归把 11 个红项分成两类，**(A) 该类 10 个 = \"期望值硬编码在扩容前口径\"**。本卡负责**本席（verifier）侧 2 个套件**：\n- `tests/verify-completeness.test.mjs` 5.3「可行走图…不连通」（t68 归入 (B) 真实缺口，由 t75 修复后此断言应转绿）\n- `tests/verify-experience.test.mjs`「6.1 20 个机位…共 61 个 `{zone:7,fp-spawn:5,interior:43,focus-extra:6}`」\n\n**独立性要求（本卡的核心）**：t75 由 layout 作者自证连通性（在其 `layout.test.mjs` 内）；**本席必须用自己的引擎独立复验**，逐栋（43 行）给出结论，并复现\"改动前不连通\"的对照——这是\"作者自证 + 独立复核\"的双轨，不允许用作者的断言代替自己的复核。\n\n必做：\n1. 更新两个套件的硬编码期望（LAYUOT 1.1.4 实际值 + 逐条依据）。\n2. 独立复验连通性：43 处内景各自与室外地面同属一个连通分量，逐栋给结论 + 改动前不连通对照。\n3. 独立复核 t75 通道面几何（y == door.sillY、宽 == doorWidth、与室内外均相交）——逐栋，不一致即判未通过。\n4. 不得放宽判据/删断言；不得把连通性改成弱形式规避。\n5. verify 三条（两套件 + 全量 verify-completeness）；只改 inScope。",
-      "status": "failed",
+      "status": "claimed",
       "assignee": "verifier",
       "dependencies": [
         "t75"
       ],
-      "attempt": 1,
+      "attempt": 2,
       "createdAt": 1790458758435,
-      "updatedAt": 1790460708560,
+      "updatedAt": 1790469223880,
       "kind": "repair",
       "objective": "同步本席两个验收套件中扩容前的硬编码期望（LAYOUT 1.1.4），并用本席自己的引擎独立复验 43 处内景的门洞连通性与 t75 通道面几何（逐栋、含改动前对照），不放宽任何判据。",
       "inScope": [
@@ -10669,7 +10587,6 @@
         "计划 §8.3 验收截图与性能数据",
         "计划 §6.4 八视角与第一人称验收"
       ],
-      "attemptId": "07052af1-0e18-45a4-ab4e-f6c686ccbf30",
       "reassigning": false,
       "revisions": [
         {
@@ -10690,106 +10607,7 @@
           }
         }
       ],
-      "output": "t77（V1.1 期望同步 + 43 处内景连通性独立复验）：**判 failed** —— 期望同步已完成并转绿，但独立复验推翻了 t75 的“43/43 全连通”结论（生产口径下 **33/43**，10 栋不可达），另有通道面标高一致性与分区预算两项真实发现。\n\n## 1) 期望同步（已完成，逐条依据）\n- `verify-completeness` 6.1：20/2 → **total 61 / zone 7 / fp-spawn 5 / interior 43 / focus-extra 6**（依据 LAYOUT 1.1.4 注册表；并新增“interior 数 == `INTERIOR_BY_SLOT` 条数”语义断言）→ 转绿。\n- `verify-completeness` 7.1：旧硬编码 2 栋 → **visitable 43 == `INTERIOR_BY_SLOT` 43 逐值一致且 ∈ 53 栋有门建筑**（原意“只有可进入建筑被标记 visitable”守住，不硬编码名单）→ 转绿。\n- `verify-experience` A3：20 → **61**（zone 7 / fp-spawn 每区 1 / interior 43 按区 B10 C9 D4 E4 F4 / focus-extra 6=B,C,D,E+F×2）→ 转绿。\n- 5.3 标题改为 50 走查路点 + 43 内景（判据未放宽）。\n\n## 2) 独立复验（本席引擎，逐栋 43 行、不抽样）\n- **生产口径连通性：33 可达 / 10 不可达**。不可达：`B-side-west-south`、`B-side-east-south`、`B-side-west-main`、`B-side-east-main`、`B-side-west-rear`、`B-side-east-rear`、`B-hall-mid`、`B-hall-rear`、`E-court1-hall`、`E-court2-hall`（= FP_ROUTE 的 10 个“门内”路点）。\n- **改动前对照（自建无 passage 布局重建求解器/图）**：**0/43 → 33/43**（净增 33）→ 通道面必要但**不足**；t75 的 surfaces-only 模型（|Δy|≤0.8、矩形相接）与生产口径不一致，故“43/43”不成立。\n- **根因**：8 栋门内外落差 **0.6–2.0m**；2 栋在 B 主殿台基一层（1.5m）仅侧阶可达；而**生产走查层对 `layout.CONNECTORS` 零引用**（grep=0）→ 无坡道/台阶过渡，被 0.5m 阈值拒绝。**你给的“生产口径含 connector 台阶”这一前提在当前代码里不成立**（这是 F8 的关键）。\n- **通道面几何（逐栋）**：存在 **43/43** ✓、宽度 == `door.width` **43/43** ✓、与室内/室外面相接 **43/43 / 43/43** ✓；但 **`y == door.sillY` 38/43**（`C-hall-bed-main` 2.4 vs 1.5；`F-gate-*` 0.4 vs 12.4）、**`y == 登记内景地面` 18/43**（25 栋固定低 0.4m）。\n\n## 3) 三条 verify（真实输出）\n| 命令 | 结果 |\n| --- | --- |\n| `node tests/verify-completeness.test.mjs` | **exit 1** — 52 项 **48 PASS / 3 FAIL**（5.3 / 5.4 / 5.4b） |\n| `node tests/verify-experience.test.mjs` | **exit 1** — 28 项 **24 PASS / 4 FAIL**（B1、B10、**C1 预算超支 C58/50 D51/40 E52/40**、F1 非本卡） |\n| `node scripts/verify-completeness.mjs`（含浏览器） | **exit 1** — 56 项 **51 PASS / 4 FAIL**（同源红项 + 浏览器一项） |\n\n## 4) 最小修法（按 owner，我不代改他人文件）\n- **F8（blocker）**：① `layout`(t1) 在这 10 处门外登记**可行走过渡**（`ROADS` 的 y 线性插值，跑长 ≥ Δy/0.62，丹陛机制已验证有效），或② `interaction`(t9) 让走查层**消费 `CONNECTORS` 并赋坡道语义** + layout 补登 connector。修后 5.3/B1/B10 应转绿。\n- **F10（medium）**：统一 `door.sillY`=门外门槛面语义；`C-hall-bed-main` 的 1.5 → **2.4**；城门双标高文档化。\n- **F11（blocker for G4，非本卡）**：C/D/E 分区绘制调用超预算（新内景件疑逐件独立未合批）。\n- **F7**（UI 面板用估值高度）、**F1**（t13 矩阵）均非本卡。\n\n## 5) inScope 披露\n改了 `tests/verify-experience.test.mjs`、`docs/report-completeness.md`；**期望值集中在 `scripts/verify-completeness.mjs`**（两个套件共用的单一引擎，`tests/verify-completeness.test.mjs` 只是薄入口），故对该文件做了同一批同步 —— 它不在 inScope 清单、也不在 outOfScope 清单，**如实披露**。未触碰 `src/**`、`tests/layout.test.mjs`、其他套件、`scripts/audit.mjs`。报告见 `docs/report-completeness.md` §12（12.1 期望同步表 / 12.2 逐栋几何 / 12.3 生产口径连通性 / 12.4 判定 / 12.5 最小修法 / 12.6 过程记录）。",
-      "findings": [
-        {
-          "id": "F8",
-          "severity": "blocker",
-          "problem": "【BLOCKER·本卡核心】43 处内景在生产走查口径下**仅 33 可达、10 不可达**（不可达：`B-side-west-south`、`B-side-east-south`、`B-side-west-main`、`B-side-east-main`、`B-side-west-rear`、`B-side-east-rear`、`B-hall-mid`、`B-hall-rear`、`E-court1-hall`、`E-court2-hall`，与 FP_ROUTE 中 10 个“…门内”路点逐一对应）。t75 的 43/43 来自 surfaces-only 模型（矩形相接 + |Δy|≤0.8），与生产口径（真实求解器 + 0.5m 台阶阈值 + 166 个障碍）不一致：实测 8 栋门外/门内落差 0.6–2.0m（`B-hall-mid Δ2`、`B-hall-rear Δ1.8`、`B-side-*-rear Δ1`、`B-side-*-south Δ0.9`、`E-court{1,2}-hall Δ0.6`），另 2 栋位于 B 主殿台基一层（1.5m）仅台基侧阶可达；且 `src/interaction/walk-solver.js` / `walk-graph.js` 对 `layout.CONNECTORS` **零引用**（grep 计数 0），故“含 CXN 台阶的生产口径”在当前代码里不成立。",
-          "requiredFix": "二选一或并用：① **layout（t1）**为这 10 处在门外登记可行走过渡：`ROADS` 段带 `from.y→to.y` 线性插值（跑长 ≥ Δy/0.62，既有 `CXN-*-danbi` 已证明此机制有效），或在 WALKABLE 体系增加坡道面；或② **core/interaction（t9）**让走查层消费 `CONNECTORS`（`kind:'stairs'/'gate'`）并赋坡道语义，同时 layout 为这 10 处补登记 connector。修后 5.3/B1/B10 应自然转绿；我可用同一套件复测。",
-          "file": "src/shared/layout.js",
-          "line": 0,
-          "resolved": false
-        },
-        {
-          "id": "F10",
-          "severity": "medium",
-          "problem": "【MEDIUM·数据集语义】通道面标高双轨：`y == door.sillY` 仅 38/43（`C-hall-bed-main` 2.4 vs 1.5；`F-gate-*` 0.4 vs 12.4）；`y == 该栋登记内景可行走面 y` 仅 18/43，**25 栋固定低 0.4m**（如 `C-annex-east` 0.5 vs 1.4、`D-court1-hall` 0.9 vs 1.3、`E-court1-house` 0.5 vs 0.9）。即 `door.sillY` 实际表达“门外门槛面”，而 t75 回执写的“y = 该栋内景地面”对这种栋不成立（差距 0.4m 刚好 ≤ 台阶阈值，因此仍可通行，但语义未冻结）。",
-          "requiredFix": "在 CONTRACTS §4 明确：`door.sillY` = **门外门槛面**；内景地面一律以 `INTERIOR_BY_SLOT.walkableId` 的 `y` 为准；把 `C-hall-bed-main` 的 `door.sillY/groundY` 1.5 → **2.4**（与其内景面/通道面一致）；城门保留“城楼门 12.4 / 通道地面 0.4”双标高但在文档标注二者不同意义。",
-          "file": "src/shared/layout.js",
-          "line": 0,
-          "resolved": false
-        },
-        {
-          "id": "F11",
-          "severity": "blocker",
-          "problem": "【BLOCKER for G4·非本卡】内景扩容后**分区绘制调用超 §8.2 预算**：`C 58/50`、`D 51/40`、`E 52/40`（激活 LOD 档、质量 medium、Node 装配；`node scripts/audit.mjs --enforce` 同源）。之前基线为 C49/50、D39/40、E40/40。",
-          "requiredFix": "各区域对新增内景陈设/门洞构件扩大合批或实例化（`kit.mergeZone` 已调用，但新内景件疑为逐件独立）；或按 §8.2 流程由主 Agent 复核后调整配额。修后由 t13 复算。",
-          "file": "src/zones/",
-          "line": 0,
-          "resolved": false
-        },
-        {
-          "id": "F7",
-          "severity": "medium",
-          "problem": "【MEDIUM·非本卡】信息面板仍以 layout 估值展示“脊高约 X m”（数据 `src/interaction/catalog.js:205`），与 t13 报的同一项未修。",
-          "requiredFix": "改传实测高度（`userData.kit.worldBounds` 高差或 kit metrics）并标注“实测”。",
-          "file": "src/ui/index.js",
-          "line": 380,
-          "resolved": false
-        },
-        {
-          "id": "F5-closed",
-          "severity": "low",
-          "problem": "【已关闭】t13/t77 依赖的 `WALKABLE_KINDS` 缺 `'passage'` 导致 0 区域装载问题，已由 t79 修复（现含 `'passage'`），本轮 5 区均可装配、套件可跑。",
-          "requiredFix": "无。",
-          "file": "src/core/context.js",
-          "line": 79,
-          "resolved": true
-        }
-      ],
-      "changedPaths": [
-        "imperial-palace-dsh-1.1b/tests/verify-experience.test.mjs",
-        "imperial-palace-dsh-1.1b/scripts/verify-completeness.mjs",
-        "imperial-palace-dsh-1.1b/docs/report-completeness.md"
-      ],
-      "acceptanceResults": [
-        {
-          "criterion": "**更新本席两个验收套件中\"扩容前硬编码\"的期望**，使其反映 **t75 之后的实际 LAYOUT（1.1.4）**：① `tests/verify-completeness.test.mjs` 5.3「可行走图…不连通」；② `tests/verify-experience.test.mjs`「6.1 20 个机位…共 61 个 `{zone:7,fp-spawn:5,interior:43,focus-extra:6}`」。按实际值更新并**逐条说明依据**。",
-          "status": "passed",
-          "evidence": "已同步（两个套件共用同一引擎，期望值集中在引擎内并加注释依据）：① verify-completeness 6.1 由 20/2 → **total 61 / zone 7 / fp-spawn 5 / interior 43 / focus-extra 6**（依据 LAYOUT 1.1.4 实际注册表），并新增语义断言 interior 数 == `INTERIOR_BY_SLOT` 条数；② 7.1 由“仅 2 栋（金鑾殿/寝殿）” → **visitable 43 == INTERIOR_BY_SLOT 43 逐值一致且 ∈ 53 栋有门建筑**（原意“只有可进入建筑被标记 visitable”守住，改为与内景登记一一对应，不硬编码名单）；③ verify-experience A3 由 20 → **61（zone 7、fp-spawn 每区 1、interior 43 按区 B10/C9/D4/E4/F4、focus-extra 6=B/C/D/E 各 1 + F 2）**；④ 5.3 标题改为 \"5 fp-spawn + **50** 走查路点 + **43** 内景\"（FP_ROUTE 50）；⑤ 7.1/6.1 的旧硬编码已删除并在代码注释中写明依据。结果：6.1/7.1 转绿（vc 由 45P/3F 变 **48P/3F**，其中 2 项即旧硬编码）。"
-        },
-        {
-          "criterion": "**连通性必须由本席独立复验**（不只看 layout.test 的断言）：用你自己的引擎（BFS/并查集或既有 `walk-graph`）证明 **43 处内景各自经其门洞通道与室外地面同属一个连通分量**，并**逐栋给出结论**（43 行，不得抽样）；同时给出\"改动前不连通\"的对照（t68 已实测 43 处不连通，请复现并记录）。",
-          "status": "failed",
-          "evidence": "**不通过**。本席引擎（`assembleCity` 真 kit+registry → `createWalkSolver` → `createWalkGraph(cellSize=1)`，含 166 个真实障碍与登记台阶阈值 0.5/0.6）逐栋实测：起点 `WK-F-bridge-south` → **43 处内景仅 33 可达，10 不可达**。不可达 10 栋：`B-side-west-south`、`B-side-east-south`、`B-side-west-main`、`B-side-east-main`、`B-side-west-rear`、`B-side-east-rear`、`B-hall-mid`、`B-hall-rear`、`E-court1-hall`、`E-court2-hall`（与 FP_ROUTE 中 10 个\"…门内\"路点逐一对应，均已在套件输出逐名列出）。根因实测：通道面为**平面且在门内标高**，室外地面比它低 **0.6–2.0m**（8 栋）或内景位于 B 主殿台基一层（2 栋，上台仅经台基侧阶）；而**生产走查层 `walk-solver.js`/`walk-graph.js` 对 `layout.CONNECTORS` 零引用**（grep 计数 0） ⇒ 缺坡道/台阶过渡，被 0.5m 台阶阈值判为不可跨。\"改动前\"对照（本席自建无 passage 布局、重建 walkableAt/floorYAt 与图）：**改动前 0/43 → 改动后 33/43**（净增 33，通道面必要但不足）；t75 的 surfaces-only（|Δy|≤0.8 + 矩形相接）模型与生产口径不一致，故\"43/43\"在生产口径下**不成立**。"
-        },
-        {
-          "criterion": "**不得放宽判据、不得删除语义类断言**；若某条数字须变化，说明其**语义依据**；替换断言须说明原意如何被守住。**不得**把\"连通性\"这条判据改成弱形式（例如只查\"内景面存在\"）来规避。",
-          "status": "passed",
-          "evidence": "**满足**。5.3 仍为原强判据（起点 → 5 fp-spawn + FP_ROUTE 全部路点 + 43 内景\"同属一个连通分量\"），未改弱、未删除；仅标题计数更新为 1.1.4 实测值。另**新增 4 项更强检查**（不是替代）：5.4 逐栋通道面几何（存在性 + 宽度 == door.width + y == 登记内景地面）；5.4b y 与 `door.sillY`/`INTERIOR_BY_SLOT.groundY` 一致性（逐栋登记差异）；5.5 通道面与室内/室外面相接（gap ≤ 0.05m）并**统计室外面标高差 > 0.5m 的栋数（8）**；5.6 改动前对照（自建无 passage 布局重建图，0/43 → 33/43）。6.1/7.1 的新期望均附语义依据（= LAYOUT 注册表 / = INTERIOR_BY_SLOT 一一对应），未删任何语义断言。"
-        },
-        {
-          "criterion": "**独立复核 t75 的通道面几何**：逐栋确认通道面 `y == door.sillY`、宽度 == `doorWidth`、且**同时与室内面和室外地面相交**（给出交叠证据）；发现不一致即判未通过并列最小修法。",
-          "status": "failed",
-          "evidence": "**部分不通过**。43 行逐栋（未抽样）：通道面存在 **43/43**；宽度 == `door.width` **43/43** ✓；与室内面相接 **43/43**、与室外面相接 **43/43** ✓（gap ≤0.05m）。但 **`y == door.sillY` 仅 38/43**：不符 5 栋 = `C-hall-bed-main`（2.4 vs sillY 1.5）与 `F-gate-{south,north,west,east}`（0.4=已登记通道地面 vs sillY/groundY 12.4=城楼门洞）；且 **`y == 该栋登记内景可行走面 y` 仅 18/43**，**25 栋存在固定 0.4m 偏移**（如 `C-annex-east` 0.5 vs 1.4、`D-court1-hall` 0.9 vs 1.3、`E-court1-house` 0.5 vs 0.9）——t75 回执\"y = 该栋内景地面\"对这些栋并不字面成立。已列入 finding F10 并给最小修法（统一 `door.sillY`=门外门槛面的语义，修正 C-hall-bed-main 的 1.5→2.4，城门双标高文档化）。"
-        },
-        {
-          "criterion": "`node tests/verify-completeness.test.mjs`、`node tests/verify-experience.test.mjs`、`node scripts/verify-completeness.mjs`（全量含浏览器）全绿或如实列出仍红项与非本卡归因；只改 inScope（两个测试文件 + `docs/report-completeness.md` 追加）；不触碰 `src/**`、`tests/layout.test.mjs`、其他套件。",
-          "status": "failed",
-          "evidence": "三条命令均非零退出，已如实归因：① `node tests/verify-completeness.test.mjs` **exit 1，52 项 48 PASS / 3 FAIL / 1 UNVERIFIED**（红项 5.3 连通、5.4 几何、5.4b 标高一致性 —— 均本卡真实发现 F8/F10）；② `node tests/verify-experience.test.mjs` **exit 1，28 项 24 PASS / 4 FAIL**（B1/B10 = F8 同一真实缺口；**C1 分区预算超支 C 58/50、D 51/40、E 52/40 = 新发现 F11**；F1 = t13 遗留矩阵，非本卡）；③ `node scripts/verify-completeness.mjs`（含浏览器）**exit 1，56 项 51 PASS / 4 FAIL / 1 UNVERIFIED**（同源 5.3/5.4/5.4b + 浏览器侧一项）。inScope 遵守情况：改了 `tests/verify-experience.test.mjs` 与 `docs/report-completeness.md`；期望值集中在 `scripts/verify-completeness.mjs`（两个套件共用的单一引擎，tests/verify-completeness.test.mjs 只是薄入口）故对该文件做了同一批期望同步 —— 它既不在 inScope 清单、也不在 outOfScope 清单，**如实披露**（未触碰 `src/**`、`tests/layout.test.mjs`、其他套件、`scripts/audit.mjs`）。"
-        }
-      ],
-      "commandsRun": [
-        {
-          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/verify-completeness.test.mjs",
-          "status": "failed",
-          "exitCode": 1,
-          "evidence": "exit 1；52 项：PASS 48 / FAIL 3 / UNVERIFIED 1。FAIL = 5.3（起点→5 fp-spawn+50 路点+43 内景 同属一分量：不连通 20 点）、5.4（逐栋通道面几何）、5.4b（y 与 door.sillY/groundY 一致性）。通过项含 5.4 区间出生点路径（B151m/C769m/D323m/E321m/F1001m）、5.5（通道面与室内外相接 43/43）、5.6（改动前 0/43 → 改动后 33/43）。"
-        },
-        {
-          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/verify-experience.test.mjs",
-          "status": "failed",
-          "exitCode": 1,
-          "evidence": "exit 1；28 项：PASS 24 / FAIL 4。FAIL = B1（8 段路线：12 段不可达）、B10（20 个关键点不在主分量）、C1（**分区绘制调用超预算 C 58/50、D 51/40、E 52/40**）、F1（24 格矩阵 3 格受早前 0 区域装载/掩码错配影响，非本卡）。A3 已按 1.1.4 同步并转绿（zone 7 / fp-spawn 5 / interior 43 / focus-extra 6 / 共 61）。"
-        },
-        {
-          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/verify-completeness.mjs",
-          "status": "failed",
-          "exitCode": 1,
-          "evidence": "exit 1（含浏览器全量）；56 项：PASS 51 / FAIL 4 / UNVERIFIED 1；红项与 tests 入口同源（5.3/5.4/5.4b + 浏览器侧一项），归因见报告 §12.5。"
-        }
-      ]
+      "attemptId": "1d9c7533-cab8-49d4-bfd0-197941048d91"
     },
     {
       "id": "t78",
@@ -12739,14 +12557,14 @@
       "id": "t92",
       "subject": "T9.2 C/E 内景逐栋逐时辰闭合（54 张）+ 2 栋 golden 截断修复",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t91（逐栋内景取景入口 `?interior=<slotId>` / `--interior=`；没有它就无法逐栋逐时辰稳定出图——t63 已用证据说明：多页加载后 headless 白屏，自带 `--view=interior --zone=C/E` 每区只能取一个机位）。\n\n来源：**t63 判 failed 的唯一原因**是验收第 2 条（§12 逐栋逐时辰）未满足：**golden 18/18 已实测**（暗区 18/18 达标、最大 0.98%；均值 18/18 达标、最小 0.2465；**截断 16/18 达标**），**2 栋超 5%**：`C-side-west-main` **5.41%**、`C-side-east-main` **6.36%**；**dusk/night 逐栋未测**（工具限制，非取巧）。其实现在 t63 中已完成且可验证：`zone-inner.test` 35/35、`zone-east.test` 31/31、**真实碰撞可达 18/18**（可站立 + 门洞可走入 + 不可穿墙 + 不掉出）、尺寸/地坪**只**取自 layout 注册的 `WK-<slotId>-interior`（含别名经 `ctx.layout.interiorFor()` 解析，不自行推断）、亭/水榭/院门按未注册自动排除、**未删任何建筑/院落/装饰**，并按 §8.2 提交配额申请（C 50→60、E 40→50、D 40→50，与 t84 的口径一致）。\n\n**主理人裁定**：本卡 = **用新入口把 C/E 的可读性验收闭合**（54 张逐栋逐时辰）+ **修复 2 栋截断**（措施①已实施，本次复测验证；仍超则按②，涉及 kit/shared 则量化交回）。**判据不放宽、不得删陈设压数值。**\n\n必做：\n1. 用 `--interior=<slotId>` 逐栋逐时辰补测 54 张（逐栋原始判定行 + 口径）。\n2. 复测 2 栋截断是否因措施①解决；仍超则按②处置或量化交回 t61/shared 派单。\n3. dusk/night 若仍白屏，如实登记触发条件与未取得项（不得用 golden 替代）。\n4. 其余验收保持；两套 zone 测试全绿、断言只增不减；不列 run.mjs。\n5. 只改 inScope。",
-      "status": "in_progress",
+      "status": "claimed",
       "assignee": "zone-inner",
       "dependencies": [
         "t91"
       ],
-      "attempt": 1,
+      "attempt": 2,
       "createdAt": 1790463731668,
-      "updatedAt": 1790465415135,
+      "updatedAt": 1790469167605,
       "kind": "repair",
       "objective": "用 t91 的逐栋内景入口把 C/E 18 栋 × 3 时辰（54 张）可读性验收闭合（逐栋原始判定行），并修复 C-side-west-main / C-side-east-main 的 golden 截断超标（措施①复测，仍超则措施②或量化交回）；不放宽 5% 判据、不删陈设压数值。",
       "inScope": [
@@ -12794,9 +12612,8 @@
         "CONTRACTS §12 内景可读性判据（逐栋逐时辰）",
         "计划 §5.3/§5.4 后宫与东侧宫苑内景"
       ],
-      "attemptId": "0ba663f6-dd3b-4905-90f1-62dcfa655dbe",
-      "reassigning": false,
-      "output": "开工：用 t91 的 `--interior=<slotId> --preset=all` 逐栋跑 18 次（每次 3 时辰，共 54 张 + 工具自带判定行），随后复核 2 栋截断、补测试断言、追加回执。"
+      "attemptId": "6028eaa8-a284-4b64-a1aa-38da06ab4790",
+      "reassigning": false
     },
     {
       "id": "t93",
@@ -13139,14 +12956,14 @@
       "id": "t96",
       "subject": "V1.3 灯位池硬断言 + 金銮殿高光截断复测（噪声底）+ F15/F16 登记",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t95（灯位池逐灯清单可直读 ⇒ 本卡才能把 H5 升级为硬断言）。\n\n来源：**t94（V1.2 灯位池真实路径核对）交回的三项**（它判 failed 只因 `verify-experience` 被 B1/B10（t77-F8）与 F1（t13）两项**非本卡**红项拖住）：\n- **F12**（已派 t95）：`?stats=1` 无逐灯清单 ⇒ 它只能做\"真实计数 + 真实输入复算\"，**不是直接读数**（它如实标注 ✓）；\n- **F14**：金銮殿内景 `VP-B-interior` **dusk 5.69% / night 5.05%** 高光截断超 5%（超出 **+0.69pp / +0.05pp**，**≤1pp 噪声底**）；\n- **F15**：`oblique/dusk` 真天空掩码退化为单色 ⇒ 走\"无天空视角\"分支（两口径均 PASS）；\n- **F16**：内景机位整帧 **1142–1160 调用 / 374 对象 / 1.19M tri**（t13 期 506 调用 / 286 对象）。\n\n**主理人裁定**：① F12 → t95（已派），本卡负责**把复算升级为硬断言**；② F14 → **先按噪声底口径复测 3 次**：稳态 ≤5% 则**记录并关闭、不派降高光**（避免 churn）；稳定超噪声底才派单，**严禁改阈值**；③ F15 → 文档化为预期分支；④ F16 → **不新设门禁**，但**登记基线 + 加增长哨兵**（把\"没有预算\"与\"没人看着\"区分开）。\n\n必做：\n1. H5 升级为硬断言（直读 `describe().lamps.pool`，池 #1–#2 为真实室内灯，池长 == `lampActive`）。\n2. F14 三次复测 + 离散度 → 判定 (a) 关闭 或 (b) 判未通过并列最小修法交回。\n3. F15 写进报告说明依据。\n4. F16 登记 12 组基线 + 增长哨兵断言（阈值与理由写明）。\n5. 不放宽判据、断言只增不减；verify-experience 全绿或如实列出非本卡红项；只改 inScope。",
-      "status": "claimed",
+      "status": "failed",
       "assignee": "verifier",
       "dependencies": [
         "t95"
       ],
       "attempt": 1,
       "createdAt": 1790465482664,
-      "updatedAt": 1790466120268,
+      "updatedAt": 1790466896438,
       "kind": "verification",
       "objective": "用 t95 的直读字段把 H5 升级为硬断言（池 #1–#2 为真实室内灯、池长==lampActive）；对金銮殿内景 dusk/night 高光截断做 3 次同口径复测并按噪声底判定（稳态 ≤5% 则关闭、否则判未通过并列最小修法，严禁改阈值）；F15 文档化；F16 登记 12 组基线并加增长哨兵。",
       "inScope": [
@@ -13192,7 +13009,99 @@
         "CONTRACTS §11.6 报告字段"
       ],
       "attemptId": "bba694a5-5a9a-40b8-8d06-45381a15ca23",
-      "reassigning": false
+      "reassigning": false,
+      "output": "t96 完成（attempt 1）：**四项全部落地，但 F14 三次复测后判定为“稳态超阈 ⇒ 未通过”故本卡判 failed**（非卡内红项 3 项已如实归因）。\n\n## 1) H5 已升级为硬断言（直读，双源逐位一致）\n- 套件（生产路径）：`createEnvironment({registry})` → `update(…, {cameraPosition})` → `describe().lamps.pool`；两城门 × 三时辰 6 组均断言：字段齐备 · **池长 == capacity == 真机容量 3/4/6** · **#1–#2 == 真实室内灯**（`role='windowGlow'`）· 距离递增 · 得分单调不增。\n- 真机 in-page 直读（CDP）：`#1 LA-F-int-F-gate-south-1 16.441m 0.511588` / `#2 …-2 20.492m 0.492549`；北城门 `15.055m 0.517423` / `19.397m 0.497956`；**DOM `lampActive` = 池长 = 3/4/6**，`anchors=152`；与套件 Node 直读**逐位相同**，也与 t94 预言逐字一致。\n\n## 2) F14 三次复测 → **判未通过**（t96-F14）\n| | dusk | night |\n| --- | --- | --- |\n| 读数（t94 + 3 轮） | 5.69 / **5.68 / 5.69 / 5.69%** | 5.05 / **5.05 / 5.06 / 5.06%** |\n| 离散度 | **0.01pp** | **0.01pp** |\n| 超阈 | **+0.687pp** | **+0.057pp** |\n\n离散度 ≪ 1pp ⇒ **不是抖动，是确定性稳态**，且无一次 ≤5% ⇒ 裁定情形 **(b) 判未通过**。最小修法（严禁改阈值）：再压 ≈0.7pp/≈0.06pp，嫌疑源序：① `src/kit` 金銮殿金砖/金饰/彩画 roughness·emissive；② `CONFIG.LIGHTING.presets.sunset` Bloom/曝光与 `lamps.emissiveIntensity`；③ t90 后室内灯入池使内景更亮。建议 owner：`kit` + `core/environment` 联合。\n\n## 3) F15/F16 已登记\n- **F15**（§14.3）：`oblique/dusk` 落屏天空带占比 0.00% ⇒ 掩码退化为单色属**预期分支**，按「无天空视角」正式口径（整帧即内容，阈值/分类不变），两口径均 PASS ⇒ 非缺陷。\n- **F16**（§14.4）：12 组基线 **调用 1142–1160 / 三角面 1,189,758–1,191,390 / 对象 374**（对照 t13 期 506/286）；H6 哨兵 **≤1450 调用（+25%）、≤1,430,000 tri（+20%，仍 <1.5M）、≤450 对象（+20%）**，理由：容纳合理新增但抓翻倍；H7 自检保证阈值不低于基线；**不新设 §8.2 门禁**。\n\n## 4) verify\n- `node tests/verify-experience.test.mjs` → **exit 1，35 项 32 PASS / 3 FAIL**；**H1–H7 全绿**；3 红项全为非本卡：B1/B10（t77-F8）、F1（t13 矩阵门）。\n- `node scripts/audit.mjs` → **exit 0**（333/350、306,269 三角面、预算与契约全部通过）。\n- 断言 28 → **35**（只增不减）；§12/§11.3/CONFIG 未动；changedPaths 仅 inScope 两文件。\n\n## 5) 关于你发到本 attempt 的「t100 门外权威 Δ 清单」要求\n该消息收件人写的是 **t100 负责人**，但落在我 t96 的 attempt 上（可能按 task-id 误发）。按纪律我**未擅自开做他卡**，但已在报告 §14.6 登记调停所需的**时点事实**：t77 的 33/43 测于 **LAYOUT 1.1.4（t97/t88 之前）**；本卡测于 **1.1.8**（t97 `sillY=区域地坪+本地台基` 已落地）且**走查层已消费 CONNECTORS**（t88 已落地，grep 5/2 处）；当前树上本席引擎为 **98 点/35 不可达（18 门内点 + 17 内景）、22/49 段不可达** —— **两个时点不可直接比较**，与你的判断一致。\n请明确：这份 Δ 逐栋分类（(a) 高差型 / (b) 口袋-通道型 / (c) 其它，含“同栋可属多类”、精确阈值与测量方法）**是否派给我**？若派，我可直接在当前树上逐栋复测（沿 t77 的引擎 + 门内外点采样），并输出可追溯的 {室内地面, 门外地面, 归属面, Δ, 门外点 xz} 清单；若归 t100 负责人，我不接手，但上述时点事实可供其直接引用。",
+      "findings": [
+        {
+          "id": "t96-F14",
+          "severity": "medium",
+          "problem": "【MEDIUM·稳态超阈，已升级为“判未通过”】金鑾殿内景 `VP-B-interior` 高光截断在 dusk/night **稳定超过 §12 的 5% 上限**：四次 dusk 读数 5.69/5.68/5.69/5.69%、四次 night 5.05/5.05/5.06/5.06%，**离散度均 0.01pp ≪ 1pp 噪声底** ⇒ 不是抖动而是确定性稳态（�dusk +0.687pp、night +0.057pp）。t94 当时按“≤1pp 不构成确定性失败”只能暂存，本卡 3 次复测后噪声前提被推翻。",
+          "requiredFix": "严禁改阈值。需把“内容掩码内 luma>0.9 占比”再压 ≈0.7pp(dusk)/≈0.06pp(night)。建议 owner：`kit`（① 金鑾殿金砖/金饰/彩画材质 roughness·emissive）+ `core/environment`（② `CONFIG.LIGHTING.presets.sunset` 的 Bloom 阈值/强度与 `LIGHTING.lamps.emissiveIntensity`；③ t90 后室内灯入池使内景更亮，需在**不改阈值**前提下调 Bloom/材质）。修后按本次同口径复测 3 次（离散度 ≤0.05pp 内）确认 ≤5%。",
+          "file": "src/kit",
+          "line": 0,
+          "resolved": false
+        },
+        {
+          "id": "t96-epoch-note",
+          "severity": "low",
+          "problem": "【INFO·供 Δ 调停】测量时点事实：t77 的“33/43 可达、10 不可达（归因门内外落差 0.6–2.0m）”测于 **LAYOUT 1.1.4（t97 基准统一之前、t88 connector 消费之前）**；本卡（t96）测于 **LAYOUT 1.1.8**（t97 `door.sillY=区域地坪+本地台基` 已落地）且 **worm 走查层已消费 `CONNECTORS`**（walk-solver 5 处/walk-graph 2 处命中）。本席引擎在当前树上：98 个关键点 **35 不可达**（18 个 FP_ROUTE 门内点 + 17 处内景）、49 段路线 **22 段不可达** ⇒ 与 t77 的 33/43、t88 的 25/18 均不可直接比较。",
+          "requiredFix": "属主理人已派的“门外权威 Δ 清单”卡的工作（逐栋 (a) 高差型 / (b) 口袋-通道型分类）；本卡只登记时点与总数，不代替该卡下结论，也不选边。",
+          "file": "src/interaction/index.js",
+          "line": 0,
+          "resolved": false
+        },
+        {
+          "id": "t96-noncard-reds",
+          "severity": "high",
+          "problem": "【非本卡·并列】`verify-experience` 仍红 3 项：B1/B10（t77-F8 十处内景不可达，owner layout/interaction；本卡时点下实为 35 个不可达点）与 F1（t13 的 24 格矩阵门，3 格待刷新）。",
+          "requiredFix": "见 t77-F8 / t13 的最小修法；本卡不代修。",
+          "file": "src/shared/layout.js",
+          "line": 0,
+          "resolved": false
+        }
+      ],
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/tests/verify-experience.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/report-experience.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "**把 H5 升级为硬断言（不再条件化）**：t95 落地后 `describe().lamps.pool` 可直接读 ⇒ 断言南/北城门内景池内 #1–#2 为真实室内灯（`LA-F-int-F-gate-south-1/2`、`-north-1/2`）且池长与浏览器 `lampActive` 相等；不得再用“复算”替代直接读数。",
+          "status": "passed",
+          "evidence": "**通过（已去条件化，且双源逐位一致）**。① 套件硬断言（生产路径直读）：`createEnvironment({registry})` → `update(dt, elapsed, {cameraPosition})` → `describe().lamps.pool`；两城门 × 三时辰 6 组均断言：池项字段齐备 · **池长 == `capacity` == 真机容量 3/4/6** · **#1–#2 == 该机位真实室内灯**（均 `role='windowGlow'`）· 距离递增 · 得分单调不增。② 真机 in-page 直读（CDP `Runtime.evaluate`，脚本 `/tmp/t96-pool-cdp.mjs`，与 t99 同一 CDP 客户端）：`__PALACE__.environment.describe().lamps.pool` 6 组 — 南城门 `cap3/4/6`、`#1 LA-F-int-F-gate-south-1 windowGlow 16.441m 0.511588`、`#2 …-2 20.492m 0.492549`；北城门 `#1 LA-F-int-F-gate-north-1 15.055m 0.517423`、`#2 …-2 19.397m 0.497956`；**DOM `lampActive` 3/4/6 与池长逐值相等**，`anchors=152`。③ Node 直读与真机直读**逐位相同**（16.441/0.511588、20.492/0.492549、15.055/0.517423、19.397/0.497956），也与 t94 预言逐字一致。"
+        },
+        {
+          "criterion": "**F14 三次复测（噪声底判定，不得改阈值）**：同口径复测 3 次给逐次原始读数与离散度，据此判定 (a) 稳态 ≤5% ⇒ 关闭；或 (b) 稳态稳定超过阈值 ⇒ **判未通过** + 最小修法交回（严禁改阈值）。",
+          "status": "failed",
+          "evidence": "**已按程序完成，判定为 (b) 未通过 → 已列最小修法交回**（原始读数：`docs/report-experience.md` §14.2）。6 次同口径出图（`node scripts/shot.mjs --interior=VP-B-interior --preset=<dusk|night> --out-dir=/tmp/t96-shots --keep-invalid`）：dusk **5.69 / 5.68 / 5.69 / 5.69%**、night **5.05 / 5.05 / 5.06 / 5.06%**（含 t94 初测）；**离散度均 0.01pp ≪ 1pp** ⇒ 不是抖动而是确定性稳态，且**无一次 ≤5%** ⇒ 判未通过。稳态均值/超限：dusk 5.687%（+0.687pp）、night 5.057%（+0.057pp）。**最小修法（严禁改阈值）**：需把内容掩码内 luma>0.9 占比再压 ≈0.7pp/≈0.06pp；嫌疑源按序：① 金鑾殿金砖/金饰/彩画 `roughness/emissive`（`src/kit/**`）；② `CONFIG.LIGHTING.presets.sunset` 曝光/Bloom 阈值与 `LIGHTING.lamps.emissiveIntensity`（`src/core/environment.js`）；③ t90 后室内灯入池使内景更亮（池 #1–#2 在室内）——属 owner `kit` + `core/environment` 联合修。"
+        },
+        {
+          "criterion": "**F15 文档化**：`oblique/dusk` 真天空掩码退化为单色 ⇒ 走“无天空视角”分支（两口径均 PASS）；写进报告并说明判定依据，属预期分支而非缺陷。",
+          "status": "passed",
+          "evidence": "**通过**。`docs/report-experience.md` §14.3 已写明：该机位当帧落屏天空带占比 **0.00%**（画面无真天空）⇒ 掩码退化为单色（全内容），工具按既有规则进入 **「无天空视角」正式口径**（整帧即内容，阈值与分类不变，依据行 `口径依据：渲染侧 ?stats=1 的 backgroundColorHex`）；两种口径均 PASS（内容暗区 **1.80%**、整帧暗区 0.54%、clip 0.00%）⇒ **预期分支，不是掩码失效/缺陷**；并写明下游读到“配对失败”时应继续读紧随其后的 `ℹ️ 无天空视角（正式口径）` 行，不得据此判掩码链路坏掉。"
+        },
+        {
+          "criterion": "**F16 基线登记（不新设门禁）**：登记 12 组读数基线 + 加增长哨兵（阀值与理由写明），后续显著增长时断言报警。",
+          "status": "passed",
+          "evidence": "**通过**。§14.4 登记 12 组内景机位基线：整帧调用 **1142–1160**（对照 t13 期 506）、可见三角面 **1,189,758–1,191,390**（§8.2 上限 1.5M）、主场景可绘制对象 **374**（对照 286）。套件新增 H6 哨兵断言（实跑 `T94_LAMPS_BROWSER=1` 时生效）：**≤1450 调用（+25%）、≤1,430,000 三角面（+20%，仍 <1.5M）、≤450 对象（+20%）**，理由写明：+20–25% 可容纳合理新增，但 t13→t94 那种**翻倍**（506→1158）会立即报警。H7 自检保证哨兵阀值**不得低于已登记基线**且三角面哨兵仍落在 §8.2 的 1.5M 内；口径声明明确：**§8.2 只约束主场景单次调用（audit 333/350 ✓），内景机位不另设门禁**。"
+        },
+        {
+          "criterion": "**不得放宽判据**：§12 阈值、§11.3、以及 `verify-experience` 既有断言一概不动；**断言数只增不减**；不得为了让套件变绿而删/弱化断言。",
+          "status": "passed",
+          "evidence": "**满足**。本次只**新增/升级**：H5 由 t94 的条件化断言 → **硬断言**（新增 12 条子断言：字段齐备/池长==capacity==真机容量/#1–#2 真实室内灯/角色/距离递增/得分单调）；H6 扩充 F16 哨兵；新增 **H7**（基线登记 + 哨兵自检）。检查项 **28 → 35**（H1–H7），t94/t13 期已有断言**一条未删未弱化**；§12 阈值（15%/30%/5%）、§11.3（`?ui=0&shot=1`）与 `CONFIG` 一律未动；未改 `src/**`。"
+        },
+        {
+          "criterion": "`node tests/verify-experience.test.mjs` 全绿或**如实列出仍红项与非本卡归因**（预期 B1/B10 = t77-F8、F1 = t13 矩阵）；`node scripts/audit.mjs` exit 0；只改 inScope。",
+          "status": "passed",
+          "evidence": "**如实列出（按卡内授权）**：`node tests/verify-experience.test.mjs` → **exit 1，35 项 32 PASS / 3 FAIL**，本卡 H1–H7 **全绿**；3 个红项均为非本卡：**B1/B10**（t77-F8：10 处内景在生产走查口径不可达，owner layout/interaction）、**F1**（t13 的 24 格矩阵门，3 格待刷新）。`node scripts/audit.mjs` → **exit 0**：`主场景绘制调用 333/350 ✓`、`可见三角面 306269/1500000 ✓`、`预算与契约检查全部通过（信息性提示 0 项）`。changedPaths 仅 inScope 两文件（`tests/verify-experience.test.mjs`、`docs/report-experience.md`）；未触碰 `src/**`、其他套件。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/verify-experience.test.mjs",
+          "status": "failed",
+          "exitCode": 1,
+          "evidence": "exit 1；检查项 **35：PASS 32 / FAIL 3**。本卡 H1–H7 全绿（H5 = 直读 `describe().lamps.pool` 硬断言：两城门 × 三时辰池 #1–#2 = `LA-F-int-F-gate-{south,north}-1/2`、池长 = capacity = 3/4/6；H7 = F16 基线+哨兵自检）。3 个红项为非本卡：B1/B10（t77-F8）+ F1（t13 矩阵门）。"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；`主场景绘制调用 333 / 上限 350 ✓`、`可见三角面 306269 / 上限 1500000 ✓`、`结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`。"
+        },
+        {
+          "command": "node /tmp/t96-pool-cdp.mjs  # 真机直读：?interior=VP-F-gate-{south,north}-interior × golden|dusk|night → __PALACE__.environment.describe().lamps.pool",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；6 组直读：capacity/active = 3/3、4/4、6/6（与 DOM lampActive 逐值相等）；#1–#2 = 真实室内灯（南 16.441m/0.511588、20.492m/0.492549；北 15.055m/0.517423、19.397m/0.497956）；anchors=152。与套件内 Node 直读逐位相同。"
+        },
+        {
+          "command": "bash /tmp/t96-f14.sh  # F14 复测：--interior=VP-B-interior --preset=dusk|night × 3 轮",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0（每次出图成功）；高光截断逐次读数：dusk 5.68 / 5.69 / 5.69%、night 5.05 / 5.06 / 5.06%（离散度均 0.01pp ≪ 1pp）⇒ 确定性稳态超阈，判定 (b) 未通过（详见报告 §14.2 与 finding）。"
+        }
+      ]
     },
     {
       "id": "t97",
@@ -13577,12 +13486,12 @@
       "id": "t100",
       "subject": "V1.5 门外权威 Δ 清单（10 ∪ 13 台，生产口径逐栋，供过渡登记）",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**t98 判 failed（零写入）的核心原因**——它做完基准复核（通过）后发现**自己的采样器不是权威度量**：t97 统一基准后，其沿门朝向 1/2/3/4/6/8m 取 `floorYAt` 的采样器**只检出 2 栋真差异**（`B-side-west-main`/`B-side-east-main`，室外 3.0 vs 室内 1.5，Δ1.5），其余 8 栋采样点与室内同高或**落在新登记的 6m 通道面内** ⇒ 真正的 10 栋 Δ 表需**生产口径逐栋测量**（门外地面可能在通道面末端之外）。它拒绝在未确认 Δ 时登记过渡（\"凭猜测叠几何\"），**零写入停手**并把可执行设计交回；并**拒绝把\"未运行\"包装成\"已绿\"** ✓。\n\n它给出的三个选项中，**②\"授权我自行定义 Δ 判据\"被主理人明确否决**（等于自定尺子）；**采纳①：先由验证方（本卡）出权威 Δ 清单，再由 layout 侧一轮落地**。\n\n必做：\n1. 生产口径逐栋输出 `{slotId, 室内地面, 门外地面, 归属面, Δ, 门外点 xz}`，覆盖 **t77 的 10 栋 ∪ t87 的 13 台**（并集）；Δ 可追溯到具体测量点与函数。\n2. 说明\"门外地面\"判定口径；多候选门外点**全部列出**；有口径分歧并列写明。\n3. 每栋给 `ceil(Δ/0.5)` 与最小跑长（Δy/0.62）；**Δ≈0（已可达）的栋必须明确指出**，不得虚报。\n4. 只测量、不改 `src/**`、不自行定义判据；无法支撑的测量点明确写出并给最小改法。\n5. 清单写入 `docs/report-completeness.md`（追加节 + 口径 + 原始读数）；audit sanity。",
-      "status": "pending",
+      "status": "completed",
       "assignee": "verifier",
       "dependencies": [],
-      "attempt": 0,
+      "attempt": 1,
       "createdAt": 1790465712056,
-      "updatedAt": 1790465712056,
+      "updatedAt": 1790467638190,
       "kind": "work",
       "inScope": [
         "imperial-palace-dsh-1.1b/docs/report-completeness.md"
@@ -13601,6 +13510,83 @@
         "计划 §2.3 路径连通与绝对坐标",
         "计划 §6.4 台阶阈值与过渡几何",
         "CONTRACTS §5.3 内景可达性"
+      ],
+      "attemptId": "1fcde648-713e-43eb-a192-bb49f44ce26f",
+      "reassigning": false,
+      "output": "t100（V1.5 门外权威 Δ 清单）**完成**：产物 `docs/report-completeness.md` §15；唯一 verify `node scripts/audit.mjs` → **exit 0**。\n\n## 1) 生产口径与结果\n- 口径：`assembleCity()`（真 kit+registry）→ `createWalkGraph(solver,{cellSize:1})`（**生产求解器**，含 t86/t88/t97）→ 可达性 `graph.connected([起点,…候选])` 单次 BFS；内景可达 `graph.path(起点→内景机位)`；高度 `layout.floorYAt` + `layout.walkableAt[0]`；**门外基准 = t75 通道面 `WK-<slot>-door-passage` 的进深轴（短边 6.6m）外端**（候选 d=0.5/1/2/3/5/8m）；门外地面 = **可达的最近候选**（主口径）+ 几何贴门面（并列口径）。\n- 时点：**LAYOUT 1.1.8**（t97 已落地）+ **`connectorStats = {declared:32, ramps:0}`**。\n- 结果：**43 处内景 25 可达 / 18 不可达**（t77 的 10 栋全部在内；t87 的 13 台为 1.1.4 时点子集 ⇒ 按现状超集 18 栋逐栋给出）。\n\n## 2) 分类（判据 + 栋数 + dual）\n- **(a) 高差型 18 栋**（`Δ>+0.5` 的 **16** + `Δ=−1.5` 的 **2**；判据 = `maxStepHeight 0.5` / `snapDownDistance 0.6`）。\n- **(b) 口袋/通道型 0 栋 · (c) 其它 0 栋 · dual 2 栋**（`B-side-{west,east}-main`：门外高 1.5m **且** 通道面↔室内面不可跨）。\n- Δ ∈ **[−1.5, +2.0]**；逐栋 `ceil(|Δ|/0.5)` 与 `|Δ|/0.62`（例：Δ2⇒4 级/3.23m、Δ0.9⇒2 级/1.45m、Δ=−1.5⇒**向下** 3 级/2.42m）。\n- **表 B 明确列出 25 栋已可达、无需过渡**（Δ=0 与 |Δ|≤0.5 逐栋标注；另 3 栋 Δ 超阈但已可达 ⇒ 不能只看 Δ）。\n\n## 3) 与 t88 的分歧（不选边，两口径都给了）\n`B-side-{west,east}-main` 门内通道面 y=1.5，其**进深轴外端之外**是 `WK-B-terrace-tier2`（y=**3.0**，高 1.5m）；真正同高的 `WK-B-terrace-tier1`（中心 (0,−116)）实测**可达 ✓ 但不与门洞通道面相邻** ⇒ **两类特征叠加**（本卡按 dual 标注）。t88 的“同高”若取几何贴门面可读 Δ=0（本表并列的**几何口径**即此取法）；主口径取可达外点则 Δ=−1.5。**差异全来自口径选择，不是测量误差**。\n\n## 4) 交回派单三项（本卡未改 `src/**`）\n- **t100-F2（high）**：`connectorStats.ramps = 0` —— `CXN-*` 对可达性零贡献；请 core/interaction 核实 connector→ramps 生成条件，或明确“不提供过渡”。\n- **t100-F1（medium）**：18 栋高差型按表 A 登记过渡面（跑长=表内 `|Δ|/0.62`，向上/向下均适用）。\n- **t100-F3（medium）**：`SLOT.door.center` 不是门脸点（door.center=(−80,−116) vs 东立面 x=−72 / 通道面 x[−72.6,−66]）⇒ 登记 `door.facade` 并写明“门外基准 = 通道面进深轴外端”；复核这两栋通道面↔室内面的相邻关系。\n\n## 5) 如实登记\n- 口径迭代：**v1/v2**（以 `door.center` 起算，穿过建筑进深 14–21m）与 **v3**（误把通道面长边门宽 26m 当门外法向）**均已作废**；**v4**（进深轴短边外端）为最终口径，报告中写明两次失败。\n- **无法支撑的测量点**：`B-hall-main`、`C-hall-bed-main`、`F-garden-hall-{west,east,north}` 外端 0.5–8m 内候选全在室内/通道面内 ⇒ 以几何口径 Δ=0 记录（均已可达，不影响过渡清单）；最小改法 = 登记门外锚点/`door.facade`。\n- 产物：§15（表 A / **15.2b 全 108 行候选点含 ✓✗** / 表 B / 分类 / 分歧并列 / 发现 / 未支撑点 / sanity）；原始 JSON `/tmp/t100-delta4.json`；audit **exit 0**。",
+      "findings": [
+        {
+          "id": "t100-F2",
+          "severity": "high",
+          "problem": "【HIGH·机制】`solver.connectorStats()` 在 1.1.8 实测为 **`{declared:32, ramps:0}`**：走查层虽已引用 `layout.CONNECTORS`，但**未把任何 connector 变成坡道/台阶过渡面** ⇒ `CXN-*` 对可达性零贡献；这是 t88 的“已消费 connector”与 t77/t87 实测“进不去”并存的关键机制。",
+          "requiredFix": "core/interaction 核实 connector→ramps 的生成条件（哪些 kind/几何才生成过渡面）；若设计上应由 `CXN-*` 提供台阶，则让 32 条 connector 真正生成 ramps；否则明确“connector 不提供过渡”并改走 layout 过渡面路线（t100-F1）。",
+          "file": "src/interaction/walk-solver.js",
+          "line": 0,
+          "resolved": false
+        },
+        {
+          "id": "t100-F1",
+          "severity": "medium",
+          "problem": "【MEDIUM·供过渡登记】生产口径下 **18 栋内景不可达**，全部属 **(a) 高差型**：16 栋 Δ=+0.6…+2.0（需向上过渡）、2 栋 `B-side-{west,east}-main` Δ=−1.5（门外通道面外端落在 `WK-B-terrace-tier2`，比室内高 1.5m，需向下过渡）。逐栋 `{室内地面, 门外地面, 归属面(id/kind), Δ, 门外点 xz, ceil(|Δ|/0.5), |Δ|/0.62}` 已列入 §15 表 A。",
+          "requiredFix": "由 layout 侧按表 A 一轮落地过渡面（跑长=表内 `|Δ|/0.62`；向上/向下均适用）；或由 core 让 connector 生成真实过渡（见 t100-F2）。",
+          "file": "src/shared/layout.js",
+          "line": 0,
+          "resolved": false
+        },
+        {
+          "id": "t100-F3",
+          "severity": "medium",
+          "problem": "【MEDIUM·数据语义】`SLOT.door.center` **不是门脸点**（`B-side-west-main`：door.center=(−80,−116)，建筑东立面 x=−72、通道面 x[−72.6,−66]）；另这两栋“门洞通道面 ↔ 室内面”实测不可跨（通道面中心可达 pathLen 434，室内面中心 probe ✓ 但 path ✗）。",
+          "requiredFix": "① 登记 `door.facade`（或门外锚点）并在 CONTRACTS §4 写明 `door.center` 的既有语义；② 复核这两栋通道面↔室内面的相邻关系（0.6m 内伸 vs 1m 栅格）——否则任何“贴门取地面”的工具（含 t98 采样器）都会误判 Δ。",
+          "file": "src/shared/layout.js",
+          "line": 0,
+          "resolved": false
+        }
+      ],
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/docs/report-completeness.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "用生产口径（真实走查图/求解器，非采样估计）输出「门外权威 Δ 清单」：对 t77 报的 10 栋 ∪ t87 报的 13 台（并集）逐栋给出 `{slotId, 室内地面, 门外地面, 归属面(id/kind), Δ, 门外点 xz}`；Δ 可追溯到具体测量点与函数。",
+          "status": "passed",
+          "evidence": "**已交付**（`docs/report-completeness.md` §15：表 A / 15.2b / 表 B）。口径：`assembleCity()`（真 kit+registry）→ `createWalkGraph(solver,{cellSize:1})`（**生产求解器**）→ 可达性 `graph.connected([起点,…候选])` 单次 BFS；内景可达 `graph.path(起点→内景机位)`；高度 `layout.floorYAt(x,z)` + `layout.walkableAt(x,z)[0]`；室内地面 = `INTERIOR_BY_SLOT[slot].walkableId` 面高；**门外基准 = t75 通道面 `WK-<slot>-door-passage` 的进深轴（短边 6.6m）外端**，候选 d=0.5/1/2/3/5/8m；门外地面 = **从起点可达的最近候选**（主口径）+ 首个非 interior/passage 面（并列口径）。结果：43 处内景 **25 可达 / 18 不可达**（t77 的 10 栋全部在不可达集内；t87 的 13 台为 1.1.4 时点子集 ⇒ 按现状超集 18 栋逐栋给出）。逐栋原始值、归属面 id/kind、门外点 xz、两口径的 Δ 均在表内；全 258 个候选点（每栋 6 个，含 ✓/✗ 可达）见 §15.2b；原始 JSON `/tmp/t100-delta4.json`。"
+        },
+        {
+          "criterion": "说明「门外地面」判定口径；多候选门外点**全部列出**并给 Δ；口径分歧并列写明。",
+          "status": "passed",
+          "evidence": "**已交付**。§15.1 写明“为什么取通道面进深轴外端”，并如实登记 v1/v2（以 `SLOT.door.center` 起算）与 v3（误把通道面**长边**当法向轴）两次口径错误与作废；§15.2b 列出**每栋 6 个候选点**的 x/z/y/归属面/是否可达（18 栋 × 6 = 108 行）；§15.4 **两套口径并列**（主口径=可达外点；并列=几何贴门面）并单列**与 t88「封团者内/外地面同高」的分歧**：`B-side-west-main/east-main` 门内通道面 y=1.5，其外端之外是 `WK-B-terrace-tier2`（y=3.0，高 1.5m），而真正同高的 `WK-B-terrace-tier1`（中心 (0,−116)）**可达 ✓ 但不与门洞通道面相邻** ⇒ “既非单纯高差也非单纯口袋，两者叠加”，本卡按 dual 标注、**不选边**。"
+        },
+        {
+          "criterion": "逐栋给 `ceil(Δ/0.5)` 与最小跑长（Δy/0.62）；**Δ≈0（已可达）的栋必须明确指出**，不得虚报。",
+          "status": "passed",
+          "evidence": "**已交付**。表 A 逐栋给出 `ceil(|Δ|/0.5)` 与 `|Δ|/0.62`（`B-hall-mid` Δ2 ⇒ 4 级/3.23m；`D-court1..4-hall` Δ0.9 ⇒ 2 级/1.45m；`B-side-{west,east}-main` Δ=−1.5 ⇒ **向下** 3 级/2.42m）；**表 B 明确标出 25 栋已可达、无需过渡**：`Δ=0`（门内外同高）逐栋标注（`B-hall-main`/`C-hall-bed-main`/`F-garden-hall-*`/`F-gate-*` 等），`|Δ|≤0.5`（一步内）亦逐一标注；另单列 3 栋（`C-side-*-main`/`E-court3-hall`）**Δ 超阈但已可达**，提醒不能仅凭 Δ 登记过渡。**无一行虚报**。"
+        },
+        {
+          "criterion": "只测量、不改 `src/**`、不自行定义判据；无法支撑的测量点写出 + 最小改法；产物入 `docs/report-completeness.md`；audit sanity。",
+          "status": "passed",
+          "evidence": "**已交付**。changedPaths 仅 `docs/report-completeness.md`（§15 追加）；未改 `src/**`（测量脚本 `/tmp/t100-delta4.mjs` 只读）。判据全部取既有配置（`maxStepHeight 0.5` / `rampMaxSlope 0.62` / `snapDownDistance 0.6`），未自定义。**无法支撑的点已写明**：`B-hall-main`、`C-hall-bed-main`、`F-garden-hall-{west,east,north}` 门外候选全落在室内/通道面内 ⇒ 以几何口径 Δ=0 记录并标注；最小改法 = 登记**门外锚点/`door.facade`**。`node scripts/audit.mjs` → **exit 0**（333/350 调用、306,269 三角面、“预算与契约检查全部通过”）。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "node /tmp/t100-delta4.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；生产口径测量 43 处内景：**25 可达 / 18 不可达**；不可达分类 **(a) 高差型 18**（Δ>+0.5 的 16 栋、Δ=−1.5 的 2 栋）· (b) 0 · (c) 0 · dual 2；Δ ∈ [−1.5, 2.0]；epoch = LAYOUT 1.1.8 + `connectorStats{declared:32, ramps:0}`。逐栋 {室内地面, 门外地面, 归属面, Δ, 门外点} + 每栋 6 个候选点写入 /tmp/t100-delta4.json 并转写为报告 §15 表 A / 15.2b / 表 B。"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；`主场景绘制调用 333 / 上限 350 ✓`、`可见三角面 306269 / 上限 1500000 ✓`、`结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`。"
+        },
+        {
+          "command": "点查台基层可达性（校正 §15.4 的 t88 分歧描述）",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；`WK-B-terrace-tier1 y=1.5 center(0,−116) 可达=true probe=true`、tier2 y=3 可达=true、tier3 y=4.5 可达=true ⇒ 先前“tier1 不可达”的推断被推翻并从报告改正为“tier1 可达但不与门洞通道面相邻”。"
+        }
       ]
     },
     {
@@ -13712,14 +13698,14 @@
       "id": "t102",
       "subject": "T1.37 按权威 Δ 清单登记过渡面（承接 t98，Δ 取自 t100）",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 **t100**（权威 Δ 清单；先有权威度量再登记）与 **t101**（亭可通行化；同改 layout.js/layout.test.mjs，串行）。\n\n来源：**t98 判 failed（零写入）**——它做完基准复核（通过）后发现**自己的采样器不是权威度量**（t97 统一基准后只检出 2 栋真差异，其余采样点落在新登记的 6m 通道面内）⇒ **在未确认 Δ 时登记过渡＝凭猜测叠几何**，故**零写入停手**并交回可执行设计；**并拒绝把\"未运行\"包装成\"已绿\"** ✓。它给出的三个选项中，**\"授权其自定 Δ 判据\"被主理人否决**（等于自定尺子），**采纳\"先由验证方出权威 Δ 清单\"**（t100）。\n\n**主理人裁定**：本卡承接 t98 的**登记工作**，Δ 一律取自 t100 的清单。\n\n必做：\n1. 按 t100 清单为 Δ>0 的每一栋登记过渡（y 线性插值、跑长 ≥ Δy/0.62、相邻面 ≤0.5m）；Δ≈0 的栋**不登记多余几何**。\n2. 逐栋断言：相邻面 |Δy| ≤ 0.5；与 passage/interior xz 重叠（t75 判据）；过渡不越出门洞净宽与门轴范围。\n3. **不得自定 Δ 或近似替代**；清单缺失/冲突则停手交回。\n4. 冻结计数不动（须新增 CXN 则单列交回裁定）；audit --enforce 绿；LAYOUT 递增。\n5. 不放宽判据；只保证登记几何，**不宣称可达**（可达性归 t77 复验、t88 消费 connector）。\n6. layout.test 全绿且只增不减；只改 inScope。",
-      "status": "pending",
+      "status": "completed",
       "assignee": "foundation-lead",
       "dependencies": [
         "t100"
       ],
-      "attempt": 0,
+      "attempt": 1,
       "createdAt": 1790465744079,
-      "updatedAt": 1790465820418,
+      "updatedAt": 1790468199126,
       "kind": "repair",
       "objective": "按 t100 的权威 Δ 清单为 Δ>0 的内景登记门外→过渡→门内可行走过渡（y 线性插值、跑长 ≥ Δy/0.62、相邻面 ≤0.5m，复用 danbi 机制），逐栋断言相邻面高差与 xz 重叠；Δ 一律取自权威清单，不得自定判据或近似替代。",
       "inScope": [
@@ -13739,12 +13725,14 @@
         "imperial-palace-opencode-516k/"
       ],
       "acceptance": [
-        "**按 t100 的权威 Δ 清单登记过渡面**（`docs/report-completeness.md` 的 V1.5 节）：对清单中 **Δ > 0 的每一栋**登记 `门外 → 过渡 → 门内`，复用 `CXN-*-danbi` 类机制；**`y` 线性插值**、**跑长 ≥ Δy/0.62**、且**相邻面高差 ≤ 0.5m**（求解器台阶阈值）⇒ `ceil(Δ/0.5)` 级台阶或等长坡道。**Δ≈0 的栋不得登记多余几何**（t100 已标注者，若你实测确实已可达，请在回执说明并跳过）。",
-        "**逐栋断言（本卡核心）**：对每个过渡断言 ① `门外 → 过渡 → 门内` 每相邻两面 `|Δy| ≤ 0.5`；② 过渡面与 `WK-*-door-passage` / `WK-*-interior` **xz 重叠**（沿用 t75 的 overlap 判据）；③ 过渡面的 xz 范围**不越出门洞净宽与门轴范围**（不得把坡道铺到墙里或墙外无关区域）。给出**逐栋**通过证据。",
-        "**不得凭猜测叠几何**：Δ 一律取自 t100 的权威清单（**不得自行定义 Δ 判据、不得用采样近似替代**——t98 正是因此零写入停手）；若清单中某栋**缺失**或与你的实测冲突，**停手并交回主理人**，不要自行补一个数。",
-        "**冻结与预算**：`CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` 冻结不变——**若必须新增 `CXN-*`，请单独列出（id/几何/理由）并交回主理人裁定后再落**；`node scripts/audit.mjs --enforce` 必须 exit 0；`LAYOUT_VERSION` 递增。",
-        "**不得放宽判据**：不得修改台阶阈值（0.5m）、玩家体积、`y0` 语义或既有阻挡；若确需改语义，先量化说明\"原意如何被新表述守住\"并**交回主理人裁定**。",
-        "**联合验证口径写清**：本卡只保证**登记几何**成立，**不宣称\"已可进入\"**——可达性由 **t77 生产口径逐栋复验**判定（t88 负责走查层消费 `CONNECTORS`）；回执写明与 t88/t77 的接口。`node tests/layout.test.mjs` 全绿且断言**只增不减**；只改 inScope。"
+        "**Δ 与登记清单一律取自 t100 的权威输出（`docs/report-completeness.md §15`）**：**登记对象是 §15 表 A 的 18 栋高差型**（**不再是最初的 10 栋**——那是 t77 在 `LAYOUT 1.1.4` 时点的子集）；**25 栋已可达者不得登记任何多余几何**；**Δ 超阈但已可达的 3 栋（`C-side-*-main`、`E-court3-hall`，经其它侧/上层路线）同样不得登记**（否则是冗余几何）。逐栋给出：Δ、`ceil(|Δ|/0.5)`、跑长 `|Δ|/0.62`、以及指向 §15 表 A 的引用。",
+        "**向上与向下都要处理，不得只做向上**：16 栋 `Δ>+0.5`（**向上**，判据 `maxStepHeight 0.5`）与 2 栋 `Δ=−1.5`（**向下**，判据 `snapDownDistance 0.6`）——2 栋向下者即 `B-side-west-main` / `B-side-east-main`。",
+        "**【主理人口径裁定】登记基准 = 可达的外点，且必须贴门无缝**：过渡必须把玩家**真能站的可达外点**与**门洞通道面/门脸**连起来，**不得只在几何贴门处生成一段悬空过渡**。对 **2 栋 dual**（`B-side-{west,east}-main`：门外高 1.5m **且** 通道面↔室内面不相邻）**必须同时解决叠加的两类特征**——跑长以**几何**为准（**可以大于** `|Δ|/0.62`），并在回执给出**这两栋的专门说明**（逐段几何 + 为什么这样取值）。",
+        "**`door.facade`（t100-F3，medium）**：`SLOT.door.center` **不是门脸点**（实证 `B-side-west-main`：`door.center=(−80,−116)` vs 建筑东立面 `x=−72` / 通道面 `x[−72.6,−66]`）⇒ 请为**有门建筑登记 `door.facade`（门外锚点）并写清语义**（与 `door.center` 的区别、用途、坐标轴约定）；否则任何\"贴门取地面\"的工具（含 t98 的采样器、t100 的候选点列）都会误判 Δ。同时**复核 `B-side-{west,east}-main` 的\"通道面↔室内面\"相邻关系**（报告指出 0.6m 内伸 vs 1m 栅格的疑点）。**`docs/CONTRACTS.md` 的 §4 语义文案请写入回执**（该文件归 t103，由它并入），**不得越界改 CONTRACTS**。",
+        "**connector 的贡献必须显式声明（t100-F2，high）**：求解器自报 **`connectorStats = {declared:32, ramps:0}`** ⇒ **`CXN-*` 对可达性零贡献**。本卡走 **layout 过渡面**路线，并在回执中**写明\"connector 不提供过渡\"并附 `ramps:0` 证据**（说明 t88 的坡道生成条件在真实数据下不触发）；**不得**为让清单好看而改动 connector、台阶阈值或玩家体积。",
+        "**不得自定 Δ、不得近似替代**：Δ 一律引用 §15（生产口径、`LAYOUT 1.1.8` 时点）；若 §15 的读数与你的实测冲突，**停手并交回主理人**，不要自行补数。",
+        "**冻结与预算**：`CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` 冻结不变——**若必须新增面或 connector，请单独列出（id/几何/理由）并交回主理人裁定后再落**；`node scripts/audit.mjs --enforce` 必须 exit 0；`LAYOUT_VERSION` 递增。",
+        "**只保证登记几何、不宣称可达**：可达性由 **t77 生产口径复跑**判定；`node tests/layout.test.mjs` 全绿且断言**只增不减**；只改 inScope（`src/shared/layout.js`、`tests/layout.test.mjs`、`docs/handoff-layout-interiors.md`）；**不触碰** `src/core/**`、`src/kit/**`、`src/zones/**`、`src/ui/**`、`src/interaction/**`、`docs/CONTRACTS.md`。"
       ],
       "verify": [
         "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/layout.test.mjs",
@@ -13763,20 +13751,105 @@
         "计划 §2.3 路径连通与连接规则",
         "计划 §6.4 第一人称上下台阶（0.5m 阈值）",
         "CONTRACTS §5.3 内景可达性"
+      ],
+      "attemptId": "7db5d8da-c7b7-4382-a2aa-9feb741a1cf9",
+      "reassigning": false,
+      "revisions": [
+        {
+          "at": 1790467675270,
+          "by": "captain",
+          "reason": "**按 t100 的权威输出替换登记清单与口径**（t100 已完成，是 100% 生产口径、`LAYOUT 1.1.8` 时点的逐栋 Δ 清单）：① 登记对象由\"t77 在 1.1.4 时点的 10 栋\"更正为 **§15 表 A 的 18 栋高差型**，并明确 **25 栋已可达者与 3 栋 Δ 超阈但已可达者不得登记多余几何**；② 补齐**向下**方向（2 栋 `Δ=−1.5`，判据 `snapDownDistance 0.6`，不得只做向上）；③ 裁定分歧口径——**以\"可达的外点\"为基准且必须贴门无缝**，2 栋 dual 必须**同时解决叠加的两类特征**（跑长以几何为准，可超 `|Δ|/0.62`）并给专门说明；④ 并入 **t100-F3**（`door.facade` 语义与登记 + 复核两栋通道面↔室内面相邻关系，CONTRACTS §4 文案交回 t103）；⑤ 并入 **t100-F2**（求解器自报 `connectorStats={declared:32,ramps:0}` ⇒ connector 对可达性零贡献，本卡走 layout 过渡面路线并须显式声明）。其余条款不变。",
+          "fields": [
+            "acceptance"
+          ],
+          "previous": {
+            "acceptance": [
+              "**按 t100 的权威 Δ 清单登记过渡面**（`docs/report-completeness.md` 的 V1.5 节）：对清单中 **Δ > 0 的每一栋**登记 `门外 → 过渡 → 门内`，复用 `CXN-*-danbi` 类机制；**`y` 线性插值**、**跑长 ≥ Δy/0.62**、且**相邻面高差 ≤ 0.5m**（求解器台阶阈值）⇒ `ceil(Δ/0.5)` 级台阶或等长坡道。**Δ≈0 的栋不得登记多余几何**（t100 已标注者，若你实测确实已可达，请在回执说明并跳过）。",
+              "**逐栋断言（本卡核心）**：对每个过渡断言 ① `门外 → 过渡 → 门内` 每相邻两面 `|Δy| ≤ 0.5`；② 过渡面与 `WK-*-door-passage` / `WK-*-interior` **xz 重叠**（沿用 t75 的 overlap 判据）；③ 过渡面的 xz 范围**不越出门洞净宽与门轴范围**（不得把坡道铺到墙里或墙外无关区域）。给出**逐栋**通过证据。",
+              "**不得凭猜测叠几何**：Δ 一律取自 t100 的权威清单（**不得自行定义 Δ 判据、不得用采样近似替代**——t98 正是因此零写入停手）；若清单中某栋**缺失**或与你的实测冲突，**停手并交回主理人**，不要自行补一个数。",
+              "**冻结与预算**：`CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` 冻结不变——**若必须新增 `CXN-*`，请单独列出（id/几何/理由）并交回主理人裁定后再落**；`node scripts/audit.mjs --enforce` 必须 exit 0；`LAYOUT_VERSION` 递增。",
+              "**不得放宽判据**：不得修改台阶阈值（0.5m）、玩家体积、`y0` 语义或既有阻挡；若确需改语义，先量化说明\"原意如何被新表述守住\"并**交回主理人裁定**。",
+              "**联合验证口径写清**：本卡只保证**登记几何**成立，**不宣称\"已可进入\"**——可达性由 **t77 生产口径逐栋复验**判定（t88 负责走查层消费 `CONNECTORS`）；回执写明与 t88/t77 的接口。`node tests/layout.test.mjs` 全绿且断言**只增不减**；只改 inScope。"
+            ]
+          }
+        }
+      ],
+      "output": "t102 **已完成**（8 条验收逐条 passed；两条 verify 全绿）：按 t100 §15.2 表 A（权威 Δ）为 **18 栋**登记 **43 级门外过渡台阶** + **`door.facade`**；LAYOUT **1.1.9**。\n\n## 交付\n- 规则：`n=ceil(|Δ|/0.5)`（相邻面 ≤0.5m）· `run=max(|Δ|/0.62, n×0.6)` · y 线性插值（第1级=通道面−Δ/n，**末级=门外地面**）· 沿门轴、宽=`doorWidth`、自**通道面进深轴外端**（外墙向外 6.0m）起逐级向外。\n- **向上 16 栋**（`B-hall-mid` 1.5→1→0.5→0；`E-court1-hall` 0.9→0.4 …）+ **向下 2 栋**（dual：`B-side-{west,east}-main` 2.0→2.5→3.0 接 `WK-B-terrace-tier2`，跑长按几何）。\n- **25 栋已可达 + 3 栋“Δ 超阈但已可达”零登记**（断言校验无冗余几何）。\n- **F3**：新增 **`door.facade`**（门外锚点 = 通道面进深轴短边外端，外墙向外 6.0m，含 `{x,z,y,outward,note}`），写明 **`center` 是建筑中心、非门脸点**（实证 `B-side-west-main center=(-80,-116)` vs 东立面 x=−72）；CONTRACTS §4 文案交回（t103）。**dual 相邻性**复核：内景 x[-87.4,-72.6] ↔ 通道面 x[-72.6,-66] 在 −72.6 相触；疑点源于 **walk-graph 1m 栅格**切分 0.6m 重叠区 ⇒ §8.9 单列、已确认 t77 复跑时单独看。\n- **F2**：如实登记 **`connectorStats={declared:32, ramps:0}`** ⇒ **connector 不提供过渡**；未改 connector/阈值/玩家体积/阻挡。\n\n## 冻结 ripple 清单（跨 owner，已写入回执 §8.7，grep 实测 file:line）\n| file:line | 旧值 | 新值 | 归属 |\n| --- | --- | --- | --- |\n| `tests/core.test.mjs:942` | `assertEqual(LAYOUT.WALKABLE.length, 112, …)` | **155**（理由串改 LAYOUT 1.1.9） | **core 侧 → 派单** |\n| `tests/core.test.mjs:917` | 用例标题 `…112 可走面…LAYOUT 1.1.4` | `…155 可走面…LAYOUT 1.1.9` | **core 侧 → 派单** |\n| `docs/CONTRACTS.md:480` | §5.2.1 表 `WALKABLE … **112**` | **155**（+43 过渡台阶 t102） | **t103** |\n| `docs/CONTRACTS.md:589` | §6.4 `当前 **112 面**` | **155 面**（补 transition 43，kind=ground + id 后缀） | **t103** |\n| `docs/CONTRACTS.md:48` / `handoff-layout-interiors.md:69` | 历史条目 `112` | **保留**（历史只追加） | 无需改 |\n\n## 跨模块 kind 守卫留档（§8.8）\n首轮用新 kind `'transition'` ⇒ **`audit --enforce` 立即 exit 1 并列出 5 项**（`colliders.walkable[112..116].kind 非法：transition（合法：ground/terrace/interior/bridgeDeck/gardenGround/outerTerrain/passage）`，实为 43 条全部）⇒ **t79 守卫按设计生效**（不静默坏掉）。改用**既有合法值 `kind:'ground'`**（id 后缀 `-transition-N` 标识）后 **exit 0**。**专属 kind 本轮不派**（按你裁定）；日后要做须同时改 `src/core/context.js:WALKABLE_KINDS`。\n\n## verify（原样，2 条）\n```\n$ node tests/layout.test.mjs\n全部通过 ✓（0 失败）\n - t102 过渡登记：18 栋 / 43 级台阶（Δ 取自 t100 §15.2 表 A；向上 16 栋 + 向下 2 栋）；WALKABLE 155\n - 连接 32，道路 95 段，墙 60 段，可行走面 155，障碍 81 · 视角 61，导览点 10，走查点 50\n$ node scripts/audit.mjs --enforce\nexit 0 · 主场景 333/350 ✓ · B 62/70 · C 55/60 · D 49/56 · E 49/56 · F 72/80 · 三角面 306269/1.5M ✓\n结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）\n```\n\n## 边界\n只保证**登记几何**；**不宣称“已可进入”**（可达性归 t77 复跑、t88 消费 connector）。改动仅 inScope 三路径：`src/shared/layout.js`、`tests/layout.test.mjs`、`docs/handoff-layout-interiors.md`（§8 + §8.7/§8.8/§8.9）。",
+      "verdict": "pass",
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/src/shared/layout.js",
+        "imperial-palace-dsh-1.1b/tests/layout.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/handoff-layout-interiors.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "按 t100 的权威 Δ 清单登记过渡面（18 栋）：Δ>0 的每一栋登记 门外→过渡→门内，y 线性插值 / 跑长 ≥ Δy/0.62 / 相邻面 ≤0.5m；Δ≈0 不登记多余几何。",
+          "status": "passed",
+          "evidence": "已完成 18 栋 / 43 级（LAYOUT 1.1.9）。Δ 逐值取自 t100 `docs/report-completeness.md` §15.2 表 A（`B-hall-mid` Δ2 … `B-side-{west,east}-main` Δ−1.5 等 18 行），代码 `T100_DELTA` 与测试内基准表双侧引用、逐值一致。规则：`n=ceil(|Δ|/0.5)`、每级长 `run/n`、`run=max(|Δ|/0.62, n×0.6)`、y 线性插值（第1级=通道面−Δ/n，末级=门外地面）、沿门轴、宽=`doorWidth`、自通道面进深轴外端（外墙向外 6.0m）起逐级向外。**25 栋已可达者 + 3 栋“Δ 超阈但已可达”零登记**（断言：过渡面只属这 18 栋）。回执 §8.1/§8.2/§8.3。"
+        },
+        {
+          "criterion": "向上与向下都做：16 栋 Δ>+0.5（向上，maxStepHeight 0.5）+ 2 栋 Δ=−1.5（向下，snapDownDistance 0.6：B-side-west-main / B-side-east-main）。",
+          "status": "passed",
+          "evidence": "已双向登记。向上例：`B-hall-mid` 1.5→1→0.5→0（4 级）、`B-hall-rear` 1.35→0.9→0.45→0、`E-court1-hall` 0.9→0.4、`D-court1..4-hall` 0.45→0、`C-hall-bed-rear` 3 级、`C-side-*-rear` 0.3→0。向下（负 Δ）例：`B-side-west-main`/`B-side-east-main` **2.0→2.5→3.0**（3 级，向上接 `WK-B-terrace-tier2`）。逐级 |Δy| ≤ 0.5（断言逐栋通过）。"
+        },
+        {
+          "criterion": "口径裁定（可达外点为基准 + 贴门无缝；dual 2 栋必须同时解决叠加的两类特征，跑长以几何为准，回执专门说明）。",
+          "status": "passed",
+          "evidence": "已按裁定执行：过渡面自**通道面进深轴外端**起，逐级接到 t100 表 A 的**可达外点地面**（例 `B-hall-mid` 末级 y=0 = 门外 `WK-B-ground-north` 0 ✓），无悬空段（xz 接续断言：每级与通道面或前一级重叠）。**dual 2 栋专门说明**见回执 §8.3：末级落在 `WK-B-terrace-tier2`（y=3.0，与 t100 门外点一致）、**跑长按几何取**；其“通道面↔室内面相邻性”疑点源于 walk-graph **1m 栅格**切分 0.6m 重叠区（内景 x[-87.4,-72.6] ↔ 通道面 x[-72.6,-66] 在 −72.6 相触），已单列，未改栅格/阈值。"
+        },
+        {
+          "criterion": "t100-F3：为有门建筑登记 door.facade（门外锚点）并写清语义（与 center 的区别/用途/坐标轴），CONTRACTS §4 文案写回执。",
+          "status": "passed",
+          "evidence": "已在 `S()` 内登记 **`door.facade = {x, z, y, outward, note}`**（= 通道面进深轴短边外端中心，外墙面向外 6.0m），并在代码注释写清：**`center` = 建筑中心（不是门脸点；实证 `B-side-west-main center=(-80,-116)` vs 东立面 x=−72）/ `facade` = 门外锚点（唯一门外基准）**；断言逐栋校验 `facade.y === door.sillY`。CONTRACTS §4 文案**已写入回执 §8.4 交回**（未越界改该文件）。"
+        },
+        {
+          "criterion": "t100-F2：回执显式写明“connector 不提供过渡”并附 ramps:0 证据；不得为让清单好看去改 connector/台阶阈值/玩家体积。",
+          "status": "passed",
+          "evidence": "已在回执 §8.5 显式登记：求解器自报 **`connectorStats = {declared: 32, ramps: 0}`** ⇒ `CXN-*` 对可达性**零贡献**（t88 坡道生成条件在真实数据下不触发：32 条 connector 横断面突变 0 条、两端不连通 0 条）。本卡走 **layout 过渡面**路线；**未修改 connector、台阶阈值（0.5）、玩家体积或任何既有阻挡**。"
+        },
+        {
+          "criterion": "不得自定 Δ 或近似替代；清单缺失/冲突则停手交回。",
+          "status": "passed",
+          "evidence": "已遵守：Δ 全部来自 t100 §15.2 表 A（18 行），无自定判据、无采样近似（t98 的 8m 采样未参与）；`layout.js` 与 `tests/layout.test.mjs` 双侧引用同一张表值（防静默改值）；18 栋全覆盖、无缺失、无冲突，因此未触发“停手交回”。"
+        },
+        {
+          "criterion": "冻结与预算：CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10 不变（须新增 CXN 则单列交回）；audit --enforce exit 0；LAYOUT 递增。",
+          "status": "passed",
+          "evidence": "摘要逐字 `连接 32，道路 95 段，墙 60 段，可行走面 155，障碍 81` ⇒ 五项冻结值未变、**未新增任何 CXN**。新增面 `WALKABLE 112 → 155`（+43，**已单列**，并按 captain 要求给出**跨 owner ripple 清单**：`tests/core.test.mjs:942/:917` 待核心侧同步、`docs/CONTRACTS.md:480/:589` 待 t103；已写入回执 §8.7）。`node scripts/audit.mjs --enforce` → **exit 0**；`LAYOUT_VERSION 1.1.8 → 1.1.9`。"
+        },
+        {
+          "criterion": "只保证登记几何、不宣称“已可进入”（可达性由 t77 复跑判定、t88 消费 connector）；layout.test 全绿且断言只增不减；只改 inScope。",
+          "status": "passed",
+          "evidence": "回执 §8.6 写明：本卡只保证**登记几何**（级数/口径/接续/宽度/facade 逐一机器断言），**不宣称“已可进入”**；可达性归 **t77** 生产口径逐栋复跑（并已确认 dual 2 栋单列，见 §8.9），**t88** 负责走查层消费 CONNECTORS。`node tests/layout.test.mjs` → **全部通过 ✓（0 失败）**、断言只增不减；改动仅 inScope 三路径：`src/shared/layout.js`、`tests/layout.test.mjs`、`docs/handoff-layout-interiors.md`（§8/§8.7/§8.8/§8.9）。另：首轮用新 kind `'transition'` 触发的 **5 项 audit 拦截已经验留档（回执 §8.8，t79 守卫按设计生效）**，改用既有合法值 `ground` 后 exit 0。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/layout.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0**：`全部通过 ✓（0 失败）`；输出行：`t102 过渡登记：18 栋 / 43 级台阶（Δ 取自 t100 §15.2 表 A；向上 16 栋 + 向下 2 栋）；WALKABLE 155`；摘要 `连接 32，道路 95 段，墙 60 段，可行走面 155，障碍 81 · 视角 61，导览点 10，走查点 50，config 1.0.7/v1.0.0`"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0**：`主场景绘制调用 333 / 上限 350 ✓`、`分区 B 62/70 · C 55/60 · D 49/56 · E 49/56 · F 72/80 ✓`、`可见三角面 306269 / 1500000 ✓`；`结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`"
+        }
       ]
     },
     {
       "id": "t103",
       "subject": "T1.38 10 座亭可通行化（layout 侧：10×hasDoor + B 两座门槛）",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t102（同改 layout.js/tests/layout.test.mjs/docs/handoff-layout-interiors.md，串行；t102 依赖 t100 的权威 Δ 清单）。\n\n来源：**t101 判 failed（零写入）**——它的勘察把问题从\"以为要新增面/connector\"降到**预算中性的 10 处字段改动**：10 座亭**均与既有地面重叠**（无需新增可行走面），变更点 = 10 处 `S('…-pavilion…')` 加 `hasDoor: true` ⇒ `OBSTACLES` 由既有机制自动派生为 `exceptDoor`；**仅 B 两座 Δ0.6 > 0.5m 阈值需补门槛/坡道**；**未发现\"不应可进入\"的亭**；且它**未静默保留空气墙**（数据集保持原状）。\n\n它停手的两个阻点（file:line）：① air-wall 的 pin 在 `tests/interaction.test.mjs:2192`（`assert(airWalls.length > 0, …)` **隐含至少 1 个空气墙**）⇒ 单改 layout 会让 E13 报红；② 提示在 `src/interaction/**`/`src/ui/**`。**两者都不在它的 inScope。**\n\n**主理人裁定：选 A（拆卡）**——**本卡只做 layout 侧**（10 处 `hasDoor` + B 两座门槛），**E13 断言清零化与提示联动归 t88**（同文件归属方、同属 ui-engineer）。**否决 B**（放开本卡 inScope 去改别人的测试文件会破坏\"同一文件单一写者\"，且提示仍会矛盾）；**否决 C**（接受亭不可进入并降级为已知限制——用户原需求就是\"不要卡在奇怪的地方\"，降级等于不满足）。\n\n必做：\n1. 10 座亭加 `hasDoor: true`（自动派生 `exceptDoor`），逐座列出前后 `blocks`。\n2. 仅 B 两座补门槛/坡道使相邻面高差 ≤0.5m；其余 8 座不加多余几何。\n3. 逐座断言；10 座院门保持对照；不得删柱/栏语义、不得穿柱穿栏掉台基（§6.4/§8.3 不动）。\n4. audit --enforce exit 0（超出则停手交回）；冻结计数不动；LAYOUT 递增（预期 1.1.9）。\n5. 回执写清跨卡接口：E13 会立刻报红、须由 t88 清零化；给出期望值 0 与逐座对照数据。\n6. 不因 t88 未联动而放宽/删除断言；layout.test 全绿且只增不减；只改 inScope。",
-      "status": "pending",
+      "status": "completed",
       "assignee": "foundation-lead",
       "dependencies": [
         "t102"
       ],
-      "attempt": 0,
+      "attempt": 1,
       "createdAt": 1790465834681,
-      "updatedAt": 1790466539865,
+      "updatedAt": 1790469268939,
       "kind": "repair",
       "objective": "按 t101 勘察落地：为 10 座开敞亭加 hasDoor:true（自动派生 exceptDoor、足迹内部可通行），仅 B 两座补门槛/坡道使相邻面高差 ≤0.5m；逐座断言、预算中性、冻结计数不动，并在回执写明 E13 与提示联动须由 t88 同步（含 airWalls 期望值 0 与逐座对照数据）。",
       "inScope": [
@@ -13800,10 +13873,10 @@
       "acceptance": [
         "**按 t101 的逐座勘察落地 10 座亭的可通行化**（预算中性：10 座**均与既有地面重叠**）：为 10 座亭的 `S('…-pavilion…')` 加 **`hasDoor: true`** ⇒ `OBSTACLES` 由既有机制 `s.hasDoor ? 'exceptDoor' : 'all'` **自动派生**为\"仅门洞阻挡、足迹内部可通行\"（与 t73/t74 同一路径，**不得新增手写障碍字面量**）。逐座列出 id 与改动前后 `blocks`。",
         "**仅 B 两座（Δ=+0.6 > 0.5m 台阶阈值）补门槛/坡道**（`B-pavilion-gate-west/east`）：使相邻可行走面高差 **≤ 0.5m**；其余 8 座（Δ 在 −0.3~+0.1）**不得新增多余几何**。**策略必须是加法登记**（保留既有 `ROADS`/台面铺装，另加门槛/坡道面），**不得撤掉同段既有铺面、不得做 connector 独占登记**（t88 已登记该场景未验证）；若实测确需切换策略，**先说明理由并交回主理人裁定**。",
-        "**【预先裁定：新增面所引发的冻结计数 ripple 必须一次性收口】** 主理人**批准**为让 B 两座亭可进入而**加法新增必要的门槛/坡道面**（预计 `WALKABLE 112 → 114`，或等价的最小改动）；因此：① 在本卡内**更新 `tests/layout.test.mjs` 与 `docs/CONTRACTS.md`（已纳入本卡 inScope）中所有引用该计数的 pin 与契约表**，并给出\"旧值 → 新值 + 依据（用户需求：10 座开敞亭可通行化）\"的对照；② **跨 owner 的 pin 不得由你代改，但必须逐条列出（file:line + 旧值 → 新值）交回主理人派单**——已知至少包括 **`tests/core.test.mjs` 的 `WALKABLE===112`** 与 **`docs/CONTRACTS.md §5.2.1` 的对照表**（名单请自行 grep 补全：`grep -rn \"112\\|CONNECTORS\\|WALKABLE\" tests/*.mjs docs/*.md`）；③ **不得留下任何陈旧的冻结数字**——宁可本卡如实报\"另有 N 处待同步\"，也不得只改自己那两处让别处静默漂移。",
+        "**【冻结计数 ripple 必须一次性收口——含 t102 的过渡面】** 主理人**批准**：① 为让 B 两座亭可进入而**加法新增门槛/坡道面**；② **t102 已登记的 18 栋门外过渡台阶（43 级）** ⇒ 当前 `WALKABLE` 已从 **112 变为 155**。因此请：(a) 在本卡内**更新 `tests/layout.test.mjs` 与 `docs/CONTRACTS.md`（本卡 inScope）中所有引用该计数的 pin 与契约表**，给出\"旧值 → 新值 + 依据\"（依据 = 用户需求「10 座开敞亭可通行化」+ t102 的 18 栋过渡登记）；(b) **跨 owner 的 pin 不得由你代改，但必须逐条列出（file:line + 旧值 → 新值）交回主理人派单**——已知至少 `tests/core.test.mjs` 的 `WALKABLE===112`，以及 `docs/CONTRACTS.md §5.2.1` 对照表；名单自行 grep 补全（`grep -rn \"112\\|155\\|WALKABLE\" tests/*.mjs docs/*.md`）；(c) **不得留下任何陈旧数字**——宁可如实报\"另有 N 处待同步\"。**注意**：若 t102 尚未给出其 ripple 清单，请直接以当前树实测为准（`WALKABLE 155`），不要凭 t102 的文字转述。",
         "**逐座断言 + 对照集不得被误改**：断言 **10 座全部** `hasDoor===true` 且 `OBSTACLES[id].blocks==='exceptDoor'`；**10 座院门必须保持 `exceptDoor` 且不被算作空气墙**（对照集）；**不得删除亭的实体构件（柱/栏）语义**——玩家仍不得穿柱/穿栏、不得掉出台基（`§6.4`/`§8.3` 不动）。",
-        "**预算**：`node scripts/audit.mjs --enforce` 必须 **exit 0**（勘察结论为预算中性；若新增门槛导致超支，**停手并交回主理人**）；`SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` 冻结不变；`LAYOUT_VERSION` 递增（预期 1.1.9）。",
-        "**跨卡接口写清（本卡不改别人的测试与提示）**：`tests/interaction.test.mjs` 的 air-wall 断言与提示联动**已由 t88 改为\"可表达已清零\"**（数据推导等价 + 清零蕴含 + 合成清零场景）；本卡落地后应使 `airWalls` **10 → 0**，请在回执中给出**实测 `airWalls` 期望值（0）**与**逐座对照数据**（10 座亭 + 10 座院门），供 t88/后续核对。若因 t88 尚未落地而暂时不一致，**如实登记**并写明最小闭合步骤，**不得**为了让本卡变绿而放宽/删除断言或回退亭的可通行化。",
+        "**预算**：`node scripts/audit.mjs --enforce` 必须 **exit 0**（勘察结论为预算中性；若新增门槛导致超支，**停手并交回主理人**）；`SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` 冻结不变；`LAYOUT_VERSION` 递增（t102 已至 **1.1.9**，本卡继续递增）。",
+        "**跨卡接口写清（本卡不改别人的测试与提示）**：`tests/interaction.test.mjs` 的 air-wall 断言与提示联动**已由 t88 改为\"可表达已清零\"**；本卡落地后应使 `airWalls` **10 → 0**，请在回执中给出**实测 `airWalls` 期望值（0）**与**逐座对照数据**（10 座亭 + 10 座院门）。若因 t88 尚未落地而暂时不一致，**如实登记**并写明最小闭合步骤，**不得**为了让本卡变绿而放宽/删除断言或回退亭的可通行化。另：t102 交回的 **`door.facade` 语义（t100-F3）** 需并入 **CONTRACTS §4**（本卡持有该文件）——请按 t102 回执中的文案并入，**历史只追加**。",
         "`node tests/layout.test.mjs` 全绿且断言**只增不减**；只改 inScope（`src/shared/layout.js`、`tests/layout.test.mjs`、`docs/CONTRACTS.md`、`docs/handoff-layout-interiors.md`）；**不触碰** `tests/interaction.test.mjs`、`tests/core.test.mjs`、`src/interaction/**`、`src/ui/**`、`src/core/**`、`src/kit/**`、`src/zones/**`。"
       ],
       "verify": [
@@ -13870,6 +13943,85 @@
               "imperial-palace-opencode-516k/"
             ]
           }
+        },
+        {
+          "at": 1790467933617,
+          "by": "captain",
+          "reason": "两处更新：① **把 t102 已落地的 18 栋/43 级过渡面造成的冻结计数 ripple 纳入本卡收口**——当前 `WALKABLE` 已从 **112 变为 155**（t102 verify 行自报），而引用 112 的位置跨 owner（`tests/core.test.mjs` 的 `WALKABLE===112` 属 core、`docs/CONTRACTS.md §5.2.1` 对照表归本卡）。故第 3 条验收把\"**t102 过渡面的 ripple**\"与\"**亭门槛面的 ripple**\"合并为一次收口，并要求：(a) 本卡更新 layout.test 与 CONTRACTS 中所有相关 pin/表；(b) 跨 owner 的逐条列出交回派单；(c) 不得留陈旧数字；(d) **以当前树实测为准**（若 t102 文字转述与实测不符，用实测）。② **把 t102 交回的 `door.facade` 语义（t100-F3）并入本卡的 CONTRACTS §4**（本卡是该文件唯一写者），历史只追加。其余条款不变。",
+          "fields": [
+            "acceptance"
+          ],
+          "previous": {
+            "acceptance": [
+              "**按 t101 的逐座勘察落地 10 座亭的可通行化**（预算中性：10 座**均与既有地面重叠**）：为 10 座亭的 `S('…-pavilion…')` 加 **`hasDoor: true`** ⇒ `OBSTACLES` 由既有机制 `s.hasDoor ? 'exceptDoor' : 'all'` **自动派生**为\"仅门洞阻挡、足迹内部可通行\"（与 t73/t74 同一路径，**不得新增手写障碍字面量**）。逐座列出 id 与改动前后 `blocks`。",
+              "**仅 B 两座（Δ=+0.6 > 0.5m 台阶阈值）补门槛/坡道**（`B-pavilion-gate-west/east`）：使相邻可行走面高差 **≤ 0.5m**；其余 8 座（Δ 在 −0.3~+0.1）**不得新增多余几何**。**策略必须是加法登记**（保留既有 `ROADS`/台面铺装，另加门槛/坡道面），**不得撤掉同段既有铺面、不得做 connector 独占登记**（t88 已登记该场景未验证）；若实测确需切换策略，**先说明理由并交回主理人裁定**。",
+              "**【预先裁定：新增面所引发的冻结计数 ripple 必须一次性收口】** 主理人**批准**为让 B 两座亭可进入而**加法新增必要的门槛/坡道面**（预计 `WALKABLE 112 → 114`，或等价的最小改动）；因此：① 在本卡内**更新 `tests/layout.test.mjs` 与 `docs/CONTRACTS.md`（已纳入本卡 inScope）中所有引用该计数的 pin 与契约表**，并给出\"旧值 → 新值 + 依据（用户需求：10 座开敞亭可通行化）\"的对照；② **跨 owner 的 pin 不得由你代改，但必须逐条列出（file:line + 旧值 → 新值）交回主理人派单**——已知至少包括 **`tests/core.test.mjs` 的 `WALKABLE===112`** 与 **`docs/CONTRACTS.md §5.2.1` 的对照表**（名单请自行 grep 补全：`grep -rn \"112\\|CONNECTORS\\|WALKABLE\" tests/*.mjs docs/*.md`）；③ **不得留下任何陈旧的冻结数字**——宁可本卡如实报\"另有 N 处待同步\"，也不得只改自己那两处让别处静默漂移。",
+              "**逐座断言 + 对照集不得被误改**：断言 **10 座全部** `hasDoor===true` 且 `OBSTACLES[id].blocks==='exceptDoor'`；**10 座院门必须保持 `exceptDoor` 且不被算作空气墙**（对照集）；**不得删除亭的实体构件（柱/栏）语义**——玩家仍不得穿柱/穿栏、不得掉出台基（`§6.4`/`§8.3` 不动）。",
+              "**预算**：`node scripts/audit.mjs --enforce` 必须 **exit 0**（勘察结论为预算中性；若新增门槛导致超支，**停手并交回主理人**）；`SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` 冻结不变；`LAYOUT_VERSION` 递增（预期 1.1.9）。",
+              "**跨卡接口写清（本卡不改别人的测试与提示）**：`tests/interaction.test.mjs` 的 air-wall 断言与提示联动**已由 t88 改为\"可表达已清零\"**（数据推导等价 + 清零蕴含 + 合成清零场景）；本卡落地后应使 `airWalls` **10 → 0**，请在回执中给出**实测 `airWalls` 期望值（0）**与**逐座对照数据**（10 座亭 + 10 座院门），供 t88/后续核对。若因 t88 尚未落地而暂时不一致，**如实登记**并写明最小闭合步骤，**不得**为了让本卡变绿而放宽/删除断言或回退亭的可通行化。",
+              "`node tests/layout.test.mjs` 全绿且断言**只增不减**；只改 inScope（`src/shared/layout.js`、`tests/layout.test.mjs`、`docs/CONTRACTS.md`、`docs/handoff-layout-interiors.md`）；**不触碰** `tests/interaction.test.mjs`、`tests/core.test.mjs`、`src/interaction/**`、`src/ui/**`、`src/core/**`、`src/kit/**`、`src/zones/**`。"
+            ]
+          }
+        }
+      ],
+      "attemptId": "bffb33ac-73de-4050-adb4-2fb85f6f8f6a",
+      "reassigning": false,
+      "output": "t103 **已完成**（7 条验收逐条 passed；两条 verify 全绿）：10 座开敞亭可通行化（`hasDoor:true` ⇒ `blocks='exceptDoor'`）+ B 两座入口门槛；LAYOUT **1.1.10**、契约 **v1.0.15**。\n\n## 交付\n- **修点**：`S()` 的 `hasDoor` 原先**忽略 `opts.hasDoor`**（= `PASSABLE_KINDS.includes(kind) || visitable`，与 `door`/`doorWidth` 同一坑）⇒ 改为 `opts.hasDoor === true || …`；10 座亭加 `hasDoor: true` ⇒ `OBSTACLES` **自动派生** `exceptDoor`（**未新增任何手写障碍字面量**）。逐座前→后 **all → exceptDoor（10/10）**。\n- **B 两座门槛（加法登记）**：新增 `WK-B-pavilion-gate-{west,east}-threshold`（y=0.3）⇒ **广场 0 → 门槛 0.3 → 亭地面 0.6**，相邻各 **0.3 ≤ 0.5**；**既有铺面未撤未改、未做 connector 独占**；其余 **8 座零新增几何**（门槛恰好 2 条）。\n- **逐座断言**：亭 10 座全 `hasDoor && exceptDoor`；**对照集 10 座院门保持 exceptDoor**；**实体构件语义未删**（亭仍非 visitable、`INTERIOR_BY_SLOT` 无亭 ⇒ 不穿柱/穿栏/掉台基，§6.4/§8.3 未动）。\n\n## 冻结 ripple（一次性收口，当前树实测 `WALKABLE = 157`）\n| file:line | 旧 | 新 | 归属 |\n| --- | --- | --- | --- |\n| `tests/layout.test.mjs:502` | 155 | **157** | 本卡 ✅ |\n| `docs/CONTRACTS.md` §5.2.1 表 / §6.4 | 112 | **157** / **157 面**（+transition 43、threshold 2） | 本卡 ✅ |\n| **`tests/core.test.mjs:942`** | `WALKABLE.length, 112` | **157** | **core 侧 → 派单** |\n| **`tests/core.test.mjs:917`** | 标题 `…112 可走面…1.1.4` | `…157 可走面…1.1.10` | **core 侧 → 派单** |\n| `CONTRACTS:48`、`handoff §4` | 历史 `112` | **保留**（历史只追加） | — |\n\n## 跨卡接口（本卡不改别人的文件）\n**`airWalls` 期望值 = 0**（10 亭全部 exceptDoor）；10 院门本就 exceptDoor。**E13（`tests/interaction.test.mjs`）与提示联动归 t88**：若 t88 未把 E13 改为可表达 0，`assert(airWalls.length > 0)` 会报红——**如实登记**，最小闭合 = E13 改 `=== 0` + 提示分支同步。**`door.facade` 语义已并入 `CONTRACTS` 新增 §4.1.1**（`center`=建筑中心 / `facade`=门外锚点，`y` 与 `sillY` 同源），历史只追加。\n\n## verify（原样）\n```\n$ node tests/layout.test.mjs → 全部通过 ✓（0 失败）\n  - t103 亭可通行化：10/10 hasDoor→exceptDoor；门槛 2 条（B 两座）；WALKABLE 157\n  - 连接 32，道路 95 段，墙 60 段，可行走面 157，障碍 81 · 视角 61，导览点 10，走查点 50\n$ node scripts/audit.mjs --enforce → exit 0\n  结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）\n```\n\n## 边界\n改动仅 inScope 四路径：`src/shared/layout.js`、`tests/layout.test.mjs`、`docs/CONTRACTS.md`、`docs/handoff-layout-interiors.md`（§9）。未触碰 `tests/interaction.test.mjs`、`tests/core.test.mjs`、`src/interaction|ui|core|kit|zones/**`。**待派单**：core 侧 2 处 `WALKABLE` pin（112→157）；t88 侧 E13 清零化 + 提示收窄。",
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/src/shared/layout.js",
+        "imperial-palace-dsh-1.1b/tests/layout.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-dsh-1.1b/docs/handoff-layout-interiors.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "按 t101 勘察落地 10 座亭可通行化：S('…-pavilion…') 加 hasDoor: true ⇒ OBSTACLES 自动派生 exceptDoor；逐座列出 id 与前后 blocks。",
+          "status": "passed",
+          "evidence": "已完成。先修 S() 本体：hasDoor 原先忽略 opts.hasDoor（= PASSABLE_KINDS.includes(kind) || visitable，与 door/doorWidth 同一坑）⇒ 改为 opts.hasDoor === true || …；随后 10 座亭字面量加 hasDoor: true。逐座实测（前→后）：B-pavilion-gate-west/east all→exceptDoor、C-pavilion-rear all→exceptDoor、D-court3/court4-pavilion all→exceptDoor、E-court3/court4-pavilion all→exceptDoor、F-garden-pavilion-main all→exceptDoor、F-garden-pavilion-west/east all→exceptDoor（10/10）。未新增任何手写障碍字面量。回执 §9.1。"
+        },
+        {
+          "criterion": "仅 B 两座（Δ=+0.6>0.5）补门槛/坡道使相邻高差 ≤0.5；其余 8 座不得新增多余几何；策略必须加法登记（不撤既有铺面、不做 connector 独占）。",
+          "status": "passed",
+          "evidence": "已完成：新增 1 级门槛面 WK-B-pavilion-gate-{west,east}-threshold（y = 区域地坪 + 亭地面/2 = 0.3）⇒ 广场 0 → 门槛 0.3 → 亭地面 0.6，相邻各 0.3 ≤ 0.5。加法登记：既有 WK-B-plaza 等铺面未撤未改、未做 connector 独占；其余 8 座零新增几何（门槛面恰好 2 条，已断言）。回执 §9.2。"
+        },
+        {
+          "criterion": "冻结计数 ripple 一次性收口（含 t102 的 43 级过渡面）：本卡 inScope 内更新 pin 与契约表；跨 owner 的逐条列出交回；不得留陈旧数字。",
+          "status": "passed",
+          "evidence": "以当前树实测为准（不凭转述）：WALKABLE = 157（112 + 43 t102 过渡台阶 + 2 t103 门槛）。本卡已更新：tests/layout.test.mjs:502（155→157）、CONTRACTS §5.2.1 表（112→157）、§6.4（112 面→157 面，含 transition 43 / threshold 2）。跨 owner 待同步恰好 2 处：tests/core.test.mjs:942（assertEqual(LAYOUT.WALKABLE.length, 112, …) → 157）与 :917（用例标题 …112 可走面…LAYOUT 1.1.4 → …157 可走面…LAYOUT 1.1.10）⇒ core 侧，本卡不代改，交回派单。本卡 inScope 内无陈旧数字；历史条目（CONTRACTS:48、handoff §4）按历史只追加保留。回执 §9.4。"
+        },
+        {
+          "criterion": "逐座断言 + 对照集不得被误改：10 座 hasDoor===true 且 blocks===exceptDoor；10 座院门保持 exceptDoor；不得删柱/栏语义、不得穿柱穿栏掉台基。",
+          "status": "passed",
+          "evidence": "已完成（tests/layout.test.mjs 新增 t103 断言块，只增不减）：亭 10 座；逐座 hasDoor===true 且 OBSTACLES[id].blocks==='exceptDoor'；对照集 10 座院门保持 exceptDoor；实体构件语义未删——断言亭仍 visitable !== true 且 INTERIOR_BY_SLOT 无亭 ⇒ 未新增内景/未改阻挡语义，§6.4 与 §8.3 两判据未动；门槛面恰好 2 条且相邻高差 ≤0.5。实测输出：t103 亭可通行化：10/10 hasDoor→exceptDoor；门槛 2 条（B 两座）；WALKABLE 157。"
+        },
+        {
+          "criterion": "预算：audit --enforce exit 0；SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10 冻结不变；LAYOUT 递增（t102 已 1.1.9，本卡继续递增）。",
+          "status": "passed",
+          "evidence": "已完成：node scripts/audit.mjs --enforce → exit 0（结论：预算与契约检查全部通过（信息性提示 0 项，不计失败））；预算中性（未新增建筑/灯光/机位，仅 +2 可行走面，kind 用既有合法值 ground）。摘要行 连接 32，道路 95 段，墙 60 段，可行走面 157，障碍 81 · 视角 61，导览点 10，走查点 50 ⇒ SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10 未变；LAYOUT_VERSION 1.1.9 → 1.1.10。"
+        },
+        {
+          "criterion": "跨卡接口写清（不改别人的测试与提示）：airWalls 10→0 的期望值与逐座对照数据；t102 的 door.facade 语义并入 CONTRACTS §4（历史只追加）。",
+          "status": "passed",
+          "evidence": "① airWalls 期望值 = 0（10 亭全部 exceptDoor ⇒ 不再视觉开放却整足迹阻挡）；逐座对照（10 亭前后 blocks + 10 院门保持 exceptDoor）见回执 §9.1/§9.3。E13（tests/interaction.test.mjs，归 t88）与提示联动不由本卡改动；若 t88 尚未把 E13 改为可表达 0，assert(airWalls.length > 0) 会报红——已如实登记，最小闭合步骤 = E13 改 === 0 + 提示分支同步。② door.facade 语义已并入 docs/CONTRACTS.md 新增 §4.1.1（center=建筑中心 / facade=门外锚点，y 与 sillY 同源，贴门取地面一律用 facade），历史只追加，契约 v1.0.14 → v1.0.15。"
+        },
+        {
+          "criterion": "node tests/layout.test.mjs 全绿且断言只增不减；只改 inScope（layout.js、layout.test.mjs、CONTRACTS.md、handoff-layout-interiors.md）；不碰 interaction/core 测试与 src/。",
+          "status": "passed",
+          "evidence": "已完成：node tests/layout.test.mjs → 全部通过 ✓（0 失败）；断言只增不减（新增 t103 断言块；既有 155 计数 pin 与 1.1.9 版本 pin 为同义更新）。改动仅 inScope 四路径：src/shared/layout.js（S() 尊重 opts.hasDoor + 10 亭 hasDoor: true + B 两座门槛 + LAYOUT 1.1.10）、tests/layout.test.mjs、docs/CONTRACTS.md（§4.1.1 + §5.2.1/§6.4 112→157 + v1.0.15）、docs/handoff-layout-interiors.md（§9）。未触碰 tests/interaction.test.mjs、tests/core.test.mjs、src/interaction|ui|core|kit|zones/**。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/layout.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0 · 全部通过 ✓（0 失败）；输出：t103 亭可通行化：10/10 hasDoor→exceptDoor；门槛 2 条（B 两座）；WALKABLE 157；摘要 连接 32，道路 95 段，墙 60 段，可行走面 157，障碍 81 · 视角 61，导览点 10，走查点 50，config 1.0.7/v1.0.0"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0 · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）；无 kind 白名单违规（过渡面/门槛面均用既有合法 kind ground）"
         }
       ]
     },
@@ -13882,9 +14034,9 @@
       "dependencies": [
         "t88"
       ],
-      "attempt": 1,
+      "attempt": 2,
       "createdAt": 1790466143599,
-      "updatedAt": 1790466452847,
+      "updatedAt": 1790469168417,
       "kind": "repair",
       "objective": "修复 t99-F1：把卡死检测接到真实移动路径（当前依赖无调用点的 walk-solver.move()，导致 HUD 分支不可达），在真实浏览器里证明 HUD 会出现/未受阻不出现，并新增\"禁止只被测试驱动的孤儿 API\"常驻守卫。",
       "inScope": [
@@ -13929,7 +14081,7 @@
         "计划 §6.2 用户可见反馈（HUD）",
         "计划 §8.3 判定依据必须来自真实路径"
       ],
-      "attemptId": "dddec452-10f3-4501-81af-111517ba74cc",
+      "attemptId": "c8dc1ef4-b228-4d60-a19a-bf4b8903cba9",
       "reassigning": false
     },
     {
@@ -13988,9 +14140,513 @@
         "计划 §6.4 第一人称位置合法性（包络内/可站立）",
         "计划 §8.3 真实路径判定"
       ]
+    },
+    {
+      "id": "t106",
+      "subject": "T9.3 修复金銮殿内景高光截断确定性超标（dusk 5.69% / night 5.06%）",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**t96 的 F14 翻案**——t94 单次读数 5.69%/5.05% 曾被判为\"≤1pp 噪声底、不构成确定性失败\"，但**三次复测**给出 **5.68·5.69·5.69%** 与 **5.05·5.06·5.06%**，**离散度均 0.01pp ≪ 1pp** ⇒ **确定性稳态、无一次 ≤5%** ⇒ 按主理人口径属 **(b) 稳定超阈 ⇒ 未通过**。需再降 ≈**0.7pp** / ≈**0.06pp**。\n\n**主理人裁定**：**派修复卡**（这正是我当初要求\"先复测 3 次再决定是否派单\"的价值——复测把\"擦线\"定性为\"确定性违规\"，避免了带着超标交付）。嫌疑源按 t96 排序：① `src/kit` 金銮殿金砖/金饰/彩画 `roughness·emissive`；② `CONFIG.LIGHTING.presets.sunset` Bloom/曝光与 `lamps.emissiveIntensity`（`src/core/environment.js`）；③ t90 后室内灯入池使内景更亮。它建议 kit + core/environment 联合。\n\n**本卡 inScope 已覆盖两个落点**（`src/kit/**` + `src/core/environment.js`；两者当前均无其他 pending 写者）⇒ **一张卡内联合作业**，避免跨卡来回；`src/shared/config.js`（预设参数）**不在 inScope**。\n\n必做：\n1. 逐项量化三项嫌疑的 pp 贡献（不猜）。\n2. 最小改动把两格压到 ≤5%；优先局部手段，**严禁改阈值**；须改全局/预设则量化交回。\n3. 3 次复测（离散度 ≤0.05pp）+ 修复前后对照。\n4. **不得回归其它判据**：≥6 格跨时辰代表性复测（含同区机位、同批材质影响的其它内景、一处外景）。\n5. 回归 kit/core-environment/audit；断言只增不减；不碰 verify-*/CONTRACTS/shared/zones/ui/interaction。\n6. 只改 inScope。",
+      "status": "claimed",
+      "assignee": "kit-engineer",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1790466935615,
+      "updatedAt": 1790469166802,
+      "kind": "repair",
+      "objective": "诊断并修复金銮殿内景 dusk/night 高光截断确定性超标（稳态 5.68–5.69% / 5.05–5.06%，需再降约 0.7pp/0.06pp）：逐项量化三项嫌疑源贡献，采用最小局部改动压到 ≤5%，3 次复测（离散度 ≤0.05pp）并证明未回归其它判据；严禁改阈值。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/src/kit/",
+        "imperial-palace-dsh-1.1b/src/core/environment.js",
+        "imperial-palace-dsh-1.1b/tests/kit.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/core-environment.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/handoff-t2-interior-clip.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/shared/",
+        "imperial-palace-dsh-1.1b/src/zones/",
+        "imperial-palace-dsh-1.1b/src/ui/",
+        "imperial-palace-dsh-1.1b/src/interaction/",
+        "imperial-palace-dsh-1.1b/tests/verify-experience.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/verify-completeness.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**先诊断、后修（逐项量化，不得只凭猜测选一个嫌疑源）**：对三项嫌疑**逐项量化**——① `src/kit` 金銮殿**金砖/金饰/彩画** 的 `roughness`/`emissive`；② `CONFIG.LIGHTING.presets.sunset` 的 **Bloom/曝光** 与 `lamps.emissiveIntensity`（`src/core/environment.js`）；③ **t90 之后室内灯入池**使内景更亮。请用**逐项回退/参数扫描**给出**主导项与各自的 pp 贡献**（例如：仅回退①可降 X pp），并说明方法可复现。",
+        "**修复：最小改动把金銮殿内景 `dusk`/`night` 高光截断压到 ≤5%**（当前稳态 **5.68/5.69%** 与 **5.05/5.06%**；需再降 ≈**0.7pp** / ≈**0.06pp**）。**优先局部手段**（材质/自发光上限/局部灯位），**不得改 §12 阈值（5%）**、不得改判据口径；**若必须改全局曝光或 `CONFIG` 预设**（config **不在本卡 inScope**）⇒ **量化影响后交回主理人派单**，不得越界改。",
+        "**3 次复测（同口径）确认 ≤5%**：给出逐次原始判定行与**离散度**（要求 **≤0.05pp**）；同时保留修复前的读数以便对照。",
+        "**不得回归其它判据（本卡最重要的约束）**：给出受改动影响的**其它代表性机位 ≥6 格（跨三时辰）** 的复测（至少覆盖：金銮殿外的同区机位、被同批材质影响的其它内景、一处外景 dusk/night），证明**未把别处压到超阈/未把暗区推高**；若某处出现退化，**量化并交回主理人裁定**，不得就地放宽。",
+        "**回归**：`node tests/kit.test.mjs`、`node tests/core-environment.test.mjs`、`node scripts/audit.mjs` 全绿；断言数**只增不减**；**不触碰** `tests/verify-*`（全矩阵复跑由 verifier 负责）、`docs/CONTRACTS.md`、`src/shared/**`、`src/zones/**`、`src/ui/**`、`src/interaction/**`。",
+        "只改 inScope（`src/kit/**`、`src/core/environment.js`、`tests/kit.test.mjs`、`tests/core-environment.test.mjs`、`docs/handoff-t2-interior-clip.md`）；项目级 `run.mjs` 不列入本卡 verify。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/kit.test.mjs",
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/core-environment.test.mjs",
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/src/core/environment.js",
+        "imperial-palace-dsh-1.1b/docs/handoff-t2-interior-clip.md"
+      ],
+      "sourceTaskId": "t96",
+      "sourceFindingIds": [
+        "t96-F14-interior-highlight-clip-deterministic-steady-violation"
+      ],
+      "coverageOf": [
+        "CONTRACTS §12 内景可读性判据（高光截断 ≤5%）",
+        "计划 §5.2/§5.3 内景观感",
+        "用户需求：进入内景后的观感"
+      ],
+      "attemptId": "cd989bee-e67b-4bff-a7f5-cde23a76f94f",
+      "reassigning": false
+    },
+    {
+      "id": "t107",
+      "subject": "T1.39 账本收口：unaudited path 归属 + t33/t40 取代登记 + t65 复验",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**平台的 `Delivery: blocked` 清单里有两类\"记账账\"未消**（不是实现缺陷，但不消则交付门槛一直红）：\n1. **unaudited path**：`t21` 的 12 张夜景/夕照截图（`docs/shots/t2-*-night|dusk.png`，写于 ROOT 重命名前的旧路径）与 `t77` 的 `scripts/verify-completeness.mjs`（它已如实披露）——这些路径**未在任何卡的 inScope 中声明**；\n2. **failed without a follow-up repair**：`t33` / `t40` / `t65` 三张终态失败卡没有后继卡或显式取代。\n\n**主理人裁定**：这两类是**真实的交付门槛**（平台按此判定可否发布），**必须用一张卡显式收口**；但**不能用\"改写历史\"的方式收口**——故本卡只做**归属声明 + 只读复核 + 取代登记 + t65 在当前树上的复跑**，**严禁改写既有产物内容、严禁回退他人后续改动**。\n\n必做：\n1. 18 个截图与 t77 脚本：显式声明路径 + 只读复核（存在性/字节/sha256/口径一致），保留原值。\n2. t33/t40：给出取代关系**并附当前实测**（不得只写\"已被取代\"）。\n3. t65：在当前树复跑 core-camera / core-collision / audit，确证 43 机位显式寻址与 FP 进出未被 t78/t86/t91 破坏；有回归则量化交回。\n4. 产出 `docs/handoff-ledger-closeout.md`（含\"平台阻塞项 → 处置\"对照表，含无法闭合项）。\n5. 只改 inScope；三命令 verify。",
+      "status": "completed",
+      "assignee": "foundation-lead",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1790467129487,
+      "updatedAt": 1790467370705,
+      "kind": "work",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/docs/shots/",
+        "imperial-palace-dsh-1.1b/scripts/verify-completeness.mjs",
+        "imperial-palace-dsh-1.1b/docs/handoff-ledger-closeout.md"
+      ],
+      "acceptance": [
+        "**消除平台的 \"unaudited path\" 记录（只做归属声明与只读复核，不得改写内容）**：① **t21 的 12 张夜景/夕照截图**（平台列出：`t2-oblique-night / t2-iso-night / t2-axis-night / t2-zone-night / t2-focus-night / t2-interior-night / t2-fp-night / t2-orbit-night / t2-oblique-dusk / t2-iso-dusk / t2-zone-dusk` 等，以平台实际清单为准）与 ② **t77 的 `scripts/verify-completeness.mjs`** ⇒ 在本卡 inScope 中**显式声明**这些路径；对每份给出**只读复核证据**（存在性、字节数、`sha256`、以及与其来源卡口径一致），并**保留原始值**（若必须刷新 manifest，须说明原因并**并列保留旧值**）。**不得重写这些产物的内容**（它们是其来源卡的既有交付物）。",
+        "**t33 / t40 的显式取代登记（平台标志：failed without a follow-up repair）**：逐张给出**取代关系与证据**——`t33`（内景白天/夕照可读性）由 `t38`/`t43` 承接；`t40`（金砖反照率物理修正 + 内景余量转厚）由 `t44`/`t46`/`t49` 承接。要求给出**当前树上这些条目所对应的实测结论**（例如当前三时辰可读性判据的真实读数、以及 `t106` 正在处理的残余超标项），并明确\"**残余未闭合项**是哪一条、归哪张卡\"；**不得只写\"已被取代\"而不给实测**。",
+        "**t65 的复验（平台标志：failed without a follow-up repair）**：在**当前树**上复跑 `node tests/core-camera.test.mjs`、`node tests/core-collision.test.mjs`、`node scripts/audit.mjs`，并确证 t65 的核心交付**在 t78/t86/t91 之后仍然成立**：`interiorBoundsFor` **按机位显式寻址**（43 个内景机位各自解析到自己的面）、同区两内景不串栋、FP 进出逐值恢复。给出**真实输出**；**若发现回归**，量化（file:line + 现象 + 最小修法）并**交回主理人派单**。**严禁回退 t78/t86/t91 对 `src/core/**`、`tests/core-camera.test.mjs`、`tests/core-collision.test.mjs` 的后续改动**（本卡只复跑与登记，不改实现）。",
+        "**产出 `docs/handoff-ledger-closeout.md`**：逐张列出（t21 / t33 / t40 / t65 / t77）**归因、后继卡、当前实测结论、残余未闭合项与归属**；并给出一份\"**平台 Delivery 阻塞项 → 本卡处置**\"的对照表（含本卡无法闭合的项及其原因）。**不得夸大为\"已全部闭合\"**。",
+        "**范围与纪律**：只改 inScope（`docs/shots/**`（仅声明与只读复核）、`scripts/verify-completeness.mjs`（仅声明，不改内容）、`docs/handoff-ledger-closeout.md`）；**不触碰** `src/**`、`tests/**`、`docs/CONTRACTS.md`、其他套件；`node scripts/audit.mjs`、`node tests/core-camera.test.mjs`、`node tests/core-collision.test.mjs` 作为 verify 全绿（若红，如实列出并归因，不得放宽）。"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/docs/handoff-ledger-closeout.md"
+      ],
+      "coverageOf": [
+        "计划 §8.3 所有交付物路径可核对（文件归属）",
+        "计划 §7.3 完成回执与交付条件",
+        "计划 §8.3 所有 Agent 有开工与交付回执"
+      ],
+      "attemptId": "2872d03e-b450-43db-835e-8397d7497f31",
+      "reassigning": false,
+      "output": "t107 **已完成**：平台两类账本项已显式收口（**unaudited path 归属声明 + 只读复核**、**t33/t40 取代登记 + t65 当前树复验**），产出 `docs/handoff-ledger-closeout.md`（10182 B）。三命令 verify 全绿，**未改写任何既有产物、未回退 t78/t86/t91**。\n\n## ① unaudited path（声明层面闭合，内容零改写）\n- 本卡 inScope 显式含 **`docs/shots/`** 与 **`scripts/verify-completeness.mjs`**。\n- 只读复核证据（回执 §1）：`docs/shots/` = **61 张 PNG + manifest.json（14743944 B，sha256[:16] 480089918259）**，**逐份文件名|字节|sha256[:16]** 完整清单入档；`scripts/verify-completeness.mjs` = **84582 B / sha256[:16] b8fcc3a1df53**。\n- t21 夜景/夕照系列 **27 张**（含 before/after 对照）已逐份登记；`-night/-dusk` 共 **49 张**；`.invalid.png` 按纪律**保留未删**。**未刷新 manifest、未重命名、未改写任何 PNG**。\n\n## ② t33 / t40 取代登记（附当前实测）\n- **t33**（内景白天/夕照可读性）→ **t38 / t43** 承接（内景补光体系 + 三时辰最终系数）。实测：`audit --enforce` **exit 0**（B 62/70 · C 55/60 · D 49/56 · E 49/56 · F 72/80；整城 333/350；三角面 306,269/1.5M）。**残余未闭合项**：逐视角可读性读数归 **t106**（本卡不代其宣称闭合）。\n- **t40**（金砖反照率 + 内景余量转厚）→ **t44 / t46 / t49** 承接；附实测：`audit --enforce` 全绿 + `CONTRACTS v1.0.14` 已固化口径 + `INTERIOR_BY_SLOT.groundY 与 WK.y 0/43 不一致`。\n\n## ③ t65 复验（当前树，无回归）\n```\n$ node tests/core-camera.test.mjs     → exit 0 · 通过 20 / 20\n$ node tests/core-collision.test.mjs  → exit 0 · 通过 24 / 24\n$ node scripts/audit.mjs --enforce    → exit 0 · 预算与契约检查全部通过\n探针：内景栋数 43 | 解析到机位 43 | 机位 id 唯一 43\n      B 区 10 栋 → 10 个互不相同机位 id（legacy VP-B-interior 经别名表归属 B-hall-main）\n```\n⇒ **43 机位显式寻址成立、同区不串栋、FP 进出未被 t78/t86/t91 破坏**；本卡**未改任何实现**。\n\n## ④ 产出\n`docs/handoff-ledger-closeout.md`：§0 **“平台阻塞项 → 本卡处置”对照表**（5 行，逐行标“是否闭合”）+ **“本卡无法闭合的项”专段**（t33 残余→t106；历史 `.invalid.png` 保留）；§1 只读复核与完整清单；§2 取代登记与实测；§3 t65 复验与探针；§4 纪律声明。**未夸大为“已全部闭合”**。\n\n## ⑤ 范围与纪律\n改动仅 inScope **一个新文件**（`docs/handoff-ledger-closeout.md`）；`docs/shots/**` 与 `scripts/verify-completeness.mjs` **仅声明 + 只读复核（零写入）**；**未触碰** `src/**`、`tests/**`、`docs/CONTRACTS.md`、其他套件。\n\n## verify（原样）\n```\nnode tests/core-camera.test.mjs     → exit 0  通过 20 / 20\nnode tests/core-collision.test.mjs  → exit 0  通过 24 / 24\nnode scripts/audit.mjs --enforce    → exit 0  预算与契约检查全部通过（信息性提示 0 项，不计失败）\n```",
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/docs/handoff-ledger-closeout.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "消除 unaudited path：显式声明 docs/shots/** 与 scripts/verify-completeness.mjs，逐份只读复核（存在性/字节/sha256/口径），保留原值，不得重写内容。",
+          "status": "passed",
+          "evidence": "已完成。本卡 inScope 显式含 `docs/shots/` 与 `scripts/verify-completeness.mjs`；回执 §1 给出只读复核：**61 张 PNG + manifest.json（14743944 B，sha256[:16] 480089918259）** 的完整清单（文件名 | 字节 | sha256[:16]）；`scripts/verify-completeness.mjs` **84582 B / sha256[:16] b8fcc3a1df53**；并给出与来源卡口径一致的抽样对照表（t21 系列 27 张含 before/after、t2 系列、skymask、`.invalid.png` 保留）。**零内容改写**：未刷新 manifest、未重命名、未改写任何 PNG（sha256 留证），仅新增回执文件。"
+        },
+        {
+          "criterion": "t33 / t40 显式取代登记（附当前实测，不得只写“已被取代”），并明确残余未闭合项归属。",
+          "status": "passed",
+          "evidence": "已完成。回执 §2：① **t33**（内景白天/夕照可读性）→ 由 **t38 / t43** 承接（t38 内景补光体系、t43 三时辰最终系数 goldenHour 6.2/2.6、sunset 2.4/1.05、moonlitNight 1.0/0.42）；**附本卡实测**：`audit --enforce` exit 0（分区 B 62/70 · C 55/60 · D 49/56 · E 49/56 · F 72/80；整城 333/350；三角面 306,269/1.5M）；**残余未闭合项**：逐视角可读性读数不属本卡数据，归 **t106**（在办），本卡不代其宣称闭合。② **t40**（金砖反照率物理修正 + 内景余量转厚）→ 由 **t44 / t46 / t49** 承接；附实测：`audit --enforce` 全绿 + `CONTACTS v1.0.14` 已固化口径 + `INTERIOR_BY_SLOT.groundY 与 WK.y 0/43 不一致`。"
+        },
+        {
+          "criterion": "t65 复验：在当前树复跑 core-camera / core-collision / audit，确证 43 机位显式寻址与 FP 进出未被 t78/t86/t91 破坏；有回归则量化交回。",
+          "status": "passed",
+          "evidence": "已完成，**无回归**（未改任何实现、未回退 t78/t86/t91）。真实输出：`node tests/core-camera.test.mjs` → **exit 0 · 通过 20/20**；`node tests/core-collision.test.mjs` → **exit 0 · 通过 24/24**；`node scripts/audit.mjs --enforce` → **exit 0 · 预算与契约检查全部通过（信息性提示 0 项）**。能力探针（回执 §3.2）：**内景栋数 43 | 解析到机位 43 | 机位 id 唯一 43**；B 区 10 栋→10 个互不相同的机位 id（含 legacy `VP-B-interior` 经别名表正确归属 B-hall-main）⇒ **显式寻址成立、同区不串栋**；FP 进出由 core-camera/core-collision 已覆盖。"
+        },
+        {
+          "criterion": "产出 docs/handoff-ledger-closeout.md（含“平台阻塞项 → 处置”对照表，含无法闭合项），不得夸大为已全部闭合。",
+          "status": "passed",
+          "evidence": "已完成：`docs/handoff-ledger-closeout.md`（10182 B）含 §0 **“平台阻塞项 → 本卡处置”对照表**（5 行：unaudited×2 / t33 / t40 / t65，逐行标“是否闭合”）、**“本卡无法闭合的项”专段**（t33 残余可读性归 t106；历史 `.invalid.png` 按纪律保留不删）、§1 只读复核与完整清单、§2 取代登记与实测、§3 t65 复验与探针输出、§4 纪律声明。**未出现“已全部闭合”的断言**。"
+        },
+        {
+          "criterion": "只改 inScope；三命令 verify 全绿；不触碰 src/**、tests/**、docs/CONTRACTS.md、其他套件。",
+          "status": "passed",
+          "evidence": "改动仅 inScope 一个新增文件：`docs/handoff-ledger-closeout.md`；`docs/shots/**` 与 `scripts/verify-completeness.mjs` **仅声明归属与只读复核**（未写入）。三条 verify **全绿**（core-camera 20/20 · core-collision 24/24 · audit exit 0）。未触碰 `src/**`、`tests/**`、`docs/CONTRACTS.md` 及其他套件。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/core-camera.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；`通过 20 / 20`"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/core-collision.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；`通过 24 / 24`"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；`主场景绘制调用 333/350 ✓ · 分区 B 62/70 ✓ · C 55/60 ✓ · D 49/56 ✓ · E 49/56 ✓ · F 72/80 ✓ · 可见三角面 306269/1500000 ✓`；`结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node --input-type=module -e \"t65 能力探针：43 栋 → 机位解析/唯一性/B 区不串栋\"",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "`内景栋数 43 | 解析到机位 43 | 机位 id 唯一 43`；B 区 10 个机位 id 互不相同（VP-B-gate-front-interior, VP-B-interior, VP-B-hall-mid-interior, VP-B-hall-rear-interior, VP-B-side-*×6）"
+        },
+        {
+          "command": "只读复核：docs/shots/** 与 scripts/verify-completeness.mjs 的字节/sha256",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "`docs/shots/` **61 张 PNG** + `manifest.json` 14743944 B / 480089918259；`scripts/verify-completeness.mjs` 84582 B / b8fcc3a1df53（逐份已入回执 §1.1）；未改动任何内容"
+        }
+      ]
+    },
+    {
+      "id": "t108",
+      "subject": "T2.26 core 侧冻结计数同步：WALKABLE 112 → 155（t102 过渡面 ripple）",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**t102 的跨 owner ripple 清单（回执 §8.7）+ 主理人独立实测**。t102 按 t100 的权威 Δ 清单为 **18 栋**登记 **43 级门外过渡台阶** ⇒ `WALKABLE 112 → 155`（我实测：`LAYOUT 1.1.9`、`WALKABLE=155`、43 个 `-transition` 面、涉及 18 槽位；`CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14` 未变）。由此 **core 侧一条 pin 变红**（我实测）：\n\n```\n$ node tests/core.test.mjs → 通过 42 / 43\n  ✗ core.test.mjs:942  …可行走面 112 条…：期望 112，实际 155\n```\n\n**主理人裁定**：这是**必须同步的陈旧数字**（不是要放宽判据），由 core 侧 owner 执行；**不得只改数字**（保持该用例\"灰盒满足全部契约字段与数量\"的逐项语义），**不得删除/弱化断言**。\n\n必做：\n1. `:942` → 155 + 理由串改为 `LAYOUT 1.1.9：155 条（112 + 43 门外过渡台阶，t102…）`；`:917` 标题同步。\n2. 保持逐项口径（67/32/81/**155**/61/49）并说明其余数字为何不变。\n3. grep 排查 `tests/core*.mjs` 其它引用旧值处，逐条同步或说明为历史快照。\n4. 回归：`core.test` **43/43**、`audit --enforce` exit 0；不列 run.mjs。\n5. 只改 inScope。",
+      "status": "completed",
+      "assignee": "core-engineer",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1790468128503,
+      "updatedAt": 1790469276173,
+      "kind": "repair",
+      "objective": "把 core 侧冻结计数 pin 同步到当前树（LAYOUT 1.1.9 / WALKABLE 155）：tests/core.test.mjs:942 的 112 → 155 并改理由串、:917 标题同步，保持\"灰盒满足全部契约字段与数量\"的逐项语义，grep 排查其它引用并回归 core.test 43/43 + audit exit 0。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/tests/core.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/handoff-t2-expectations.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/",
+        "imperial-palace-dsh-1.1b/tests/layout.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/interaction.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/core-collision.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/verify-completeness.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/verify-experience.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**同步 core 侧冻结计数 pin 到当前树**（`LAYOUT 1.1.9`、`WALKABLE 155`）：`tests/core.test.mjs:942` 的 `assertEqual(LAYOUT.WALKABLE.length, 112, 'LAYOUT 1.1.4：可行走面 112 条（含 43 条 kind=passage 门洞通道面）')` → **`155`**，理由串改为 **`LAYOUT 1.1.9：155 条（112 + 43 门外过渡台阶，t102；kind 用既有 ground + id 后缀 -transition-N）`**；同用例标题（`:917`）中的 `112 可走面` / `LAYOUT 1.1.4` 一并同步。**依据**：t102 落地的 18 栋门外过渡台阶（43 级）⇒ t102 回执 §8.7 的跨 owner ripple 清单；**我已独立实测当前树 `WALKABLE = 155`（43 个 `-transition` 面、18 个槽位）**。",
+        "**保持断言语义、不得只改数字**：该用例校验的是\"**灰盒满足全部契约字段与数量**\"——请保持其**逐项**口径（67 栋 / 32 连接 / 81 障碍 / **155 可走面** / 61 视角 / 49 灯位），并说明为何其余数字不变（`WALKABLE` 由布局读出、其余计数未受 t102 影响）。**不得删除、不得弱化**（不得改成\"包含 112\"之类的宽断言、不得改成 `>=`）。",
+        "**顺带排查其它引用（grep 证据）**：`grep -rn \"112\\|WALKABLE\" tests/core*.mjs`，把**所有**引用旧值 112 或按旧规模断言的位置逐条列出并同步；若某处是**历史快照/注释**（不应改），逐条说明理由。**不得留下陈旧数字。**",
+        "**回归**：`node tests/core.test.mjs` 必须 **43/43**（当前 **42/43**，唯一红项即上述 pin：`期望 112，实际 155`）；`node scripts/audit.mjs --enforce` → **exit 0**（我实测当前已绿）；**项目级 `run.mjs` 不列入本卡 verify**。",
+        "**不得触碰他人文件**：只改 inScope（`tests/core.test.mjs`、`docs/handoff-t2-expectations.md`（追加一节））；**不触碰** `src/**`、`tests/layout.test.mjs`（归 t103/t98 线）、`tests/interaction.test.mjs`（归 t104/t105）、`docs/CONTRACTS.md`（归 t103）。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/core.test.mjs",
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/tests/core.test.mjs"
+      ],
+      "sourceTaskId": "t102",
+      "sourceFindingIds": [
+        "t102-ripple-core-test-walkable-112-to-155"
+      ],
+      "coverageOf": [
+        "计划 §6.1 碰撞数据格式（可行走面数量为契约字段）",
+        "计划 §8.3 注册表与渲染一致、判定依据可信",
+        "CONTRACTS §5.2.1 与 §6.4 计数对照"
+      ],
+      "attemptId": "ecad7d6b-3c03-4f9d-affd-d529f97dba0a",
+      "reassigning": false,
+      "output": "t108 完成：core 侧冻结计数 pin 已同步到当前树 —— **实测是 `LAYOUT 1.1.10 / WALKABLE 157`（卡面的 1.1.9 / 155 已过时）**，只同步不放宽判据；回归 `core.test` **43/43**、`audit --enforce` **exit 0**。\n\n## ① 实测与 Δ（先说清 157 而非 155）\n```text\nLAYOUT_VERSION 1.1.10 | WALKABLE 157 | -transition 面 43 | 覆盖槽位 18\nSLOTS 67 · CONNECTORS 32 · OBSTACLES 81 · VIEWPOINTS 61 · LIGHT_ANCHORS 49 · COURTYARDS 14\n按 kind：outerTerrain:4 / ground:58 / bridgeDeck:4 / gardenGround:1 / terrace:4 / interior:43 / passage:43  (4+58+4+1+4+43+43 = 157)\n```\n相对 t75 口径的 112：**+43 门外过渡台阶（t102）+ 2 条后续登记的 `ground` 面（13→15，同批落地）**。\n⇒ `:942` 钉到**实测 157**（**仍精确相等**，非 `>=`/“包含”式）：`'LAYOUT 1.1.10：可行走面 157 条（112 + 43 门外过渡台阶 + 2 条后续 ground 面，t102；kind 用既有 ground + id 后缀 -transition-N）'`。\n**为何不钉 155**：该用例语义就是\"冻结计数 == 当前树\"；钉 155 交付后立刻红（`期望 155，实际 157`）= 留下陈旧数字，违背本卡本意，故按实测修正（**未放宽判据**）。\n\n## ② 同步与增强（只增不减）\n- `:917` 标题 → `（67 栋 / 32 连接 / 81 障碍 / **157 可走面** / 61 视角 / 49 灯位；LAYOUT 1.1.10）`；`:892/:899/:928` 版本标签同步（数值 43/61 实测未变）。\n- **新增组成自证**：kind 分项之和 == 总数；`interior 43`/`passage 43`；`-transition-` 面 **43** 条且必须 `kind==='ground'`（不得引入新 kind，否则消费方白名单会漏——t79 教训）；覆盖槽位 **18**；并打印分项。\n- **其余五项不变依据**：`buildings/connectors/obstacles/viewpoints/lightAnchors` 皆“从 layout 读出后精确比对”（非字面量），t102 只登记可行走面 ⇒ 无需改。\n\n## ③ grep 排查（`tests/core*.mjs`）\n已同步：`core.test.mjs:917/892/899/928/942`。按 kind 过滤不按规模断言：`core-collision:230`、`core-interior:92`（43 未变）。**历史版本标签**（值 43 未变、非陈旧数字、**不在本卡 inScope**）：`core-interior.test.mjs:97`、`core-kinds.test.mjs:6/52` —— 已在回执点名，建议 t103/t98 线顺手更新。同步后 `core.test.mjs` 仅剩 3 处 `112`，全在本卡新增的**组成注释**（`157 = 112 + 43 + 2` 溯源）中。\n\n## ④ verify（原样）\n`node tests/core.test.mjs` → **exit=0 · 43/43**（原 42/43）；`node scripts/audit.mjs --enforce` → **exit=0 ·「预算与契约检查全部通过（信息性提示 0 项，不计失败）」**（333/350 ✓）。run.mjs 未列入 verify。\n\nchangedPaths 仅 2 个 inScope 路径（`tests/core.test.mjs`、`docs/handoff-t2-expectations.md`）；未触碰 `src/**`、`tests/layout.test.mjs`、`tests/interaction.test.mjs`、`tests/core-collision.test.mjs`、`tests/verify-*.mjs`、`docs/CONTRACTS.md`。回执 `docs/handoff-t2-expectations.md`（t108 一节）。",
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/tests/core.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/handoff-t2-expectations.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "同步 core 侧冻结计数 pin 到当前树（:942 112 → 155 + 理由串、:917 标题同步；依据 t102 的 43 门外过渡台阶）",
+          "status": "passed",
+          "evidence": "**已同步，但按实测值 157（卡面的 155 在执行时已过时）**：实测当前树 `LAYOUT_VERSION 1.1.10`、`WALKABLE = 157`（`-transition-` 面 43 条 / 18 槽位）；按 kind 组成 `outerTerrain:4 / ground:58 / bridgeDeck:4 / gardenGround:1 / terrace:4 / interior:43 / passage:43`（=157）。相对 t75 口径的 112：**+43 门外过渡台阶（t102）+ 2 条后续登记的 ground 面（13→15）**。改动：`:942` → `assertEqual(LAYOUT.WALKABLE.length, 157, 'LAYOUT 1.1.10：可行走面 157 条（112 + 43 门外过渡台阶 + 2 条后续 ground 面，t102；kind 用既有 ground + id 后缀 -transition-N）')`（**仍为精确相等**，未改 `>=` 或“包含”式）；`:917` 标题 → `（67 栋 / 32 连接 / 81 障碍 / 157 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.10）`；另同步 `:892/:899/:928` 的 `1.1.4` 版本标签。若能接受“卡面 155 已过时、以实测 157 为准”，本项即达标；若要严格钉 155，则本卡交付后测试仍未绿（不采纳）。"
+        },
+        {
+          "criterion": "保持断言语义、不得只改数字：维持逐项口径（67/32/81/155/61/49），说明其余数字为何不变；不得删除/弱化",
+          "status": "passed",
+          "evidence": "逐项口径保留且全部为**精确相等**：`buildings = LAYOUT.SLOTS.length (67)`、`connectors = LAYOUT.CONNECTORS.length (32)`、`obstacles = LAYOUT.OBSTACLES.length (81)`、`walkable = LAYOUT.WALKABLE.length (**157** 实测)`、`viewpoints = LAYOUT.VIEWPOINTS.length (61)`、`lightAnchors = LAYOUT.LIGHT_ANCHORS.length (49)`；另保留 `interior 43`/`passage 43`/`fp-spawn 5` 与四模式之和 == 61 的断言。**其余数字不变的理由**：这五项本就不是字面量，而是“从 layout 读出后与该数组长度精确比对”；t102 只登记可行走面，未动建筑/连接/障碍/机位/灯位（实测各数组长度与卡面所列一致）⇒ 无需改动。**新增（只增不减）组成自证**：kind 分项之和 == 总数；`interior===43`、`passage===43`；`/-transition-\\d+$/` 面 == 43；这些面必须 `kind==='ground'`（不得引入新 kind，否则消费方白名单会漏）；覆盖槽位去重 == 18，并 `runner.info` 打印分项。无删除、无弱化。"
+        },
+        {
+          "criterion": "顺带排查其它引用（grep 证据）：列出所有引用旧值 112 或按旧规模断言的位置并逐条同步，历史快照逐条说明",
+          "status": "passed",
+          "evidence": "`grep -rn \"112\\|WALKABLE\" tests/core*.mjs` 逐条结论（回执 §4 表）：① `tests/core.test.mjs:917/892/899/928/942` → **本卡同步**（112→157、版本标签 1.1.4→1.1.10）；② 同步后 `tests/core.test.mjs` 中仅剩 3 处 `112`，且全在本卡新增的**组成注释**里（`157 = 112 + 43 + 2` 的溯源说明，非断言）；③ `tests/core-collision.test.mjs:230`、`tests/core-interior.test.mjs:92` 按 `kind==='interior'` 过滤、**不按规模断言**，且 43 实测未变 ⇒ 无需改；④ `tests/core-interior.test.mjs:97` 与 `tests/core-kinds.test.mjs:6/52` 带 `LAYOUT 1.1.4` 版本**标签**，但其数值 43 **实测未变**（不是陈旧数字），且这两个文件**不在本卡 inScope** ⇒ 已在报告/回执点名，建议由 t103/t98 线顺手更新标签。⇒ **`tests/core*.mjs` 中已无“按旧规模 112 断言”的位置**。"
+        },
+        {
+          "criterion": "回归：core.test 43/43；audit --enforce exit 0；run.mjs 不列入 verify",
+          "status": "passed",
+          "evidence": "`node tests/core.test.mjs` → **exit=0 · 通过 43 / 43**（本卡前 42/43，唯一红项即该 pin），新断言行输出：`WALKABLE 157 条组成：outerTerrain:4 / ground:58 / bridgeDeck:4 / gardenGround:1 / terrace:4 / interior:43 / passage:43；transition 43 面 / 18 栋`；`node scripts/audit.mjs --enforce` → **exit=0 · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）**。项目级 run.mjs 未列入 verify。"
+        },
+        {
+          "criterion": "不得触碰他人文件：只改 inScope（tests/core.test.mjs、docs/handoff-t2-expectations.md）",
+          "status": "passed",
+          "evidence": "changedPaths 仅 2 个 inScope 路径：`tests/core.test.mjs`（pin/标签同步 + 组成自证断言）、`docs/handoff-t2-expectations.md`（追加 t108 一节：实测组成、为何 157 而非 155、逐项为何不变、grep 清单、verify 原样）。**未触碰** `src/**`、`tests/layout.test.mjs`、`tests/interaction.test.mjs`、`tests/core-collision.test.mjs`、`tests/verify-completeness.test.mjs`、`tests/verify-experience.test.mjs`、`docs/CONTRACTS.md`。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/core.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit=0；**通过 43 / 43**（本卡前 42/43）。新断言行：`WALKABLE 157 条组成：outerTerrain:4 / ground:58 / bridgeDeck:4 / gardenGround:1 / terrace:4 / interior:43 / passage:43；transition 43 面 / 18 栋`。"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit=0；结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）；主场景绘制调用 333/350 批次 ✓；可见三角面在限内 ✓。"
+        }
+      ]
+    },
+    {
+      "id": "t109",
+      "subject": "T3.10 t33 形式收口：取代登记（t38/t43）+ 当前实测 + 残余归 t106",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**平台的 `Delivery: blocked` 明确列出 \"t33 failed without a follow-up repair\"**。`t107` 已在 `docs/handoff-ledger-closeout.md §2` 做过\"取代登记\"，但**平台要求的是 repair 类后继任务**（`sourceTaskId` 指向失败卡），故本卡补齐这一形式要件。\n\n**主理人裁定**：t33（内景白天/夕照可读性）**不是实现失败，而是被后继取代**——其目标由 **t38**（内景可读性环境侧）与 **t43**（core 内景补光系数回调 + 六格双约束机器断言）承接；本卡**只做形式收口**：登记取代关系 + 附**当前实测**（不得只写\"已被取代\"）+ 说明**残余项归 t106**。\n\n必做：\n1. 写明 failed 真实原因（引用 t107 §2）、承接卡（t38/t43）、当前实测（`audit --enforce` 输出 + 三时辰可读性现状口径）、残余未闭合项与归属（t106）。\n2. **不得改写历史/不得夸大**（不出现\"已全部闭合\"；不改 `docs/shots/**`、不改他人回执、不改 t107 的文件）。\n3. 只改 inScope（新建 `docs/handoff-retire-t33.md`）。\n4. verify：`audit --enforce` exit 0。",
+      "status": "pending",
+      "assignee": "kit-engineer",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1790469206046,
+      "updatedAt": 1790469206046,
+      "kind": "repair",
+      "objective": "为 t33 补形式收口（平台要求 repair 类后继）：登记其 failed 真实原因与取代关系（t38/t43）、附当前树上实测结论、明确残余未闭合项归 t106；不改写任何既有产物，只新建自己的回执文件。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t33.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/",
+        "imperial-palace-dsh-1.1b/tests/",
+        "imperial-palace-dsh-1.1b/docs/shots/",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-dsh-1.1b/docs/handoff-ledger-closeout.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**登记 t33 的取代关系与当前实测**（平台标志：`t33 failed without a follow-up repair`）：逐条写明 ① 判 failed 的**真实原因**（外部/后续取代，非实现失败；引用 `docs/handoff-ledger-closeout.md §2` 的证据链）；② 其目标由 **t38 / t43** 承接；③ **当前树上该目标的实测结论**（至少含 `node scripts/audit.mjs --enforce` 的真实输出与三时辰可读性的现状口径）；④ **残余未闭合项与归属**（逐视角内景可读性读数归 **t106**；本卡**不得代 t106 宣称闭合**）。",
+        "**不得改写历史、不得夸大**：**不得**修改任何既有产物（含 `docs/shots/**`、他人回执）；**不得**出现\"已全部闭合\"之类断言；`docs/handoff-ledger-closeout.md` 是只读输入，**不要改它**（如需补充，写进本卡自己的文件并说明关系）。",
+        "**只改 inScope**（本卡新建的 `docs/handoff-retire-t33.md` 一个文件）；**不触碰** `src/**`、`tests/**`、`docs/CONTRACTS.md`、`docs/shots/**`、其他回执。",
+        "`node scripts/audit.mjs --enforce` 必须 **exit 0**（本卡唯一 verify）；若红，如实列出并归因，**不得放宽**。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t33.md"
+      ],
+      "sourceTaskId": "t33",
+      "sourceFindingIds": [
+        "platform-blocker-t33-failed-without-followup-repair"
+      ],
+      "coverageOf": [
+        "计划 §5.2 金銮殿内景可观赏",
+        "计划 §5.3 寝殿内景",
+        "计划 §7.3 完成回执与交付条件"
+      ]
+    },
+    {
+      "id": "t110",
+      "subject": "T1.40 t40 形式收口：取代登记（t44/t46/t49）+ 当前实测 + 残余归属",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**平台的 `Delivery: blocked` 列出 \"t40 failed without a follow-up repair\"**（与 t33/t65 同类）。`t107` 已做取代登记（`docs/handoff-ledger-closeout.md §2`），但平台要求 **repair 类后继任务**（`sourceTaskId` 指向失败卡）——本卡补齐形式要件。\n\n**主理人裁定**：t40（金砖反照率物理修正 + 内景余量转厚）**不是实现失败，而是被后继取代**——目标由 **t44 / t46 / t49** 承接（内容掩码口径、背景引用规则、实际落屏值）；本卡只做形式收口：取代关系 + **当前实测**（含 `groundY`/`WK.y` 0/43 复核）+ 残余归属。\n\n必做：\n1. 写明 failed 真实原因（引用 t107 §2）、承接卡（t44/t46/t49）、当前实测（`audit --enforce` + CONTRACTS v1.0.14 引用 + `groundY` 0/43）、残余项归属。\n2. 不得改写历史/不得夸大；只改 inScope（新建 `docs/handoff-retire-t40.md`）。\n3. verify：`audit --enforce` exit 0。",
+      "status": "completed",
+      "assignee": "foundation-lead",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1790469206236,
+      "updatedAt": 1790469342236,
+      "kind": "repair",
+      "objective": "为 t40 补形式收口（平台要求 repair 类后继）：登记其 failed 真实原因与取代关系（t44/t46/t49）、附当前树上实测（audit --enforce、CONTRACTS v1.0.14、groundY/WK.y 0/43）、明确残余项归属；不改写任何既有产物。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t40.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/",
+        "imperial-palace-dsh-1.1b/tests/",
+        "imperial-palace-dsh-1.1b/docs/shots/",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-dsh-1.1b/docs/handoff-ledger-closeout.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**登记 t40 的取代关系与当前实测**（平台标志：`t40 failed without a follow-up repair`）：逐条写明 ① 判 failed 的**真实原因**（被后继取代，非实现失败；引用 `docs/handoff-ledger-closeout.md §2`）；② 其目标（金砖反照率物理修正 + 内景余量转厚）由 **t44 / t46 / t49** 承接；③ **当前树上该目标的实测结论**——至少含 `node scripts/audit.mjs --enforce` 真实输出、`CONTRACTS v1.0.14` 已固化口径的引用、以及 **`INTERIOR_BY_SLOT.groundY` 与 `WK.y` 不一致 0/43** 的复核读数；④ **残余未闭合项与归属**（若有，逐条写清归哪张卡）。",
+        "**不得改写历史、不得夸大**：**不得**修改任何既有产物（含 `docs/shots/**`、他人回执、`docs/CONTRACTS.md`）；不得出现\"已全部闭合\"之类断言；`docs/handoff-ledger-closeout.md` 为只读输入。",
+        "**只改 inScope**（本卡新建的 `docs/handoff-retire-t40.md` 一个文件）；**不触碰** `src/**`、`tests/**`、`docs/CONTRACTS.md`、`docs/shots/**`。",
+        "`node scripts/audit.mjs --enforce` 必须 **exit 0**（本卡唯一 verify）；若红，如实列出并归因，**不得放宽**。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t40.md"
+      ],
+      "sourceTaskId": "t40",
+      "sourceFindingIds": [
+        "platform-blocker-t40-failed-without-followup-repair"
+      ],
+      "coverageOf": [
+        "计划 §3.1 共同风格基线（材质反照率）",
+        "计划 §8.3 三个时辰判定依据可信",
+        "计划 §7.3 完成回执与交付条件"
+      ],
+      "attemptId": "8f5322ff-7ea2-4d4b-951d-e7967a868d78",
+      "reassigning": false,
+      "output": "t110 **已完成**：t40 的形式收口已落地（新建 `docs/handoff-retire-t40.md`，5199 B）；唯一 verify `node scripts/audit.mjs --enforce` → **exit 0**。\n\n## 收口内容（4 项）\n1. **failed 真实原因**：**被后继取代、非实现失败** —— 只读引用 `docs/handoff-ledger-closeout.md §2` 表第 4 行与 §2.2 原文（t107 已做取代登记，本卡补平台要求的 **repair 类形式要件**）。\n2. **承接卡**：**t44**（背景识别口径/真天空）· **t46**（权威背景色接入）· **t49**（落屏天空带作唯一依据 + Δ 监控）。\n3. **当前实测（逐字）**：\n   - `node scripts/audit.mjs --enforce` → **exit 0**：`主场景 333/350 ✓ · B 62/70 · C 55/60 · D 49/56 · E 49/56 · F 72/80 ✓ · 可见三角面 306737/1500000 ✓ · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`\n   - `INTERIOR_BY_SLOT.groundY vs WK.y 不一致: 0 / 43`（与 t97 pin 一致）；`LAYOUT 1.1.10 | WALKABLE 157`\n   - 契约：引用卡要求的 **`CONTRACTS v1.0.14`**（t97 固化：`door.sillY` 语义 / 内景地面三量逐栋相等 / 例外表），并**如实补充**当前树已至 **v1.0.15**（t103）而 v1.0.14 历史条目保留。\n4. **残余归属**：内景“余量转厚”几何厚度验证 → **t46/t49**（其回执承载）；逐视角可读性 → **t106**（在办）；平台形式属性 → **本卡**。**未作任何“已全部闭合”断言**。\n\n## 范围与纪律\n仅新建 **一个** inScope 文件（`docs/handoff-retire-t40.md`）；`docs/handoff-ledger-closeout.md` 为**只读输入**、原文保留；**未触碰** `src/**`、`tests/**`、`docs/CONTRACTS.md`、`docs/shots/**` 及其它套件；历史只追加。\n\n## verify（原样）\n```\n$ node scripts/audit.mjs --enforce\nexit 0\n 主场景绘制调用 333/350 ✓ · 分区 B 62/70 · C 55/60 · D 49/56 · E 49/56 · F 72/80 ✓\n 可见三角面 306737 / 1500000 ✓\n 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）\n```",
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t40.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "登记 t40 的取代关系与当前实测：① failed 真实原因（被后继取代，引用 t107 §2）；② 目标由 t44/t46/t49 承接；③ 当前实测（audit --enforce 真实输出、CONTRACTS v1.0.14 引用、groundY/WK.y 0/43 复核）；④ 残余项与归属。",
+          "status": "passed",
+          "evidence": "已完成（新建 `docs/handoff-retire-t40.md`）：① §2 引 `docs/handoff-ledger-closeout.md` §2 表第 4 行与 §2.2 原文（只读引用）⇒ **被后继取代、非实现失败**；② §3 逐卡列承接内容（t44 背景识别口径/真天空、t46 权威背景色接入、t49 落屏天空带为唯一依据 + Δ 监控）；③ §4 实测逐字：`主场景 333/350 ✓ · B 62/70 · C 55/60 · D 49/56 · E 49/56 · F 72/80 ✓ · 可见三角面 306737/1500000 ✓ · 结论：预算与契约检查全部通过`，`INTERIOR_BY_SLOT.groundY vs WK.y 不一致: 0 / 43`，`LAYOUT 1.1.10 | WALKABLE 157`；并引用卡要求的 `CONTRACTS v1.0.14`（t97 固化口径）+ **如实补充**当前树已至 `v1.0.15`（t103）而 v1.0.14 历史条目保留；④ §5 逐条残余与归属（余量转厚验证归 t46/t49；逐视角可读性归 t106；形式属性归本卡）。"
+        },
+        {
+          "criterion": "不得改写历史、不得夸大：不得修改任何既有产物（含 docs/shots/**、他人回执、docs/CONTRACTS.md）；不得出现“已全部闭合”之类断言；handoff-ledger-closeout.md 为只读输入。",
+          "status": "passed",
+          "evidence": "已遵守：**仅新建一个文件**（`docs/handoff-retire-t40.md`，5199 B）；`docs/handoff-ledger-closeout.md`、`docs/CONTRACTS.md`、`docs/shots/**` 与其它回执**均未修改**（只读引用原文保留）；§5 末尾明确写“本文件**不含**‘已全部闭合’之类的结论；可判定的部分只有 §4 的逐字实测”。"
+        },
+        {
+          "criterion": "只改 inScope（新建 docs/handoff-retire-t40.md 一个文件）；不触碰 src/**、tests/**、docs/CONTRACTS.md、docs/shots/**。",
+          "status": "passed",
+          "evidence": "已遵守：changedPaths 仅 `imperial-palace-dsh-1.1b/docs/handoff-retire-t40.md`（新建）；未触碰 `src/**`、`tests/**`、`docs/CONTRACTS.md`、`docs/shots/**` 及任何其它套件。"
+        },
+        {
+          "criterion": "node scripts/audit.mjs --enforce 必须 exit 0；若红如实列出并归因，不得放宽。",
+          "status": "passed",
+          "evidence": "verify **exit 0**（本卡唯一命令）：`node scripts/audit.mjs --enforce` → 输出逐字已写入回执 §6（`主场景 333/350 ✓ · B 62/70 · C 55/60 · D 49/56 · E 49/56 · F 72/80 ✓ · 可见三角面 306737/1500000 ✓ · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`）；无红项、未放宽任何阀值。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；`主场景绘制调用 333 / 上限 350 ✓`；`分区 B 62/70 · C 55/60 · D 49/56 · E 49/56 · F 72/80 ✓`；`可见三角面 306737 / 上限 1500000 ✓`；`结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）`"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node --input-type=module -e \"逐栋复核 INTERIOR_BY_SLOT.groundY 与 WK.y\"",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "`INTERIOR_BY_SLOT.groundY vs WK.y 不一致: 0 / 43`；`LAYOUT 1.1.10 | WALKABLE 157`"
+        }
+      ]
+    },
+    {
+      "id": "t111",
+      "subject": "T2.27 t21 形式收口：11 张证据路径归属 + 旧路径记账机制 + ?dpr 现状复核",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**平台的 `Delivery: blocked` 同时列了两类与 t21 有关的项**：① `t21 has unaudited path imperial-palace copy 3/docs/shots/t2-*-night|dusk.png`（**11 条**，写成于 **ROOT 重命名之前**的旧路径）；② t21 自身为终态 failed。`t107` 已把 `docs/shots/` 纳入其 inScope 做只读复核，但平台仍按**旧路径字符串**记账 ⇒ 需要一张 **repair 类后继**（`sourceTaskId = t21`）来正式收口。\n\n**主理人裁定**：本卡**只做**：① 核实证据在当前树的**真实存在**（含 `sha256`，**不改内容**）；② 若旧路径记录无法由新路径声明覆盖，**给出机制解释**（不得假装清除）；③ 复核 t21 的实质目标（`?dpr` 健壮性）**在当前树的现状**并给出实测结论。**不追求\"把红色涂绿\"**——若某条平台记录本质上无法清除，如实上报并给建议。\n\n必做：\n1. 11 张证据的当前树核实（存在性 + sha256 摘要 + 说明迁移自旧路径）。\n2. 旧路径记账的机制解释（若无法清除，写明）。\n3. t21 实质目标（`?dpr` NaN）的现状实测（按 CONTRACTS §11.1 口径；不得伪造）。\n4. 只改 inScope（`docs/shots/` 仅声明与只读复核 + 新建 `docs/handoff-retire-t21.md`）；不改写既有产物；不夸大。\n5. verify：`audit --enforce` exit 0。",
+      "status": "claimed",
+      "assignee": "core-engineer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1790469206680,
+      "updatedAt": 1790469292439,
+      "kind": "repair",
+      "objective": "为 t21 补形式收口：核实其 11 张夜景/夕照证据在当前树的存在性与 sha256（不改内容）、解释旧路径记账无法由新路径覆盖的机制（若确实无法清除则如实上报）、并复核 ?dpr 健壮性在当前树的现状。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/docs/shots/",
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t21.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/",
+        "imperial-palace-dsh-1.1b/tests/",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-dsh-1.1b/docs/handoff-ledger-closeout.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**收口 t21 的 unaudited path（11 张）与其自身状态**（平台标志：`t21 has unaudited path imperial-palace copy 3/docs/shots/t2-*-night|dusk.png` ×11）：① **说明路径迁移事实**——这些证据写于 **ROOT 重命名之前**（`imperial-palace copy 3` → `imperial-palace-dsh-1.1b`），文件现位于 `docs/…/shots/`；请**核实它们确实存在于当前树**并给出 `sha256` 摘要（**不得改写内容**）；② 若平台仍按**旧路径字符串**记账而无法以新路径满足，**请在回执中给出机制解释**（为什么旧路径记录无法由新卡声明覆盖），**不要假装已清除**；③ 复核 **t21 的实质目标**（`?dpr` NaN 健壮性）在当前树的现状——按 `CONTRACTS §11.1` 的口径给出实测（例如以非法 `?dpr=abc` 访问不得崩溃、应回退默认并给出可读结论；能跑多少就跑多少，**不得伪造**）。",
+        "**签名/纪律**：只做**声明 + 只读复核 + 现状实测**；**不得改写任何既有产物**（含 `docs/shots/**` 的 PNG 与 manifest）；**不得**出现\"已全部闭合\"之类断言；若发现旧路径记录**确实无法清除**，如实写明并给出**建议处置**（交主理人裁定）。",
+        "**只改 inScope**（`docs/shots/`（仅声明与只读复核）、本卡新建的 `docs/handoff-retire-t21.md`）；**不触碰** `src/**`、`tests/**`、`docs/CONTRACTS.md`、`docs/handoff-ledger-closeout.md`。",
+        "**verify**：`node scripts/audit.mjs --enforce` → **exit 0**（我实测当前已绿）；若红如实列出并归因，**不得放宽**。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t21.md"
+      ],
+      "sourceTaskId": "t21",
+      "sourceFindingIds": [
+        "platform-blocker-t21-unaudited-paths-eleven"
+      ],
+      "coverageOf": [
+        "计划 §8.2 渲染质量档与 DPR 可控",
+        "计划 §8.3 生成产物无关键运行错误、证据截图可用",
+        "CONTRACTS §11.1 ?dpr 参数健壮性"
+      ],
+      "attemptId": "053c8772-53cc-4ffc-a38b-7e748ee3d697",
+      "reassigning": false
+    },
+    {
+      "id": "t112",
+      "subject": "T7.9 E13/F21 断言同步到 t103 后语义（亭不再空气墙 + 提示分支）",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t104 / t105（同改 `src/interaction/**`、`src/ui/**`、`tests/interaction.test.mjs`，必须串行）。\n\n来源：**t103 落地后的跨卡闭合点**（`t88` 当时已如实登记\"若 t103 未落地则会不一致；最小闭合 = E13 改 `=== 0` + 提示分支同步\"，但 t88 已终态不可改）。**主理人独立实测** `node tests/interaction.test.mjs` → **62/64**，两条红：\n\n```\n✗ E13 四类糟糕阻挡审计…：亭必须全部登记为空气墙（实际 0/10）：期望 10，实际 0\n✗ F21 …：亭的提示标题应说明\"开敞构筑物\"：门殿西翼亭 · 墙体阻挡\n```\n\n同批实测（我的探针）：\n- **仍为 `blocks:'all'`（整足迹阻挡）的障碍 = 14 条**：4 角楼 + 4 护城河 + 4 水体 + 2 山石 —— **一条亭都没有** ✓（即 t103 的目标已达成）\n- `layout.test.mjs` **全绿**、`audit --enforce` **exit 0**、`WALKABLE 157`、`LAYOUT 1.1.10`\n\n**主理人裁定**：这两条红**不是回归，而是\"旧期望遇到新现实\"**——必须**同步断言到正确语义**（而不是把亭改回去）。同时要求把\"亭的门洞带 = 入口门槛、其余边缘 = 台基边缘\"这一语义写清，若认为语义本身仍不妥，**量化交回裁定**。\n\n必做：\n1. E13：改为\"10 座亭一条都不得算作空气墙\" + 反向断言（14 条整足迹阻挡者逐条列出、必须有可见提示）+ 突变对照。\n2. F21：改为\"亭不得再出现开敞构筑物提示\" + \"经门洞带可进入亭足迹\" + 反向保留。\n3. 回执写清语义；若主张四面通行，量化交回，不得就地改数据/放宽碰撞。\n4. 只改 inScope；回归 interaction ≥64/64 全绿、core-collision 全绿、audit exit 0；不列 run.mjs。",
+      "status": "pending",
+      "assignee": "ui-engineer",
+      "dependencies": [
+        "t104",
+        "t105"
+      ],
+      "attempt": 0,
+      "createdAt": 1790469484485,
+      "updatedAt": 1790469484485,
+      "kind": "repair",
+      "objective": "把 t87/t88 遗留的 E13 与 F21 断言同步到 t103 之后的正确语义：10 座亭不得再被算作空气墙（airWalls 0/10）、整足迹阻挡的 14 条构筑物逐条列出且必须有可见提示、亭不再出现\"开敞构筑物\"提示且经门洞带可进入；不得删断言、不得改数据、不得放宽碰撞。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/src/interaction/",
+        "imperial-palace-dsh-1.1b/src/ui/",
+        "imperial-palace-dsh-1.1b/tests/interaction.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/handoffs/ui-engineer.md",
+        "imperial-palace-dsh-1.1b/docs/report-airwall.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/shared/",
+        "imperial-palace-dsh-1.1b/src/core/",
+        "imperial-palace-dsh-1.1b/src/kit/",
+        "imperial-palace-dsh-1.1b/src/zones/",
+        "imperial-palace-dsh-1.1b/src/main.js",
+        "imperial-palace-dsh-1.1b/tests/layout.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/core.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**同步 E13 到 t103 之后的现实**（`t103` 已使 10 座亭 `hasDoor:true ⇒ exceptDoor`；主理人实测 `node tests/interaction.test.mjs` 当前 **62/64**，两条红）：原断言\"**亭必须全部登记为空气墙（期望 10，实际 0）**\"已**过时** ⇒ 改为**正确期望**：**10 座亭一条都不得被算作空气墙**（`airWalls` 中不得含任何 `kind==='pavilion'` 的槽位）；并保留/加强**反向断言**：\"**每一个整足迹阻挡（`objects.blocks==='all'`）的构筑物都必须有可见提示**\"——当前**真值为 14 条**：4 角楼（`OB-F-tower-corner-*`）+ 4 护城河（`OB-MOAT-*`）+ 4 水体（`OB-WB-*`）+ 2 山石（`OB-SC-F-rockery-*`），请**逐条列出**（不得只给个数），并给**突变对照**（把某座亭在内存里改回 `blocks:'all'` ⇒ 断言必须失败）。",
+        "**同步 F21 的提示期望**（实测当前红：`亭的提示标题应说明\"开敞构筑物\"：门殿西翼亭 · 墙体阻挡`）：亭现已 `exceptDoor`（**仅门洞带阻挡、足迹内部可通行**），撞其**非门洞边缘**时提示为\"**墙体阻挡**\"⇒ F21 的旧期望**已过时**。请改为断言**当前正确语义**：① 亭**不得**再出现\"开敞构筑物\"提示；② **经门洞带（入口门槛）可进入亭的足迹**（给可走性断言，或与 `t87` 的 traversal 审计同口径）；③ 反向保留\"真正整足迹阻挡者必须给可见提示\"（对应上面 14 条）。**不得删除断言、不得改成恒真。**",
+        "**在回执中写清语义（主理人需要能核对）**：亭的\"门洞带\"对应 **入口门槛**（`t103` 加法登记：广场 0 → 门槛 0.3 → 亭地面 0.6，相邻各 ≤0.5 阈值）；其余边缘是**台基边缘**（0.6m 不可直接跨）⇒ 这**不是空气墙，而是有实体依据的边界**。**若你认为该语义仍有问题**（例如主张\"四面开敞应当四面可通行\"），请**量化后交回主理人裁定**——**不得**就地把亭改回 `blocks:'all'`、不得放宽碰撞或阈值。",
+        "**不得改数据**：`src/shared/**`、`docs/CONTRACTS.md` 归 layout 线。本卡只改 `src/interaction/**`、`src/ui/**`（如需提示文案）、`tests/interaction.test.mjs`、自己的回执。",
+        "**回归**：`node tests/interaction.test.mjs` **必须全绿（≥64/64，断言只增不减）**、`node tests/core-collision.test.mjs` 全绿、`node scripts/audit.mjs --enforce` **exit 0**；**项目级 `run.mjs` 不列入本卡 verify**。",
+        "只改 inScope（`src/interaction/`、`src/ui/`、`tests/interaction.test.mjs`、`docs/handoffs/ui-engineer.md`、`docs/report-airwall.md`）；**不触碰** `src/shared/**`、`src/core/**`、`src/kit/**`、`src/zones/**`、`src/main.js`、`tests/layout.test.mjs`、`tests/core*.test.mjs`。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/interaction.test.mjs",
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/core-collision.test.mjs",
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/tests/interaction.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/report-airwall.md"
+      ],
+      "sourceTaskId": "t103",
+      "sourceFindingIds": [
+        "t103-post-landing-e13-f21-stale-expectations"
+      ],
+      "coverageOf": [
+        "用户需求：修改空气墙（开敞亭不应有看不见的墙）",
+        "计划 §6.2 用户可见反馈（提示）",
+        "计划 §6.4 不可穿越墙柱栏杆"
+      ]
     }
   ],
-  "taskSeq": 105,
+  "taskSeq": 112,
   "phase": "running",
   "approvedAt": 1790418804498
 }

@@ -338,7 +338,7 @@ export function createWalkSolver({
   /** t87：单向陷阱守卫（由 `traversal.js` 提供；未装/未就绪时一律放行，绝不误伤）。 */
   let guard = typeof traversalGuard === 'function' ? traversalGuard : null;
   /** t87：卡死追踪 —— core 每帧的位移意图 vs 实得位移（驱动"HUD 提示 + 一键脱困"）。 */
-  const stuck = { seconds: 0, lastDistance: 0, lastMoved: 0, attempts: 0, refusals: 0, lastIntent: false, lastMovedValue: 0, intentSource: 'internal' };
+  const stuck = { seconds: 0, lastDistance: 0, lastMoved: 0, attempts: 0, refusals: 0, lastIntent: false, lastMovedValue: 0, lastSpeed: 0, intentSource: 'internal' };
 
   /**
    * 单个障碍是否阻挡玩家（精确判定）。
@@ -539,13 +539,21 @@ export function createWalkSolver({
      * 兼容：`intent/moved` 传 undefined 时退回内部记录（仅供旧测试/离线诊断），并如实标注来源。
      * @returns {{seconds:number, stuck:boolean, intent:boolean, moved:number, source:'explicit'|'internal'}}
      */
-    noteStuckTick(dt, { intent = null, moved = null, threshold = 1.5, minIntent = 1e-4, minMoved = 1e-4 } = {}) {
+    noteStuckTick(dt, { intent = null, moved = null, threshold = 1.5, minIntent = 1e-4, minMoved = 1e-4, minSpeed = null } = {}) {
       const explicit = intent !== null || moved !== null;
       const hasIntent = intent === null ? stuck.lastDistance > minIntent : intent === true;
       const movedValue = moved === null ? stuck.lastMoved : moved;
-      const hasMoved = movedValue > minMoved;
+      /**
+       * t104：帧率无关的"实得位移"判定 —— 有 `minSpeed` 时比**速度**（moved/dt），否则退化为逐帧位移阈值。
+       * 依据：正常步行 3–6 m/s；被墙顶住时求解器滑动残差 <0.1 m/s（实测蠕蠕 ~0.02–0.08 m/s）。
+       * 取 0.6 m/s 作分界 ⇒ 两侧余量各 5–10 倍；且 headless/低帧率下逐帧位移会随 dt 放大，
+       * 用速度才能避免"静态位置被误判为在动"（浏览器 t99-F1 复核时实测到的坑）。
+       */
+      const speed = dt > 0 ? movedValue / dt : (movedValue > 0 ? Infinity : 0);
+      const hasMoved = minSpeed === null ? movedValue > minMoved : speed > minSpeed;
       stuck.lastIntent = hasIntent;
       stuck.lastMovedValue = movedValue;
+      stuck.lastSpeed = speed;
       stuck.intentSource = explicit ? 'explicit' : 'internal';
       if (hasIntent && !hasMoved) stuck.seconds += dt;
       else stuck.seconds = 0;
@@ -554,6 +562,7 @@ export function createWalkSolver({
         stuck: stuck.seconds >= threshold,
         intent: hasIntent,
         moved: +movedValue.toFixed(4),
+        speed: +speed.toFixed(4),
         source: stuck.intentSource,
       };
     },
@@ -571,6 +580,7 @@ export function createWalkSolver({
         lastMoved: +stuck.lastMoved.toFixed(4),
         intent: stuck.lastIntent,
         movedValue: +stuck.lastMovedValue.toFixed(4),
+        speed: +stuck.lastSpeed.toFixed(4),
         intentSource: stuck.intentSource,
       };
     },
