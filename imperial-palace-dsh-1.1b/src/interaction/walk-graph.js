@@ -126,7 +126,7 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     const start = nearestCell(from.x, from.z);
     const goal = nearestCell(to.x, to.z);
     if (!start || !goal) return { ok: false, reason: 'noCell', path: [] };
-    const { parents, visited } = flood(start);
+    const { parents, visited } = labelAll({ x: from.x, z: from.z }); // t156：复用按锚点缓存的标注（同一 flood ⇒ 与原来逐值相同）
     const goalIndex = index(goal.col, goal.row);
     if (parents[goalIndex] === -2) return { ok: false, reason: 'unreachable', path: [], visited, start, goal };
     const nodes = [];
@@ -148,14 +148,27 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
 
   /** 一组世界坐标点是否同属一个连通分量。 */
   function connected(points) {
-    const anchors = points.map((p) => nearestCell(p.x, p.z)).filter(Boolean);
-    if (anchors.length !== points.length) {
-      return { ok: false, reason: '部分点不在可行走栅格上', anchors, visited: 0 };
+    // t156（F11）：与 `path()` **同口径** —— 同一 `flood(首点)` + 逐点 `parents[idx] !== -2`。
+    //   旧实现的根因：整集守卫 `anchors.length !== points.length ⇒ ok:false` 会把"个别点取不到最近格"
+    //   误报成"整组不连通"（74/94 点一次性调用时的 4 点假红），而 `path()` 逐点判定 ⇒ 两条 API 答案不一致。
+    //   判据强度不变：任一取不到格 / 不同分量 ⇒ `ok:false`。
+    const list = Array.isArray(points) ? points : [];
+    if (list.length === 0) return { ok: false, reason: '空点集', anchors: [], unreachable: [], visited: 0 };
+    const startCell = nearestCell(list[0].x, list[0].z);
+    if (!startCell) {
+      return { ok: false, reason: '起点不在可行走栅格上', anchors: [null], unreachable: [{ index: 0, point: list[0], reason: 'noCell' }], visited: 0 };
     }
-    const { parents, visited } = flood(anchors[0]);
+    const { parents, visited } = labelAll(list[0]);
+    const anchors = [];
     const unreachable = [];
-    anchors.forEach((anchor, i) => {
-      if (parents[index(anchor.col, anchor.row)] === -2) unreachable.push({ index: i, point: points[i], anchor });
+    list.forEach((p, i) => {
+      const cell = nearestCell(p.x, p.z);
+      anchors.push(cell);
+      if (!cell) {
+        unreachable.push({ index: i, point: p, reason: 'noCell' });
+        return;
+      }
+      if (parents[index(cell.col, cell.row)] === -2) unreachable.push({ index: i, point: p, anchor: cell, reason: 'differentComponent' });
     });
     return { ok: unreachable.length === 0, visited, anchors, unreachable };
   }

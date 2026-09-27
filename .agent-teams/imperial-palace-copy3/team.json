@@ -17,7 +17,7 @@
       },
       "executionPrompt": "项目：紫禁天朝·完整皇宫 3D 交互项目。\n根目录（含空格，命令必须加引号）：\"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3\"（下称 ROOT）。产物只能写在 ROOT 内；严禁修改同级 imperial-palace/、imperial-palace copy/、imperial-palace copy 2/ 及 AI_Test 其他任何文件（仅可只读参考）。\n必读：ROOT/imperial-palace-plan.md（§2 布局与边界、§3 风格基线、§5 各区要求、§6 接口、§7.1 分工、§8 验收）、ROOT/README.md、ROOT/assets/reference/palace-layout.png。\n开工前在 ROOT/docs/handoffs/<task-id>.md 写开工回执（已读版本/可写范围/依赖/冲突），完成后写交付回执（文件清单、接口、实测命令与真实输出、未验证项）。\n技术约束：Node v26；唯一依赖是本地内置 ROOT/public/vendor/three（three r169 + addons）。禁止 npm install（npm 缓存不可写），不得要求必需的网络资源。\n纪律：只改任务 inScope 内文件；index.html、main.js、src/shared/* 各有唯一负责人，你要改动他人文件先报告主理人；完成前必须自己跑通 verify 命令并粘贴真实输出；不得伪造数据；无法验证的项写“未验证”。\n你的职责是冻结全队共同依赖：布局注册表（建筑槽位、院落、连接 ID、区域边界、道路）、风格与预算 config、接口契约文档、测试与构建脚手架。你的产物被下游 8 个任务直接依赖，数值必须一次说清、可被机器校验。",
       "joinedAt": 1790416546390,
-      "status": "working"
+      "status": "idle"
     },
     {
       "id": "7b462cad-db0b-4237-9155-c18404e2fa49",
@@ -115,7 +115,7 @@
       },
       "executionPrompt": "项目：紫禁天朝·完整皇宫 3D 交互项目。\n根目录（含空格，命令必须加引号）：\"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3\"（下称 ROOT）。只读验证交付代码：只允许新增/修改 ROOT/docs/reports/**、ROOT/docs/handoffs/**、ROOT/tests/verify-*.test.mjs、ROOT/scripts/verify-*.mjs；严禁改动 src/**、public/**、index.html、main.js，严禁修改同级其他 imperial-palace* 目录。\n必读：ROOT/imperial-palace-plan.md（§6.4 八视角与第一人称逐条要求、§8.1 G0–G5、§8.2 性能预算、§8.3 最终检查清单）、ROOT/docs/CONTRACTS.md、ROOT/docs/STYLE_GUIDE.md、ROOT/src/shared/layout.js、ROOT/src/shared/config.js。\n技术约束：Node v26；无 npm install；只用本地内置 three r169。文件沙箱会阻止 headless Chrome 生成截图（Failed to create a unique user data directory for headless；加 --user-data-dir 会挂起）：遇到这种情况必须如实记录为“未验证”并附命令与原始报错，绝对不得伪造截图或性能数字。Node 侧可做严肃验证：直接 import 区域模块、遍历场景图统计绘制批次/三角面、用碰撞数据做第一人称路线的几何走查（记录可通门洞、台阶高差、阻挡判定）。\n纪律：结论必须可复现（命令 + 真实输出 + 计数）；不得自己说自己合格、不得为了让任务通过而降低标准；发现不达标判失败并给出最小可执行修法；无法判定项明确标注不确定性。",
       "joinedAt": 1790416607627,
-      "status": "working"
+      "status": "idle"
     }
   ],
   "tasks": [
@@ -10601,14 +10601,14 @@
       "id": "t77",
       "subject": "V1.1 验收套件期望同步 + 43 处内景连通性独立复验",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t75（门洞通道面：使 43 处内景与室外连通）。\n\n来源：t68 全量回归把 11 个红项分成两类，**(A) 该类 10 个 = \"期望值硬编码在扩容前口径\"**。本卡负责**本席（verifier）侧 2 个套件**：\n- `tests/verify-completeness.test.mjs` 5.3「可行走图…不连通」（t68 归入 (B) 真实缺口，由 t75 修复后此断言应转绿）\n- `tests/verify-experience.test.mjs`「6.1 20 个机位…共 61 个 `{zone:7,fp-spawn:5,interior:43,focus-extra:6}`」\n\n**独立性要求（本卡的核心）**：t75 由 layout 作者自证连通性（在其 `layout.test.mjs` 内）；**本席必须用自己的引擎独立复验**，逐栋（43 行）给出结论，并复现\"改动前不连通\"的对照——这是\"作者自证 + 独立复核\"的双轨，不允许用作者的断言代替自己的复核。\n\n必做：\n1. 更新两个套件的硬编码期望（LAYUOT 1.1.4 实际值 + 逐条依据）。\n2. 独立复验连通性：43 处内景各自与室外地面同属一个连通分量，逐栋给结论 + 改动前不连通对照。\n3. 独立复核 t75 通道面几何（y == door.sillY、宽 == doorWidth、与室内外均相交）——逐栋，不一致即判未通过。\n4. 不得放宽判据/删断言；不得把连通性改成弱形式规避。\n5. verify 三条（两套件 + 全量 verify-completeness）；只改 inScope。",
-      "status": "claimed",
+      "status": "failed",
       "assignee": "verifier",
       "dependencies": [
         "t75"
       ],
       "attempt": 7,
       "createdAt": 1790458758435,
-      "updatedAt": 1790478056164,
+      "updatedAt": 1790478887012,
       "kind": "repair",
       "objective": "同步本席两个验收套件中扩容前的硬编码期望（LAYOUT 1.1.4），并用本席自己的引擎独立复验 43 处内景的门洞连通性与 t75 通道面几何（逐栋、含改动前对照），不放宽任何判据。",
       "inScope": [
@@ -10674,7 +10674,104 @@
           }
         }
       ],
-      "attemptId": "be4b2a2b-bc60-42b8-8f7d-fb45a465471f"
+      "attemptId": "be4b2a2b-bc60-42b8-8f7d-fb45a465471f",
+      "output": "t77（attempt 7）复测完成：**判 failed —— 但已大幅收敛**：`t151` 后 **43/43 内景全部可达**、**42/42 路点可达**、**B10 转绿**；仅剩 **2/49 走查段** 不可达，且底数据表明是**单向陷阱**（进得去、回不来），另发现一处**库级一致性缺陷**。\n\n## 1) 逐项对照（1.1.18 → 1.1.19）\n| 项 | 1.1.18 | **1.1.19** |\n| --- | --- | --- |\n| 内景可达（`path(南桥起点→内景)`，cS1 与 cS2） | 41/43 | **43/43 ✓**（`unreachableIds: []`） |\n| 42 个「门内」路点可达 | 40/42 | **42/42 ✓** |\n| 走查相邻段可达 | 46/49 | **47/49**（仍 2 段 ✗） |\n\n## 2) 2 条不可达段 = **单向陷阱**（只进不出 / 单向边）\n| 段 | 正向 | 反向 |\n| --- | --- | --- |\n| `寝殿西配殿门内→寝殿东配殿门内` | ✗ `unreachable`（cS1/cS2） | ✗ `unreachable` |\n| `寝殿东配殿门内→西配房门内` | ✗ `unreachable` | ✓ 216m |\n\n**单向实证**：`C-side-west-main` 内景 起点→点 **✓881m** / **点→起点 ✗**；`C-side-east-main` **✓880m** / **✗**；对照 `C-side-west-rear` 967m/967m ✓✓、`C-fp-spawn` 769m/769m ✓✓。\n⇒ t151 的下坡带（1.9/1.4）让玩家**能下到**殿内（所以 43/43 可达），但**回程需要 >0.5m 的上台阶** ⇒ `path(点→起点)` 失败。这也说明 t87 的“单向陷阱守卫”未覆盖“新增下坡带 ⇒ 回程不可行”这一类。\n\n## 3) 库级一致性缺陷（可复现，影响 5.3 的归因）\n同一 solver、三张**全新图**、同一 94 点：\n- 一次性 `connected([起点,…94 点])` → **4 点不可达**（`文华殿门内`、`陈设正堂门内`、`VP-E-court1/2-hall-interior`；g1 与 g3 两次复现同一集合）；\n- 另一张全新图**逐点** `path(起点→点)` → **0 点不可达**；\n- 对这 4 点**单独** `connected([起点,点])` → **0 点不可达**（anchor 距点 0–0.5m、`probe=true` y=1.40）。\n⇒ 5.3 的红 4 点属 **`src/interaction/walk-graph.js` 的 `connected()` 库口径缺陷**，**不是场景缺陷**；而 B1 的红（2 段）**是真实缺陷**。\n\n## 4) 最小修法（交回派单；本轮未改 `src/**`）\n- **t77-F10（blocker，layout/t151）**：门下坡带改为**双向可走**（每级落差 ≤0.5m；现回程有 >0.5m 上台阶）。建议 2.4→1.9→1.4→0.9 四级对称台阶并在通道面侧补齐。\n- **t77-F11（high，core/interaction）**：`connected()` 改为逐点 `flood`（与逐点 `path` 同口径）或查清多锚点取格差异根因。\n- **t77-F12（medium，core/interaction）**：单向陷阱守卫/逆向 BFS 审计扩展到**每处新增过渡带**。\n\n## 5) 三条 verify 真实状态（1.1.19）\n| 命令 | 结果 |\n| --- | --- |\n| `tests/verify-completeness.test.mjs` | **exit 1** · 52 项 **49 PASS / 2 FAIL**（5.3=库口径 4 点；5.4b 按契约口径 PASS、不计退出码） |\n| `tests/verify-experience.test.mjs` | **exit 1** · 35 项 **33 PASS / 2 FAIL**（**B1=2 段单向陷阱**；F1=非本卡 t13；**B10 转绿**） |\n| `scripts/verify-completeness.mjs`（含浏览器） | **exit 1** · 56 项 **53 PASS / 2 FAIL / 1 UNVERIFIED** |\n| `scripts/probe-global-reach.mjs`（只读诊断） | **exit 0** |\n| `scripts/audit.mjs --enforce` | **exit 0**（333/350、306,269 tri） |\n\n## 6) 范围\n本 attempt **仅改 `docs/report-completeness.md`**（新增 §23）；未改任何测试、`src/**`、既有 `scripts/**`。\n\n**距离全绿只差两件事**：① 把 t151 的下坡带做成**双向**（F10）；② 修 `connected()` 的库口径（F11）。两者落地后，B1/B10/5.3 应同时转绿，我用同一 43 行引擎复测即可闭环。",
+      "findings": [
+        {
+          "id": "t77-F10",
+          "severity": "blocker",
+          "problem": "【BLOCKER·单向陷阱】`t151` 的“C 两殿门外加法下坡带（1.9/1.4）”使两栋殿内**可进不可回**：`C-side-{west,east}-main` 内景 “起点→点” ✓ 881m/880m，但 **“点→起点” ✗ `unreachable`**；走查段 `寝殿西配殿门内→寝殿东配殿门内` **双向均 ✗**、`寝殿东配殿门内→西配房门内` **正向 ✗ / 反向 ✓ 216m** ⇒ 47/49 段可达、2 段单向不可行。",
+          "requiredFix": "owner layout（t151 作者）：把门下坡带改为**双向可走**——每级落差 ≤ `maxStepHeight 0.5`（现回程存在 >0.5m 的上台阶）；建议 2.4→1.9→1.4→0.9 四级对称台阶并在通道面侧补齐。不得改阈值。",
+          "file": "src/shared/layout.js",
+          "line": 0,
+          "resolved": false
+        },
+        {
+          "id": "t77-F11",
+          "severity": "high",
+          "problem": "【HIGH·库级一致性缺陷】同一 solver、同一 94 点：一次性 `connected([起点,…])` 报 **4 点不可达**（文华殿门内、陈设正堂门内、VP-E-court1/2-hall-interior；两张全新图两次复现同一集合），而逐点 `path(起点→点)`（另一张全新图）为 **0**；对这 4 点单独 `connected([起点,点])` 也为 **0**（anchor 距点 0–0.5m、`probe=true` y=1.40）。⇒ `verify-completeness.test.mjs` 的 5.3 红项**不是场景缺陷**而是库口径缺陷。",
+          "requiredFix": "owner core/interaction：把 `connected()` 改为逐点 `flood`（与本席逐点 `path` 同口径），或查清多锚点预采样下 `nearestCell` 取格差异的根因；修后 5.3 的 4 点应自然消失。",
+          "file": "src/interaction/walk-graph.js",
+          "line": 0,
+          "resolved": false
+        },
+        {
+          "id": "t77-F12",
+          "severity": "medium",
+          "problem": "【MEDIUM·守卫口径】t87 的“单向陷阱守卫”/逆向 BFS 审计当时为 0 陷阱，但 t151 新增的下坡带造成了新的单向不可行（§23.2）；说明该守卫的审计口径未覆盖“新增过渡带 ⇒ 回程不可行”这一类。",
+          "requiredFix": "owner core/interaction：把 `reverseFlood` 检查从既有栅格扩展到**每处新增过渡带**（或对“能进不能出”的点做穷举报警）。",
+          "file": "src/interaction/traversal.js",
+          "line": 0,
+          "resolved": false
+        }
+      ],
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/docs/report-completeness.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "**期望同步**：两个套件按实际 LAYOUT 更新“扩容前硬编码”并逐条说明依据。",
+          "status": "passed",
+          "evidence": "**通过（沿用已完成的同步，本时点复查未退化）**：6.1 动态（total = `VIEWPOINTS.length` = 61；zone 7 / fp-spawn 5 / interior 43 / focus-extra 6）+ “interior 数 == `INTERIOR_BY_SLOT` 条数”；7.1 = 43 栋 == `INTERIOR_BY_SLOT` 43 条；A3 = 61（逐区 B10/C9/D4/E4/F4）；5.3 标题 = 5 fp-spawn + 50 路点 + 43 内景。本时点：`LAYOUT 1.1.19`；`walkable 171 / viewpoints 61 / FP_ROUTE 50 / interior 43`。"
+        },
+        {
+          "criterion": "**口径裁定**：约束口径 = 生产走查图（含 `CXN-*`），不是 surfaces-only。",
+          "status": "passed",
+          "evidence": "**通过**。全部结论取自生产引擎（`assembleCity()` + `createWalkGraph(solver,{cellSize:1,maxCells:2000000})`，并用 `cellSize:2` 对照）；逐时点登记 `connectorStats = {declared:32, ramps:0}`（connector 仍零贡献，本时点变化来自 t151 的**可行走面/台阶**）。另发现并登记了一处**库级口径缺陷**（`connected` 与 `path` 不一致，见 §23.3 与 finding t77-F11）。"
+        },
+        {
+          "criterion": "**逐栋独立复验（43 行）** + t13 复核；若确有建筑或路线不可达 ⇒ 判未通过 + 最小修法。",
+          "status": "failed",
+          "evidence": "**不通过（但已大幅收敛：座标全可达，仅剩“段”层缺陷）**。**43/43 内景可达**（`path(南桥起点→内景机位)`，cellSize 1 与 2 均 ✓；`unreachableIds: []`）；**42/42 “门内”路点可达**；但 **2/49 走查相邻段不可达**，且底数据表明是**单向陷阱**：`C-side-{west,east}-main` 内景 **起点→点 ✓ 881m/880m，点→起点 ✗ `unreachable`**（进了出不来）；含 `寝殿西配殿门内→寝殿东配殿门内`（双向均 ✗）与 `寝殿东配殿门内→西配房门内`（正向 ✗ / 反向 ✓ 216m）。最小修法：让 t151 的门下坡带**双向可走**（每级落差 ≤0.5m；现回程存在 >0.5m 上台阶）。另：5.3 报的 4 点（文华殿门内/陈设正堂门内/VP-E-court1/2-hall-interior）经**两种调用形态交叉验证**（见 §23.3）属**库级 `connected` 缺陷**，不是场景缺陷。"
+        },
+        {
+          "criterion": "**独立复核 t75 通道面几何**（逐栋 y==sillY / 宽 / 与室内外相交）。",
+          "status": "failed",
+          "evidence": "**部分不通过（与前几轮同值）**：通道面 43/43 · 宽 == `doorWidth` 43/43 · 与室内面**相接（≤0.05m）43/43**（严格重叠仅 2/43）· 与室外面相交 43/43 · **`y == door.sillY` 38/43**（5 处 = 城门双标高 + `C-gate-inner`，已按契约例外集在入口层复核为 PASS，见 §20.2）；**操作性可跨 43/43**（两栋 C 侧现可从起点进入）。"
+        },
+        {
+          "criterion": "**不得放宽判据/删语义断言**；不得把连通性改成弱形式。",
+          "status": "passed",
+          "evidence": "**满足**。本 attempt **未改任何测试或判据**（仅追加报告 §23）：5.3/B1/B10 仍为原强判据；B10 因 t151 而**真实转绿**（全部点同属起点分量），B1 仍红（2 段单向陷阱）。断言数只增不减。"
+        },
+        {
+          "criterion": "三条 verify 全绿或如实列出仍红项与非本卡归因；只改 inScope。",
+          "status": "passed",
+          "evidence": "**如实列出（1.1.19）**：`tests/verify-completeness.test.mjs` **exit 1 · 52 项 49 PASS / 2 FAIL**（5.3 = 库级 `connected` 口径缺陷 4 点；5.4b 已按契约口径 PASS 且不计退出码）；`tests/verify-experience.test.mjs` **exit 1 · 35 项 33 PASS / 2 FAIL**（**B1 = 2 段单向陷阱**；F1 = **非本卡** t13；**B10 转绿**）；`scripts/verify-completeness.mjs` **exit 1 · 56 项 53 PASS / 2 FAIL / 1 UNVERIFIED**；`scripts/probe-global-reach.mjs` **exit 0**；`scripts/audit.mjs --enforce` **exit 0**。本 attempt 仅改 `docs/report-completeness.md`（新增 §23）。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/verify-completeness.test.mjs",
+          "status": "failed",
+          "exitCode": 1,
+          "evidence": "exit 1；52 项 **49 PASS / 2 FAIL / 1 UNVERIFIED**（5.3 = 库级 `connected` 口径缺陷 4 点；5.4b 按契约口径 PASS、不计退出码）。"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/verify-experience.test.mjs",
+          "status": "failed",
+          "exitCode": 1,
+          "evidence": "exit 1；35 项 **33 PASS / 2 FAIL**（**B1 = 2/49 段 = 单向陷阱**；F1 = 非本卡 t13）。**B10 转绿**（42 路点 + 5 fp-spawn + 43 内景同属起点分量）。"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/verify-completeness.mjs",
+          "status": "failed",
+          "exitCode": 1,
+          "evidence": "exit 1；56 项 **53 PASS / 2 FAIL / 1 UNVERIFIED**（与 tests 入口同源）。"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/probe-global-reach.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；局部 `facade→室内` ✓；全局点可达（43/43）；并输出断点定位。"
+        },
+        {
+          "command": "逐向 `path` 双向测试 + `connected` 两种调用形态交叉验证（/tmp 只读脚本）",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**单向陷阱实证**：`C-side-west-main` 起点→点 ✓881m / 点→起点 ✗`unreachable`；`C-side-east-main` ✓880m / ✗；`C-west-rear` 967m/967m ✓✓；`C-fp-spawn`、`WK-C-ground` 中心均 ✓✓。**库级不一致实证**（同一 solver、3 张全新图）：一次性 `connected([起点,…94 点])` → **4 点不可达**（g1/g3 两次复现同一集合）；另一张全新图逐点 `path` → **0 点不可达**；对这 4 点单独 `connected([起点,点])` → **0 点不可达**（anchor 距点 0–0.5m、probe=true）。"
+        }
+      ]
     },
     {
       "id": "t78",
@@ -19700,12 +19797,12 @@
       "id": "t154",
       "subject": "T1.62 契约登记护栏方法论：分量级判定 + 可复现突变证据 + 三类反例",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**t153（5/5）的请裁第 2 条**——它建议把两条方法论入库（`CONTRACTS.md` 不在其 inScope）。**主理人批准**，因为这是**护栏框架的最后一块**：把\"如何做一个可信护栏\"从经验变成契约，后续所有护栏类任务都有模板。\n\n`t153` 已实证的三段式（**合取式判据 + 真实文件突变 + 锁定已知伪影集合**）：\n- 合取式 `|floorYAt(面中心) − 自身 y| ≤ 0.5 ∧ componentOf(面中心, FP_ROUTE[0]).ok`；\n- **内存 clone 突变对本库无效**（`floorYAt` 读模块级数组；实测突变后 `(-44.5,168.5)` 仍解析 1.90）⇒ 必须**真实文件突变 + 立即恢复**；真实突变下合取式**命中 6 条**（证明护栏是活的）；\n- 粗口径改**锁已知伪影集合**（7 条逐条枚举，精确集合相等）⇒ 已知伪影不假红、新增命中仍红。\n\n必做：\n1. `§12.1.4` 增补两条方法论（面/格级无法判定分量级缺陷；阈值型护栏必须给可复现的突变证据：修前必红+修后全绿+对照不假红，三条齐备才可提交）。\n2. 把\"**内存突变无效**\"这个坑写进契约（必须真实文件突变 + 立即恢复 + 恢复后如何证明几何一致）。\n3. 登记**三类反例**（太宽 417 假红 / 太窄的缝 / 判据恒真自 t140 起从未生效）+ 当前五层护栏与承载断言 + 违反即红规则。\n4. 写明**粗口径非权威**（引 t146；不得据此补几何；权威 = 细口径 + 提额）。\n5. 纪律：只改 CONTRACTS + 回执；不动任何阈值/判据/断言/src/tests/scripts；audit --enforce exit 0；给 grep 与版本号真实输出。",
-      "status": "in_progress",
+      "status": "completed",
       "assignee": "foundation-lead",
       "dependencies": [],
       "attempt": 1,
       "createdAt": 1790478461909,
-      "updatedAt": 1790478528808,
+      "updatedAt": 1790478557592,
       "kind": "repair",
       "objective": "把 t153 的两条方法论与三类反例登记进 CONTRACTS §12.1.4：① 面级/格级无法判定分量级缺陷；② 阈值型护栏必须给出可复现的突变证据（修前必红+修后全绿+对照不假红，三条齐备才可常驻），并写入\"内存 clone 突变对本库无效、必须真实文件突变+立即恢复\"；同时登记三类反例与五层护栏承载、粗口径非权威地位。历史只追加、版本递增、不改任何判据。",
       "inScope": [
@@ -19743,10 +19840,313 @@
       ],
       "attemptId": "5cf61bf9-7bba-45e9-b42d-fdca33a10ea2",
       "reassigning": false,
-      "output": "t154 实施与验证已完成（CONTRACTS v1.0.21：§12.1.4.1 分量级判定 / §12.1.4.2 突变三证 + 内存突变之坑 / §12.1.4.3 三类反例与五层护栏 / §12.1.4.4 粗口径非权威；三条 verify 全绿），正在提交完成状态。"
+      "output": "t154 **已完成**：`CONTRACTS v1.0.20 → **v1.0.21**`，§12.1.4 增补**护栏方法论**四小节（分量级判定 / 突变三证 + 内存突变之坑 / 三类反例 + 五层护栏 / 粗口径非权威）；三条 verify 全绿。\n\n## ① §12.1.4.1 分量级判定（`:1056`）\n**规则**：缺陷若是**集群/分量级**属性（判据：**集群内任一单体与其直接邻居的 |Δ| 均在可跨带内**）⇒ **必须**在**分量级**判定（`componentOf(x,z,主户外锚点).ok` 或 `path(...).ok === true`）；**面/格级只能作辅助**。附实测反例表（两种面级尝试**各造 417 处假红**）+ **⓪ 分量级合取式承载**（`|floorYAt(面中心) − 自身 y| ≤ 0.5 ∧ componentOf(...).ok`，精确 `=== 0`，失败逐条打印）+ \"为何必须合取\"。\n\n## ② §12.1.4.2 阈值型护栏的**可复现突变证据**（`:1073`）\n**三证齐备**方得常驻：① **修前必红（含突变命中清单）** ② **修后全绿** ③ **对照项不假红**；**缺一不得声称有效**、**不得把\"不红\"包装成\"通过\"**。\n**⚠️ 本库特有的坑（已写入契约）**：`layout.floorYAt` 读**模块级**数组 ⇒ **内存 clone / 打补丁式突变无效**（实测：内存内摘掉 `-descent-*` 后 `(-44.5,168.5)` **仍解析 1.90**）⇒ **必须真实文件突变 + 立即恢复**，回执须登记**改了什么 / 何时恢复 / 如何证明恢复一致**（示例：t153 临时删 4 条 → 合取式命中 **6 条** → 立即恢复 → `walk-reachability` 与 `layout.test` **双双 exit 0**）。\n\n## ③ §12.1.4.3 三类反例 + 五层护栏（`:1087`）\n| 反例 | 形态 | 后果 |\n| --- | --- | --- |\n| (a) **格级太宽** | \"足印 ∪ 四周 1m 邻带\" / \"进深轴两端临界格\" | **各造 417 处假红** |\n| (b) **格级太窄** | `t134` 只查门中心/门带 | **过渡面带溜过**（C 两殿由此缝隙通过） |\n| (c) **判据恒真** | `t140` 早期 `path(...) != null`（对象永不为 null） | **自 t140 起从未生效**（`t148`/`t149` 已钉为禁止项） |\n\n**五层护栏承载表**：⓪ 分量级 `walk-reachability`（t153）· ① 面级 `layout.test.mjs:839`（t128）· ② 链级 `:905`（t131）· ③ 格级 `:930`（t134）· ④ 结果级 `walk-reachability`（t140/t148）—— **违反即红 · 不得放宽阈值 · 不得改 `>=` · 不得删断言**。\n\n## ④ §12.1.4.4 粗口径**非权威**（`:1104`）\n**权威 = 细口径**（`cellSize:1` **+ 显式提额 `maxCells`**）；**粗口径（`cellSize:2`/`3`）= 非权威对照**（引 `t146`：3m/2m 格心下 **1.05m 窄面可能不含格心** ⇒ 报\"不可达\"**可能是伪影**）；**禁止据此让布局侧补几何**；若需把守只能**锁已知伪影集合（精确集合相等）**：分量级 **7 条** + 门洞级 `B-hall-mid`/`B-hall-rear`。\n\n## ⑤ 纪律与 verify\n仅改 [CONTRACTS.md](<imperial-palace-dsh-1.1b/docs/CONTRACTS.md>)（**历史只追加、版本递增**）；**未触碰** `src/**`、`tests/**`、`scripts/**`；**未改任何阈值/判据/断言**。\n```\n$ grep -n \"12\\.1\\.4\" docs/CONTRACTS.md\n  56: v1.0.21 历史   1056: §12.1.4.1   1073: §12.1.4.2   1087: §12.1.4.3   1104: §12.1.4.4\n$ node tests/walk-reachability.test.mjs → t140 结果：全部通过 ✓（exit 0）\n$ node scripts/audit.mjs --enforce → exit 0\n  结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）\n```\n**版本号真实输出**：`> | 契约版本 | \\`CONTRACTS v1.0.21\\` |`（`:7`）。\n\n## 收口状态\n护栏框架闭环：**五层分工 + 违反即红 + 三证方法论 + 三类反例 + 粗口径非权威** 均有契约条款与承载断言 ⇒ 后续\"护栏类\"任务**有模板可循**（本卡即 t153 请裁第 2 条的落地）。\n\n## 后续（交回派单）\n跨 owner pin：`tests/core.test.mjs` 已于 t152 同步 **171 / 1.1.19** ✓；`tests/walk-reachability.test.mjs` 基线已绿 ✓。**建议让 t77 复跑**（C 两殿已由 t151 几何 + t153 护栏双向证明全局可达）。",
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "【两条方法论写进 CONTRACTS §12.1.4】① 面级/格级原理上无法判定分量级缺陷（须用 `componentOf(...).ok`）；② 阈值型护栏定常驻前必须有可复现突变证据（修前必红 + 修后全绿 + 对照不假红）。",
+          "status": "passed",
+          "evidence": "**已完成**（`CONTRACTS v1.0.20 → **v1.0.21**`，历史只追加、未改判据）：新增 **§12.1.4.1**（`:1056`）与 **§12.1.4.2**（`:1073`）。① §12.1.4.1：缺陷若为集群/分量级（判据：集群内任一单体与直接邻居 |Δ| 均在带内）⇒ **必须分量级判定**（`componentOf(x,z,主户外锚点).ok` / `path(...).ok === true`），面/格级只作辅助；附**两种面级尝试各造 417 处假红**的实测反例 + **⓪ 合取式承载**与“为何必须合取”。② §12.1.4.2：**三证齐备**（修前必红含突变清单 + 修后全绿 + 对照不假红）方得常驻，**缺一不得声称有效**。"
+        },
+        {
+          "criterion": "【“内存突变无效”写进契约】`floorYAt` 读模块级数组 ⇒ 内存 clone 无效（实测 `(-44.5,168.5)` 仍 1.90）；取证必须真实文件突变 + 立即恢复 + 登记改了什么/何时恢复/恢复后如何证明几何一致。",
+          "status": "passed",
+          "evidence": "**已完成**：§12.1.4.2 以 **⚠️ 本库特有的坑** 单列：`floorYAt` 读**模块级**数组 ⇒ `{...LAYOUT, WALKABLE: filtered}` **对几何无效**，附实测（摘掉 `-descent-*` 后 `(-44.5,168.5)` **仍解析 1.90**，t153）；明写**必须真实文件突变 + 立即恢复**，回执须登记**改了什么 / 何时恢复 / 如何证明恢复一致**（示例：临时删 → 合取式命中 **6 条** → 立即恢复 → `walk-reachability` 与 `layout.test` **双双 exit 0**）。"
+        },
+        {
+          "criterion": "【三类反例 + 五层护栏 + 违反即红】登记 (a) 太宽 417 假红 (b) 太窄 t134 的缝 (c) 判据恒真 t140 自其起从未生效；写明五层护栏承载与违反即红。",
+          "status": "passed",
+          "evidence": "**已完成**：新增 **§12.1.4.3**（`:1087`）——三类反例表：(a) **格级太宽**（两种尝试**各造 417 处假红**）(b) **格级太窄**（t134 只查门中心/门带 ⇒ **过渡面带溜过**）(c) **判据恒真**（t140 早期 `path(...) != null` ⇒ **自 t140 起从未生效**）；并给出**五层护栏承载表**：⓪ 分量级 `walk-reachability`（t153）· ① 面级 `layout.test.mjs:839`（t128）· ② 链级 `:905`（t131）· ③ 格级 `:930`（t134）· ④ 结果级 `walk-reachability`（t140/t148）+ **违反即红 · 不得放宽 · 不得改 `>=` · 不得删断言**。"
+        },
+        {
+          "criterion": "【粗口径非权威】`cellSize:2`/`3` = 非权威对照（引 t146）；不得据此让布局侧补几何；权威 = 细口径（`cellSize:1` + 显式提额 `maxCells`）。",
+          "status": "passed",
+          "evidence": "**已完成**：新增 **§12.1.4.4**（`:1104`）——权威 = **细口径**（`cellSize:1` **+ 显式提额 `maxCells`**）；粗口径（`cellSize:2`/`3`）= **非权威对照**（引 `t146`：3m/2m 格心下 **1.05m 窄面可能不含格心** ⇒ 报“不可达”可能为**伪影**）；**禁止据此让布局侧补几何**；若需把守只能**锁已知伪影集合（精确集合相等）**并逐条登记（分量级 **7 条** + 门洞级 `B-hall-mid`/`B-hall-rear`）。"
+        },
+        {
+          "criterion": "【纪律】只改 CONTRACTS（历史只追加、版本递增）与回执；不改阀值/判据/断言/src/tests/scripts；audit exit 0；给 grep 与版本号真实输出。",
+          "status": "passed",
+          "evidence": "**已完成**：仅改 **`docs/CONTRACTS.md`**（新增 §12.1.4.1~4 + 版本表/版本对应关系 + 历史 v1.0.21），**未触碰** `src/**`、`tests/**`、`scripts/**`，**未改任何阀值/判据/断言**。**真实输出**：`grep -n \"12\\.1\\.4\" docs/CONTRACTS.md` → `56:`（v1.0.21）· `1056:` §12.1.4.1 · `1073:` §12.1.4.2 · `1087:` §12.1.4.3 · `1104:` §12.1.4.4；**版本号** `> | 契约版本 | `CONTRACTS v1.0.21` |`（`:7`）；`node tests/walk-reachability.test.mjs` → `t140 结果：全部通过 ✓`（exit 0）；`node scripts/audit.mjs --enforce` → **exit 0**。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && grep -n \"12\\.1\\.4\" docs/CONTRACTS.md",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；`56:> - **v1.0.21（t154 / T1.62）**…`、`1056:#### 12.1.4.1 分量级判定…`、`1073:#### 12.1.4.2 阈值型护栏必须给出**可复现的突变证据**…`、`1087:#### 12.1.4.3 三类反例…`、`1104:#### 12.1.4.4 粗口径…的**非权威**地位`"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/walk-reachability.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0 · `t140 结果：全部通过 ✓`（⓪ 分量级护栏：94 面 · 细口径命中 0 / 粗口径命中 7 已登记）"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0 · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）"
+        }
+      ]
+    },
+    {
+      "id": "t155",
+      "subject": "T1.63 下坡带双向可走（F10）+ 布局侧双向断言（补 t87 覆盖缺口）",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**t77 attempt 7（LAYOUT 1.1.19）**——**大幅收敛**：内景可达 **43/43** ✓（两套 `cellSize`，`unreachableIds: []`）、42 个「门内」路点 **42/42** ✓、**B10 转绿**、走查相邻段 **47/49**（仅剩 2 段）。\n**剩 2 段 = 单向陷阱（进得去、回不来）**：双向实证 `C-side-west-main` **起点→点 ✓881m / 点→起点 ✗**、`C-side-east-main` **✓880m / ✗**；对照 `C-side-west-rear` **967/967 ✓**、`C-fp-spawn` **769/769 ✓**。⇒ **`t151` 的下坡带能下去，但回程需 >0.5m 上台阶** ⇒ 反向失败。`t87` 的单向陷阱守卫**未覆盖\"新增下坡带 ⇒ 回程不可行\"**（当时审计 0 陷阱）。\n\n**主理人裁定**：① **先只读双向剖面**（逐跳给正向/反向 Δy 与 `canStep` 原因码），指出反向上台阶 >0.5 的**具体那一跳与格对**，再最小改动（加法优先，使每跳正反向 |Δy| ≤0.5）；② 新增**布局侧双向断言**（每处门外过渡带全长双向可走，精确断言），补上 `t87` 的覆盖缺口；③ 全程 `.ok`、局部/全局并列、两套 cellSize、交叉校验。\n\n必做：\n1. 只读双向剖面（定位反向上台阶 >0.5 的格对）。\n2. 按结论最小改动（加法优先；阈值 0.5/0.6 逐值不动）。\n3. 新增布局侧双向断言（每处过渡带全长双向可走；精确、失败逐栋逐跳打印）。\n4. 验证：`.ok`、局部/全局、两套 cellSize、交叉校验、报 LAYOUT_VERSION。\n5. 不宣称可达；纪律：五层护栏+新断言全绿；阈值/默认 cellSize/包络不动；pin 交回；LAYOUT 递增；layout.test 只增不减；audit exit 0；只改 inScope。",
+      "status": "failed",
+      "assignee": "foundation-lead",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1790478936218,
+      "updatedAt": 1790479006610,
+      "kind": "repair",
+      "objective": "把 t151 的门外下坡带做成双向可走（先出只读双向剖面定位反向上台阶 >0.5 的格对，再最小改动，使每跳正反向 |Δy| ≤ 对应阈值），并在 tests/layout.test.mjs 增加\"每处门外过渡带全长双向可走\"的精确断言，补上 t87 单向陷阱守卫未覆盖的类别。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/src/shared/layout.js",
+        "imperial-palace-dsh-1.1b/tests/layout.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/handoff-layout-interiors.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/core/",
+        "imperial-palace-dsh-1.1b/src/interaction/",
+        "imperial-palace-dsh-1.1b/src/zones/",
+        "imperial-palace-dsh-1.1b/src/kit/",
+        "imperial-palace-dsh-1.1b/tests/interaction.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/walk-reachability.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/verify-experience.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/verify-completeness.test.mjs",
+        "imperial-palace-dsh-1.1b/scripts/",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**【F10：把 t151 的下坡带做成双向可走】**`t77` 实测：`C-side-{west,east}-main` 内景**起点→点 ✓881m/880m，但点→起点 ✗** ⇒ **进得去、回不来**（回报需 >0.5m 上台阶）；对照 `C-side-west-rear` 967/967 ✓、`C-fp-spawn` 769/769 ✓。请**先做只读双向剖面**（`cellSize:1` 提额；对 `2.4→1.9→1.4→1.3→1.7→室内` 链上**每一跳**给正向/反向的 `Δy` 与 `canStep` 原因码 + 两侧解析高度），**指出反向上台阶 >0.5 的**具体那一跳与格对**，再按结论做最小改动（**加法优先**；可行改法例如补齐/调平级差使**每跳正反向 |Δy| ≤ 0.5**）。**不得**改阈值（`maxStepHeight 0.5` / `snapDownDistance 0.6` 逐值不动）。",
+        "**【新增布局侧双向断言】**在 `tests/layout.test.mjs` 增加：**每一处门外过渡带（`-transition-*` / `-descent-*` / `-threshold`）在其全长上必须双向可走**（沿门轴取若干采样点，正向与反向都逐跳满足 `|Δy| ≤` 对应阈值；**精确断言**、失败打印逐栋/逐跳清单）。**理由**：`t87` 的单向陷阱守卫**未覆盖\"新增下坡带 ⇒ 回程不可行\"**这一类（当时审计 0 陷阱）⇒ 该类缺陷此前的唯一发现途径是 `t77` 的走查段复测。",
+        "**【验证口径】**：全程 **`.ok`** 判据（`componentOf` / `path(...).ok`，**严禁** `!= null`/`if (!p)`）；**局部与全局并列**；**两套 `cellSize`**；**自建 BFS 与生产 `graph.path` 交叉校验**；报 `LAYOUT_VERSION`（先读再写）。",
+        "**不宣称可达 + 纪律**：**不得**宣称\"43 栋均可进入\"（最终判定归 `t77` 复跑）；五层护栏 + 新增双向断言**全绿**；阈值 / 默认 `cellSize` / 玩家体积 / 包络**一律不动**；`WALKABLE` 变化须**先读实测再同步 pin**并逐条列出跨 owner pin 交回；`LAYOUT_VERSION` 递增；`layout.test.mjs` 断言**只增不减**；`audit --enforce` **exit 0**；只改 inScope（`src/shared/layout.js`、`tests/layout.test.mjs`、`docs/handoff-layout-interiors.md`）。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/layout.test.mjs",
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/probe-global-reach.mjs",
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/src/shared/layout.js",
+        "imperial-palace-dsh-1.1b/tests/layout.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/handoff-layout-interiors.md"
+      ],
+      "sourceTaskId": "t77",
+      "sourceFindingIds": [
+        "t77-F10-c-two-descent-band-one-way-trap",
+        "t87-one-way-trap-guard-misses-new-descent-bands"
+      ],
+      "attemptId": "4e6982b9-c315-4d53-b3fa-c796b4eb610b",
+      "reassigning": false,
+      "output": "t155 **failed（零写入；1 个 blocker + 1 个前提未复现）** —— ① **阻塞项**：`src/interaction/walk-graph.js:188` 返回了 `componentOf` 但**函数本体已不在作用域** ⇒ `ReferenceError: componentOf is not defined` ⇒ **一切基于图的验证现在跑不了**（`walk-reachability` 由 t154 的 exit 0 变为 **exit 1**），属**刚引入的回归**（`src/interaction/**` 不在我 inScope ⇒ **停手交回**）；② **F10 前提未被复现**：下坡带实测**已完全双向可走**（`max |Δ| = 0.50`，全格在主分量）。\n\n## ① 只读双向剖面（`cellSize:1` 提额，`LAYOUT 1.1.19`，三行 z 完全一致）\n```\nx:  -61.5 … -51.5 | -50.5 | -49.5 -48.5 | -47.5 -46.5 | -45.5 -44.5 | -43.5 …\ny:  1.70（通道面）  | 1.70   | 1.30  1.30 | 1.40  1.40 | 1.90  1.90 | 2.40（台基）\n标志：全部 M（与 FP_ROUTE[0]=(0,−480) 同属主分量）\n```\n**逐跳 |Δ|（正/反同值）**：`1.70↔1.30 = 0.40` · `1.30↔1.40 = 0.10` · `1.40↔1.90 = **0.50**` · `1.90↔2.40 = **0.50**`\n⇒ **最大 0.50 ≤ `maxStepHeight 0.5`，且每格均在主分量** ⇒ **该走廊已双向可走，未复现“反向需 >0.5 上台阶”**。\n**结论**：若 t77 的反向失败真实存在，**断点不在这条下坡带上**；**在拿到真实跳点前不做几何改动**（避免\"猜段位\"，本线已四次证明其代价高）。\n\n## ② 阻塞项（blocker，需派单）\n- `src/interaction/walk-graph.js:188` 的对象字面量里有 `componentOf,`（注释仍是 t148 的“连通分量访问器”），但**文件中已无 `function componentOf` 定义** ⇒ **`createWalkGraph` 构建即抛错**；\n- 后果实测：`node tests/walk-reachability.test.mjs` → **exit 1**（在 `:50` 抛 `ReferenceError`）；`node scripts/probe-global-reach.mjs` 同样跑不了；\n- 对照：**`node tests/layout.test.mjs` → 全部通过 ✓**（它不用图）；`audit --enforce` → **exit 0**（t154 实测）；\n- 我**未越界修改** `src/interaction/**`（不在 inScope），**零写入**提交。\n\n## ③ 未落地项（设计已就绪，F1 修复后可一次完成）\n**布局侧双向断言**：对每处 `-transition-*`/`-descent-*`/`-threshold` 沿门轴逐格采样，**正反两向**各判 `up≤0.5 / down≤0.6`，**精确断言失败数 === 0**，失败打印（栋 id / 跳 / 两侧 y / Δ / 方向）——因 F1 使验证无法运行，**我不先提交一个跑不通的断言**（避免留红/假绿）。\n\n## ④ 纪律\n**零写入** ⇒ 几何/阈值/默认 `cellSize`/包络均未动；`WALKABLE` 仍 **171**、`LAYOUT` 仍 **1.1.19**（无几何变更故不递增）；断言未增删；**未宣称任何可达**。\n```\n$ node tests/layout.test.mjs → 全部通过 ✓（exit 0）\n$ node tests/walk-reachability.test.mjs → exit 1（ReferenceError: componentOf is not defined @ src/interaction/walk-graph.js:188）\n$ node scripts/probe-global-reach.mjs → 同上（图构建失败）\n$ node scripts/audit.mjs --enforce → exit 0（t154 实测）\n```\n\n## findings（请裁 / 派单）\n- **F1（blocker）**：`walk-graph.js` 的 `componentOf` 定义丢失（**回归**，t153/t154 时该文件是好的）⇒ 请派给 `src/interaction/**` 的 owner 恢复（语义按 t148：1 次 flood 标注 + O(1) 判定，签名 `(x,z,from=null) → {ok,cell,root,size}`），修后复跑这两个命令。\n- **F2（high）**：请回贴 **t77 反向失败路径的逐跳清单**（或批准我在 F1 修复后自行用 `path(point→start)` + 反向边界扫描定位，约 1 轮）。\n- **F3（medium）**：F1 修复后下一轮落地布局侧双向断言（我已给采样与打印口径）。\n\n**说明**：本卡的 \"failed\" **不代表下坡带有问题** —— 恰恰相反，剖面证明它是合规的；失败源于**外部回归（F1）**与**前提未被复现（F2）**，两者均需上游动作。",
+      "findings": [
+        {
+          "id": "t155-F1",
+          "severity": "blocker",
+          "problem": "**阻塞项（高）：`src/interaction/walk-graph.js` 当前抛错，导致一切基于图的验证无法运行** —— 实测 `node` 导入时抛 `ReferenceError: componentOf is not defined`（堆栈：`src/interaction/walk-graph.js:188`），而该行正是返回对象里的 `componentOf, // t148：连通分量访问器……`——**函数本体已不在作用域内**（文件中已无 `function componentOf` 定义）⇒ **`createWalkGraph` 构建即失败**。后果：`node tests/walk-reachability.test.mjs` **现在 exit 1 并在 `:50` 抛错**（t153/t154 同一命令几分钟前还是 exit 0 且全绿）⇒ **属刚引入的回归**（推测有并行卡正在重构该文件）；本卡 verify #2 `node scripts/probe-global-reach.mjs` 也因此跑不了。",
+          "requiredFix": "由 `src/interaction/**` 的 owner 卡恢复 `componentOf`（与 t148 的语义一致：1 次 flood 标注 + O(1) 成员判定，签名 `(x, z, from = null) → { ok, cell, root, size }`）并重新导出；修后请同时复跑 `node tests/walk-reachability.test.mjs`（应回到 `t140 结果：全部通过 ✓`）与 `node scripts/probe-global-reach.mjs`。**本卡不越界改 `src/interaction/**`**。"
+        },
+        {
+          "id": "t155-F2",
+          "severity": "high",
+          "problem": "**F10 的前提在实测中未被复现**：`C-side-{west,east}-main` 的门外下坡带在 `cellSize:1` 下**已完全双向可走**——逐格剖面（3 条 z 行一致）为 `1.70(M) → 1.30(M) → 1.40(M) → 1.90(M) → 2.40(M)`，逐跳 |Δ| 最大 **0.50**（≤ `maxStepHeight 0.5`）、且**每一格都在主分量内**；未发现“反向需上台阶 > 0.5”的格对。",
+          "requiredFix": "请把 `t77` 的**反向失败路径的逐跳清单**（每跳的两侧坐标/解析高度/`canStep` 原因码）回贴（或批准我在修复 F1 后自行用 `path(point→start)` + 反向边界扫描定位，约 1 轮即可）；否则改动会是“猜段位”。在拿到真实跳点前**不做几何改动**。"
+        },
+        {
+          "id": "t155-F3",
+          "severity": "medium",
+          "problem": "**布局侧双向断言未落地（设计已就绪）**：因 F1 使任何基于图的验证不可运行，我**不先提交一个跑不通的断言**（避免留红/留假绿）；本卡 inScope 也不含 `tests/walk-reachability.test.mjs`（权威口径层）。",
+          "requiredFix": "F1 修复后下一轮在 `tests/layout.test.mjs` 落地：对每处 `-transition-*`/`-descent-*`/`-threshold` 沿门轴逐格采样，**正反两向**各判 `up≤0.5 / down≤0.6`，**精确断言失败数 === 0**，失败打印（栋 id / 跳 / 两侧 y / Δ / 方向）。"
+        }
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "【F10：双向剖面定位反向需上台阶 >0.5 的格对】`.ok`、`cellSize:1` 提额。",
+          "status": "failed",
+          "evidence": "**已完成（剖面已拿到，但结论与卡上预期相反）**：只读逐格剖面（`LAYOUT 1.1.19`，`cellSize:1` 提额，`z=160/168/176` 三行完全一致，x 从 −61.5 到 −41.5 逐格）：\n```\n-61.5…-51.5 : 1.70M（门洞通道面）\n-50.5 / -49.5 / -48.5 : 1.70 / 1.30 / 1.30（transition-1）\n-47.5 / -46.5 : 1.40 / 1.40（t151 新增 descent-2）\n-45.5 / -44.5 : 1.90 / 1.90（t151 新增 descent-1）\n-43.5 起 : 2.40（台基 mid）\n```\n**逐跳 |Δ|（正/反同值）**：`1.70↔1.30 = 0.40` · `1.30↔1.40 = 0.10` · `1.40↔1.90 = **0.50**` · `1.90↔2.40 = **0.50**` ⇒ **最大 0.50 ≤ `maxStepHeight 0.5`**，且 **每一格均为 `M`（与 FP_ROUTE[0] 主分量同属一分量）** ⇒ **该走廊在`cellSize:1` 下完全双向可走**，**未复现“反向需 >0.5 上台阶”**。⇒ 若 t77 的反向失败真实存在，则**断点不在这条下坡带上**，需其提供**反向路径的逐跳清单**（本轮因阻塞项拿不到，见下）。"
+        },
+        {
+          "criterion": "【最小改动】按剖面结论使每跳正反向 |Δy| ≤ 阈值（加法优先；阈值不动）。",
+          "status": "failed",
+          "evidence": "**未做改动（零写入）**：剖面证明**下坡带本身已双向合规**（max |Δ|=0.50，全格在主分量）⇒ 在无“反向失败的真实跳点”之前**不做任何几何改动**（否则就是本线已多次否定的“猜段位”）。阈值 `0.5`/`0.6` **未动**。"
+        },
+        {
+          "criterion": "【新增布局侧双向断言】每处门外过渡带（`-transition-*`/`-descent-*`/`-threshold`）全长双向可走，精确断言 + 失败逐栋逐跳打印。",
+          "status": "failed",
+          "evidence": "**未落地（零写入）**：设计已就绪（沿门轴逐格采样、正反两向各判 `up≤0.5 / down≤0.6`、精确断言 0 失败、失败打印 `栋/跳/两侧 y/Δ`），但因**已有一处在本卡侧能先建立的两向校验被 t155 的阻塞项阻断**（见 finding F1：`src/interaction/**` 当前抛错），我选择**不先落一个无法跑通的断言**（避免留红）。注：本卡 inScope 仅 `src/shared/layout.js`/`tests/layout.test.mjs`/回执，而双向判定的权威口径需图（`.ok`），下一轮在 F1 修复后**一次可完成**（同一跳点清单）。"
+        },
+        {
+          "criterion": "【验证口径】`.ok`、局部/全局并列、两套 cellSize、交叉校验、报 LAYOUT_VERSION。",
+          "status": "failed",
+          "evidence": "**部分完成**：`LAYOUT_VERSION = **1.1.19**`（先读：`LAYOUT 1.1.19`）；剖面全用 `floorYAt` + `componentOf(...,FP_ROUTE[0]).ok`（**无 `!= null`/`if (!p)`**）；坐标基线 `FP_ROUTE[0] = (0,−480)`。**卡住的环节**：`createWalkGraph` 当前抛错（见 F1）⇒ 无法在本轮完成“两套 cellSize + 自建 BFS 与生产 `graph.path` 交叉校验 + 局部/全局并列”的全套读数（t153/t154 同一套读数是绿的，说明是**刚引入的回归**）。"
+        },
+        {
+          "criterion": "【不宣称可达 + 纪律】五层护栏 + 新断言全绿；阈值/默认 cellSize/包络不动；pin 交回；LAYOUT 递增；断言只增不减；audit exit 0；只改 inScope。",
+          "status": "failed",
+          "evidence": "**部分达成**：本轮**零写入** ⇒ 阀值/默认 `cellSize`/包络/几何均未动，`WALKABLE` 仍 **171**、`LAYOUT` 仍 **1.1.19**（无几何变更故不递增）、断言未增删；**未宣称任何可达**。`node tests/layout.test.mjs` → **全部通过 ✓（exit 0）**；`node scripts/audit.mjs --enforce` → **exit 0**（t154 实测）；`node scripts/probe-global-reach.mjs` 与 `node tests/walk-reachability.test.mjs` → **当前因 F1 抛错而无法运行**（非本卡引入）。"
+        }
+      ]
+    },
+    {
+      "id": "t156",
+      "subject": "T7.16 修 connected()/path() 口径不一致 + 常驻一致性断言 + 逆向审计扩展（F11/F12）",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。\n\n来源：**t77 attempt 7 揪出的库级一致性缺陷（决定 5.3 的归因）**——同一 solver、**三张全新图**、同一 94 点：\n- 一次性 `connected([起点,…94 点])` ⇒ **4 点不可达**（`文华殿门内`、`陈设正堂门内`、`VP-E-court1/2-hall-interior`；两张新图复现同一集合）；\n- 逐点 `path(起点→点)` ⇒ **0 点不可达**；\n- 对那 4 点**单独** `connected([起点,点])` ⇒ **0 不可达**（anchor 距点 0–0.5m、`probe=true` y=1.40）。\n⇒ **5.3 的 4 点红属 `src/interaction/walk-graph.js` 的 `connected()` 库口径缺陷，不是场景缺陷**（B1 的 2 段红才是真实缺陷，归 `t155`）。\n\n**主理人裁定**：**必须根治这一类**——\"同一概念、两种实现给出不同答案\"在本项目已多次出现（`baseline` vs raw 水体、`path` vs `connected`、`WALKABLE` 计数双源）⇒ 除修实现外，**必须加常驻一致性断言**把两者机器化对齐。\n\n必做：\n1. **先给根因**（多锚点预采样下 `nearestCell` 取格差异？`connected` 内部 flood 起点选择？），再修：`connected()` 与 `path()` 同口径（不得改判据强度）。\n2. 新增常驻断言 **`connected([a,b]) ≡ path(a→b).ok`**（全城代表性点对逐对；精确、失败打印不一致清单）。\n3. F12：把单向陷阱/逆向审计扩展到**每处新增/修改的过渡带**（正面+反向都出读数），并写明与布局侧双向断言的层次分工（不重复计数、不留缝）。\n4. 验证：`.ok` 判据；interaction 如实报项数与仍红项；audit --enforce exit 0；断言只增不减；不碰 src/core、src/shared、阈值、默认 cellSize、CONTRACTS；只改 inScope。",
+      "status": "failed",
+      "assignee": "ui-engineer",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1790478942318,
+      "updatedAt": 1790479553281,
+      "kind": "repair",
+      "objective": "修复 connected() 与 path() 的库口径不一致（connected 多锚点一次性调用报 4 点不可达，而逐点 path 报 0；5.3 的 4 点红属库口径缺陷而非场景缺陷）：先给根因，再使 connected() 与 path() 同口径；新增常驻断言 connected([a,b]) ≡ path(a→b).ok；并把单向陷阱/逆向审计扩展到每处新增过渡带。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/src/interaction/walk-graph.js",
+        "imperial-palace-dsh-1.1b/tests/interaction.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/report-airwall.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/core/",
+        "imperial-palace-dsh-1.1b/src/shared/",
+        "imperial-palace-dsh-1.1b/src/kit/",
+        "imperial-palace-dsh-1.1b/src/zones/",
+        "imperial-palace-dsh-1.1b/src/ui/",
+        "imperial-palace-dsh-1.1b/tests/layout.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/walk-reachability.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/core.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/verify-experience.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/verify-completeness.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**【F11：修 `connected()` 与 `path()` 的口径不一致（library-level）】**`t77` 用同一 solver、**三张全新图**、同一 94 点复现：**一次性 `connected([起点,…94 点])` → 4 点不可达**（`文华殿门内`、`陈设正堂门内`、`VP-E-court1/2-hall-interior`；两张新图复现同一集合）；而**逐点 `path(起点→点)` → 0 点不可达**；对这 4 点**单独** `connected([起点,点])` → **0 不可达**（anchor 距点 0–0.5m、`probe=true` y=1.40）⇒ **5.3 的 4 点红是库口径缺陷，不是场景缺陷**。请**先给根因**（多锚点预采样下 `nearestCell` 取格差异？`connected` 内部 flood 的起点选择？），再修：**`connected()` 改为与 `path()` 同口径**（逐点/逐起点 flood）或修正取格逻辑；**不得**改判据强度。",
+        "**【新增常驻一致性断言（这是本缺陷类别的根治）】**断言 **`connected([a, b])` ≡ `path(a→b).ok`**（对全城代表性点对逐对比较，**精确断言、失败打印不一致清单**）。**理由**：这是\"**同一概念两种实现给出不同答案**\"的又一实例（前有 `baseline` vs raw 水体、`path` vs `connected`、`WALKABLE` 计数）⇒ 必须机器化对齐，否则断言之间会互相矛盾。",
+        "**【F12：单向陷阱/逆向审计扩展到\"每处新增过渡带\"】**把 `t87` 的单向陷阱守卫（逆向 BFS 审计）扩展覆盖面：**凡新增/修改过渡带（`-transition-*` / `-descent-*` / `-threshold`）的位置，必须双向审计**（正向与反向可达性都给出读数）；**并说明与 `t151`/`t153` 的布局侧双向断言的层次分工**（哪一层负责哪一类），**不得重复计数也不得留缝**。",
+        "**【新增（因 `t155` 实测的在途缺口）：必须恢复 `componentOf` 定义并保证图验证可跑】**`t155` 实测：`src/interaction/walk-graph.js:188` 的对象字面量里仍导出 `componentOf,`，但**文件里已无 `function componentOf` 定义** ⇒ **`createWalkGraph` 构建即抛 `ReferenceError: componentOf is not defined`** ⇒ `node tests/walk-reachability.test.mjs` 与 `node scripts/probe-global-reach.mjs` **双双跑不了**（`t153`/`t154` 时两者均 exit 0）⇒ **图验证被静默阻断**。请：① **确保最终状态下 `componentOf` 已正确定义并导出**（语义按 `t148`：**1 次 flood 标注 + O(1) 成员判定**；签名 `(x, z, from = null) → {ok, cell, root, size}`）；② **在提交前跑下面两条作为冒烟门槛**（任一抛错即视为\"树不可验\"，不得提交）；③ 在回执中给出这两条命令的**真实输出**。",
+        "**验证与纪律**：全程 **`.ok`** 判据（**严禁** `!= null`/`if (!p)`）；`node tests/interaction.test.mjs`（如实报告项数与仍红项）、`node scripts/audit.mjs --enforce` **exit 0**；断言数**只增不减**；**不得**改 `src/core/**`、`src/shared/**`、阈值、`cellSize` 默认值、`docs/CONTRACTS.md`；只改 inScope（`src/interaction/walk-graph.js`、`tests/interaction.test.mjs`、`docs/report-airwall.md`）。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/interaction.test.mjs",
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/src/interaction/walk-graph.js",
+        "imperial-palace-dsh-1.1b/tests/interaction.test.mjs"
+      ],
+      "sourceTaskId": "t77",
+      "sourceFindingIds": [
+        "t77-F11-connected-vs-path-library-caliber-mismatch",
+        "t77-F12-one-way-trap-audit-should-cover-new-bands"
+      ],
+      "reassigning": false,
+      "revisions": [
+        {
+          "at": 1790479049105,
+          "by": "captain",
+          "reason": "**因 `t155` 实测的\\\"在途缺口\\\"追加一条**（同一文件、同一负责人 ⇒ 直接 amend，不另开卡）：`t155` 在 `LAYOUT 1.1.19` 上实测 **`src/interaction/walk-graph.js:188` 仍导出 `componentOf,`，但文件里已无 `function componentOf` 定义** ⇒ `createWalkGraph` **构建即抛 `ReferenceError`** ⇒ **`node tests/walk-reachability.test.mjs` 与 `node scripts/probe-global-reach.mjs` 双双跑不了**（而 `t153`/`t154` 时两者均 exit 0）⇒ **整条图验证链被静默阻断**（这是本项目第一次出现\\\"**树不可验**\\\"）。**判断**：这极可能是你（`t156`）正在改同一文件时的**在途状态**——故不派重复修复，而是要求你**在最终状态下把 `componentOf` 定义/导出恢复正确**，并**在提交前跑那两条命令作为冒烟门槛**（任一抛错即视为树不可验、不得提交），回执给出真实输出。**另外**：`t155` 的逐格剖面**未复现** t77 所述\\\"反向需 >0.5 上台阶\\\"（该带逐跳 |Δ| = 0.40/0.10/0.50/0.50，全格在主分量 ⇒ 该带双向合规）⇒ 反向失败的真正跳点**在别处**（提示：`canStep` 上 0.5 / 下 0.6 是**不对称**的，|Δ| ∈ (0.5, 0.6] 的跳**下行可过、上行不可过** ⇒ 请在 F12 的双向审计里把这一类作为重点；该定位属 `t155` 后继续卡，不在本卡 inScope，但你的 F12 扩展应能覆盖它）。",
+          "fields": [
+            "acceptance",
+            "inScope"
+          ],
+          "previous": {
+            "acceptance": [
+              "**【F11：修 `connected()` 与 `path()` 的口径不一致（library-level）】**`t77` 用同一 solver、**三张全新图**、同一 94 点复现：**一次性 `connected([起点,…94 点])` → 4 点不可达**（`文华殿门内`、`陈设正堂门内`、`VP-E-court1/2-hall-interior`；两张新图复现同一集合）；而**逐点 `path(起点→点)` → 0 点不可达**；对这 4 点**单独** `connected([起点,点])` → **0 不可达**（anchor 距点 0–0.5m、`probe=true` y=1.40）⇒ **5.3 的 4 点红是库口径缺陷，不是场景缺陷**。请**先给根因**（多锚点预采样下 `nearestCell` 取格差异？`connected` 内部 flood 的起点选择？），再修：**`connected()` 改为与 `path()` 同口径**（逐点/逐起点 flood）或修正取格逻辑；**不得**改判据强度。",
+              "**【新增常驻一致性断言（这是本缺陷类别的根治）】**断言 **`connected([a, b])` ≡ `path(a→b).ok`**（对全城代表性点对逐对比较，**精确断言、失败打印不一致清单**）。**理由**：这是\"**同一概念两种实现给出不同答案**\"的又一实例（前有 `baseline` vs raw 水体、`path` vs `connected`、`WALKABLE` 计数）⇒ 必须机器化对齐，否则断言之间会互相矛盾。",
+              "**【F12：单向陷阱/逆向审计扩展到\"每处新增过渡带\"】**把 `t87` 的单向陷阱守卫（逆向 BFS 审计）扩展覆盖面：**凡新增/修改过渡带（`-transition-*` / `-descent-*` / `-threshold`）的位置，必须双向审计**（正向与反向可达性都给出读数）；**并说明与 `t151`/`t153` 的布局侧双向断言的层次分工**（哪一层负责哪一类），**不得重复计数也不得留缝**。",
+              "**验证与纪律**：全程 **`.ok`** 判据（**严禁** `!= null`/`if (!p)`）；`node tests/interaction.test.mjs`（如实报告项数与仍红项）、`node scripts/audit.mjs --enforce` **exit 0**；断言数**只增不减**；**不得**改 `src/core/**`、`src/shared/**`、阈值、`cellSize` 默认值、`docs/CONTRACTS.md`；只改 inScope（`src/interaction/walk-graph.js`、`tests/interaction.test.mjs`、`docs/report-airwall.md`）。"
+            ],
+            "inScope": [
+              "imperial-palace-dsh-1.1b/src/interaction/walk-graph.js",
+              "imperial-palace-dsh-1.1b/tests/interaction.test.mjs",
+              "imperial-palace-dsh-1.1b/docs/report-airwall.md"
+            ]
+          }
+        }
+      ],
+      "attemptId": "76c6c285-2105-4915-af71-736b39cc2a57",
+      "output": "t156 attempt 2：**交付完成但 verify 非绿 ⇒ 按规则判 failed（如实报红）**。已交付：`connected()` 与 `path()` **逐值同口径**、常驻一致性断言 **F27**（含 F12 过渡带双向审计）、**componentOf 已定义并导出**（两处冒烟门槛均可跑）。`audit --enforce` **exit 0**；`interaction` **66/70**（断言 722→**726**、skip 0）。\n\n**① 根因（F11）**：① `connected()` 的**整集守卫** `anchors.length !== points.length ⇒ ok:false` —— 任一点取不到最近格即整次 `ok:false` 且 `unreachable` 为空（一次性传 74/94 点时把\"个别点取不到格\"误报成\"整组不连通\" = t77 的 4 点假红）；② `path()` 用\"起点 flood + 终点 `parents[idx] !== -2`\"，与旧 `connected` 语义不同。\n\n**② 修法（强度不变）**：`connected()` 改为与 `path()` **同一 flood 入口 + 逐点 parent 判定**，取不到格/不同分量**逐点**记入 `unreachable`（`noCell`/`differentComponent`），任一不可达仍 `ok:false`；`path()` 改为复用按锚点缓存的 `labelAll`（同一 flood ⇒ 结果**逐值不变**，同时达成 t148 的性能目标）。\n\n**③ F27 常驻一致性**：锚点 `(0,−480)` × 50 点（43 内景机位 + 5 出生点 + t77 点名点）**逐对**断言 `connected([A,p]).ok ≡ path(A→p).ok`（全程 `.ok`）。**实测不一致 0 项**；一次性 51 点 `ok=false` 与逐点可达 40/50 一致 ⇒ 假红消除。\n\n**④ F12 过渡带双向审计**：逐处给**正向**（锚点→带）与**反向**（带→锚点）读数并断言不得单向；**检出 8 处单向带**：`WK-C-side-{west,east}-main-descent-1/2`、`WK-C-side-{west,east}-main-transition-1/2`（`fwd=true / bwd=false`）。层次分工见报告 §16.3（t151/t153 管几何/链路，本层管图搜索，共用同一 solver，不重复计数）。\n\n**⑤ 冒烟门槛**：`node tests/walk-reachability.test.mjs` → **能跑完不抛错**（恢复前为 `ReferenceError: componentOf is not defined`；读数「全部通过 ✓」、t153 ⓪ 94 条：细口径 0 / 粗口径 7）｜`node scripts/probe-global-reach.mjs` → **exit 0**「一致 9/9」。\n\n**⑥ 仍红 4 项（同一真实缺陷，非本卡改动）**：E13「可达但不可返回 = 176 格」· E15 陷阱格 · E16「进得去出不来」= `VP-C-side-west/east-main-interior` + 寝殿东/西配殿门内 · F27 的 F12 部分（8 处单向带）⇒ 全部指向 `C-side-west/east-main` 单向几何（与 t146 交回的 2 栋同源）。另把 F26 原硬编码条数/点名改为**数据推导 + 有则点名**（layout 已修好，不再陈旧）。\n\n**纪律**：仅改 inScope 三路径（`src/interaction/walk-graph.js`、`tests/interaction.test.mjs`、`docs/report-airwall.md` §16）；未改 `src/core/**`、`src/shared/**`、阈值、默认 `cellSize`、`docs/CONTRACTS.md`；`run.mjs` 未列入。**findings**：t156-F1（high，layout 修 8 处单向带 ⇒ E13/E15/E16/F27 应同时转绿）· t156-F2（medium，verify 非绿的归因与两种处置选项）。",
+      "findings": [
+        {
+          "id": "t156-F1",
+          "severity": "high",
+          "problem": "**F27/F12 新断言检出的真实单向缺陷（非本卡改动）**：8 处过渡带 `fwd=true / bwd=false` —— `WK-C-side-{west,east}-main-descent-1/2`、`WK-C-side-{west,east}-main-transition-1/2`；同根缺陷另现身于 E13（可达但不可返回 **176** 格）、E15（陷阱格）、E16（`VP-C-side-west/east-main-interior` + 寝殿东/西配殿门内 4 点“进得去出不来”）。",
+          "requiredFix": "layout/区域线：修复 `C-side-west-main` / `C-side-east-main` 的过渡带单向性（正反两向 `canStep` 必须一致）；本卡已给出**带 id 与正/反读数**可直接定位；修好后 E13/E15/E16/F27 应同时转绿，**不得**放宽这些看门狗。",
+          "file": "src/shared/layout.js"
+        },
+        {
+          "id": "t156-F2",
+          "severity": "medium",
+          "problem": "**本卡 verify 非绿**：`node tests/interaction.test.mjs` = 66/70 exit 1。四条红项均为上述同一真实缺陷（非本卡改动）——本卡新增的 F27 一致性部分**已绿**（50 对不一致 0），红的是其 F12 过渡带单向断言（在真实数据上正确报警）。",
+          "requiredFix": "待 layout 修复 `C-side-west/east-main` 单向性后重跑即可转绿；或在主理人明确“过渡带单向性暂可接受”时，把 F12 的单向断言降级为**读数 + 单独断言**（需主理人裁定，不得自行放宽）。",
+          "file": "tests/interaction.test.mjs"
+        }
+      ],
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/src/interaction/walk-graph.js",
+        "imperial-palace-dsh-1.1b/tests/interaction.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/report-airwall.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "F11：先给根因，再修 connected()/path() 口径不一致（不得改判据强度）",
+          "status": "passed",
+          "evidence": "根因（二重）：① `connected()` 整集守卫 `anchors.length !== points.length ⇒ ok:false`：任一点取不到最近格即整次 ok:false 且 unreachable 为空（一次性传 74/94 点 → t77 的 4 点假红）；② `path()` 用“起点 flood + 终点 parents[idx]!==-2”，语义与旧 connected 不同。修法已落地：connected() 改为与 path() **同一 flood 入口 + 逐点 parent 判定**（逐点记 noCell/differentComponent；任一不可达仍 ok:false，**强度不变**）；path() 改为复用按锚点缓存的 labelAll（同一 flood ⇒ 结果逐值不变）。"
+        },
+        {
+          "criterion": "新增常驻一致性断言 connected([a,b]) ≡ path(a→b).ok（逐对；精确、打印不一致清单）",
+          "status": "passed",
+          "evidence": "新增常驻 **F27**：锚点 (0,−480) × 50 点（43 内景机位 + 5 出生点 + t77 点名点）逐对断言 `connected([A,p]).ok ≡ path(A→p).ok`（全程 .ok）；**实测不一致 0 项**；一次性 51 点 ok=false 与逐点可达 40/50 一致 ⇒ 假红消除。"
+        },
+        {
+          "criterion": "F12：单向陷阱/逆向审计扩展到每处新增过渡带 + 层次分工",
+          "status": "passed",
+          "evidence": "F27 内含 F12：对 `-transition-*`/`-descent-*`/`-threshold` 逐处给正向（锚点→带）与反向（带→锚点）读数并断言不得单向。**检出 8 处单向带**：`WK-C-side-{west,east}-main-descent-1/2`、`WK-C-side-{west,east}-main-transition-1/2`（fwd=true/bwd=false）。层次分工（报告 §16.3）：t151/t153 管几何/链路，本层管图搜索，共用同一 solver，不重复计数。"
+        },
+        {
+          "criterion": "恢复 componentOf 定义并保证图验证可跑（两处冒烟门槛 + 真实输出）",
+          "status": "passed",
+          "evidence": "`componentOf(x,z,from=null) → {ok,cell,root,size}` 已定义并导出；createWalkGraph 实测 **BUILD OK**。冒烟① walk-reachability：**能跑完不抛错**（恢复前为 `ReferenceError: componentOf is not defined`），读数「全部通过 ✓」/t153 ⓪ 94 条（细口径 0 / 粗口径 7）；冒烟② probe-global-reach：**exit 0**「一致 9/9」。"
+        },
+        {
+          "criterion": "验证与纪律：.ok 判据；interaction 如实报项数与仍红项；audit --enforce exit 0；断言只增不减；只改 inScope",
+          "status": "failed",
+          "evidence": "`interaction` **66/70 exit 1**（断言 722→**726**、skip 0）；`audit --enforce` **exit 0**。仍红 4 项均指向同一真实在途缺陷（E13 可达但不可返回 176 格 / E15 陷阱格 / E16 4 点 / F27 的 F12 部分 8 处单向带 = `C-side-west/east-main` 单向几何，与 t146 的 2 栋同源）。F26 原硬编码条数与点名已改为数据推导 + 有则点名。未改 src/core、src/shared、阈值、默认 cellSize、CONTRACTS；仅改 inScope 三路径。**因 verify（interaction）非绿，按规则本任务判 failed**。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/interaction.test.mjs",
+          "status": "failed",
+          "exitCode": 1,
+          "evidence": "通过 66 / 70，exit 1（断言 722→726、skip 0）。关键行：· 库级一致（t156）：connected≡path 逐对 50 对 ⇒ 不一致 0 项；一次性 51 点 ok=false（逐点可达 40/50）✓。仍红 4 项：E13（可达但不可返回 176 格）/E15（陷阱格）/E16（4 点）/F27 的 F12 部分（8 处单向带）——均指向 C-side-west/east-main 单向几何。"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；结论“预算与契约检查全部通过（信息性提示 0 项，不计失败）”。"
+        },
+        {
+          "command": "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/walk-reachability.test.mjs && node scripts/probe-global-reach.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "冒烟① walk-reachability 能跑完不抛错（恢复前会 ReferenceError: componentOf is not defined）；读数「t140 结果：全部通过 ✓」/ t153 ⓪ 分量级护栏 94 条（细口径命中 0 / 粗口径命中 7）。冒烟② probe-global-reach exit 0，「一致 9/9」。"
+        }
+      ]
     }
   ],
-  "taskSeq": 154,
+  "taskSeq": 156,
   "phase": "running",
   "approvedAt": 1790418804498
 }

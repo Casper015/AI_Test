@@ -808,3 +808,65 @@
 | `node scripts/probe-global-reach.mjs`（只读诊断） | **exit 0** | 两口径读数 + 断点格对（§22.2） |
 | `node scripts/audit.mjs --enforce` | **exit 0** | 333/350、306,269 tri、全部通过 |
 
+---
+
+## 23. t77（attempt 7）复测：`t151` 已使 43/43 内景可达，但暴露**两条单向陷阱** + 一处**库级一致性缺陷**
+
+> attempt `be4b2a2b-bc60-42b8-8f7d-fb45a465471f` · 树 **`LAYOUT 1.1.19`**（t151「C 两殿门外加法下坡带（未被覆盖窗口内 1.9/1.4）」）· 同一生产口径引擎 + `scripts/probe-global-reach.mjs` 只读诊断
+
+### 23.1 逐项对照（1.1.18 → 1.1.19）
+
+| 项 | 1.1.18 | **1.1.19** |
+| --- | --- | --- |
+| 内景可达（`path(南桥起点→内景机位)`，cellSize 1 与 2） | 41 / 43 | **43 / 43** ✓（`unreachableIds: []`） |
+| 42 个「门内」路点可达 | 40 / 42 | **42 / 42** ✓ |
+| 走查相邻段可达 | 46 / 49 | **47 / 49**（仍 2 段 ✗） |
+| 5.3（引擎 `connected` 大口径） | 4 点不连通 | **仍报 4 点**（与 `path` 矛盾，见 §23.3） |
+
+### 23.2 两条不可达段的机制：**单向陷阱**（只进不出 / 单向边）
+
+| 段 | 正向 | 反向 | 结论 |
+| --- | --- | --- | --- |
+| `寝殿西配殿门内 (−67.5,168) → 寝殿东配殿门内 (67.5,168)` | **✗ unreachable**（cS1 与 cS2 均 ✗） | **✗ unreachable** | 两栋 C 侧殿堂**互不可达**（但都可从起点进入） |
+| `寝殿东配殿门内 (67.5,168) → 西配房门内 (−65.5,250)` | **✗ unreachable**（cS1/cS2） | ✓ 216m | **单向边**（该方向不可行） |
+
+**单向陷阱实证**（起点=南桥北端；`path` 双向各测一次）：
+
+| 点 | 起点→点 | **点→起点** | 结论 |
+| --- | --- | --- | --- |
+| `C-side-west-main` 内景 (−67.5,168) | ✓ **881m** | **✗ unreachable** | **进了出不来** |
+| `C-side-east-main` 内景 (67.5,168) | ✓ **880m** | **✗ unreachable** | **进了出不来** |
+| `C-side-west-rear` 门内 (−65.5,250) | ✓ 967m | ✓ 967m | 正常双向 |
+| `C-fp-spawn` / `WK-C-ground` 中心 | ✓ 769m / ✓ 849m | ✓ / ✓ | 正常双向 |
+
+⇒ `t151` 的“加法下坡带”（1.9/1.4）让玩家**能下到**两栋殿内（所以 43/43 可达），但**台阶是单向的**：回程需要向上跨 > 0.5m ⇒ `path(点→起点)` 失败 ⇒ 两栋成为**单向陷阱**（t87 常驻“单向陷阱守卫”应拦截这一形态；其当时审计为 0 陷阱，说明该守卫的**审计口径**未覆盖“新增下坡带造成的回程不可行”）。
+
+### 23.3 库级一致性缺陷：`connected()` 与 `path()` 对同一点给出相反结论（可复现）
+
+**同一 solver、三张全新图（冷缓存）、同一 94 个点**：
+
+| 调用形态（全新图） | 结果 |
+| --- | --- |
+| `connected([起点, …94 点])`（一次性大调用） | **4 点不可达**：`文华殿门内`、`陈设正堂门内`、`VP-E-court1-hall-interior`、`VP-E-court2-hall-interior`（g1 与 g3 两次复现，集合相同） |
+| 逐点 `path(起点→该点)`（另一张全新图） | **0 点不可达** |
+| 对上述 4 点单独 `connected([起点, 该点])` | **0 点不可达**（anchor 与点相距 0–0.5m，`probe=true`，y=1.40） |
+
+⇒ `src/interaction/walk-graph.js` 的 `connected()`（一次性多锚点）与 `path()`（单点）在**同一输入**上不一致；两者都基于 `nearestCell + flood(start) + parents[goal]===-2`，故属**库级口径缺陷**（疑似与 `nearestCell` 的螺旋扫描在大量锚点预采样时的取格差异有关，需 core/interaction 复核）。
+**影响**：`tests/verify-completeness.test.mjs` 的 5.3（用 `connected` 大口径）会因此报红 4 点，而同一场景按 `path` 逐点是全绿 ⇒ **5.3 的红不是场景缺陷**（本轮已用两种调用形态交叉验证）；而 `B1`（逐段 `path`）的红**是真实缺陷**（§23.2）。
+
+### 23.4 最小修法（交回派单；本轮未改 `src/**`）
+
+1. **t77-F10（blocker，owner layout，t151 作者）**：让 `WK-C-side-{west,east}-main` 门外的下坡带**双向可走**——每级落差 ≤ `maxStepHeight 0.5`（现在回程方向存在 >0.5m 的上台阶）；或把 1.9/1.4 两级改为 **2.4→1.9→1.4→0.9 的四级对称台阶**并在通道面侧补齐。修后 `B1` 的两段应转绿。
+2. **t77-F11（high，owner core/interaction）**：修 `walk-graph.js` 的 `connected()`：改为逐点 `flood`（与本席逐点 `path` 同口径），或查清多锚点预采样下 `nearestCell` 取格差异的根因；修后 5.3 的红 4 点应自然消失。
+3. **t77-F12（medium，owner core/interaction）**：t87 的“单向陷阱守卫”/审计口径应覆盖“**新增下坡带 ⇒ 回程不可行**”这一类；建议把 `reverseFlood` 检查从既有格扩展到**每处新增过渡带**。
+
+### 23.5 三条 verify 的真实状态（1.1.19）
+
+| 命令 | 结果 | 红项与归因 |
+| --- | --- | --- |
+| `node tests/verify-completeness.test.mjs` | **exit 1 · 52 项 49 PASS / 2 FAIL** | 5.3（4 点，**§23.3 库级口径缺陷**）· 5.4b（已按契约口径 PASS，不计入退出码） |
+| `node tests/verify-experience.test.mjs` | **exit 1 · 35 项 33 PASS / 2 FAIL** | **B1（2/49 段 = 单向陷阱，§23.2）**；F1 = **非本卡**（t13）——B10 已转绿 |
+| `node scripts/verify-completeness.mjs`（含浏览器） | **exit 1 · 56 项 53 PASS / 2 FAIL / 1 UNVERIFIED** | 同源 5.3/5.4b |
+| `node scripts/probe-global-reach.mjs`（只读诊断） | **exit 0** | 两口径 + 断点定位 |
+| `node scripts/audit.mjs --enforce` | **exit 0** | 333/350、306,269 tri、全部通过 |
+

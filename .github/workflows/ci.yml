@@ -36,11 +36,11 @@ jobs:
           - name: "Gemini 3.8 Flash"
             dir: "imperial gemini 3.8flash"
             command: "npm ci && npm run check && npm run build"
-          - name: "Imperial Palace Tour"
-            dir: "imperial-palace"
-            command: "npm ci && npm run build"
-          - name: "Palace Batch 164358"
-            dir: "imperial-palace-2026-09-26-164358"
+          - name: "GPT-6 Luna (Tour)"
+            dir: "imperial-palace/luna"
+            command: "npm ci && npm run check:layout && npm run build"
+          - name: "GPT-6 Sol"
+            dir: "imperial-palace/sol"
             command: "npm ci && npm run check && npm run build"
 
     steps:

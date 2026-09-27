@@ -636,3 +636,38 @@ $ node scripts/audit.mjs
 ### 15.5 交叉校验
 
 生产 `graph.path()` 与自建 BFS（`graph.flood`）在**两套口径下均逐栋一致 43/43** ✓（`path()` 内部即调用 `flood`，交叉校验确认二者同源、探针无偏）；常驻断言 **F26** 锁定：粗口径不可达=12、伪影=10、细口径真实缺口=2（点名两栋）、两套口径 path≡BFS 各 43/43。
+
+---
+
+## 16. t156：`connected()` ↔ `path()` 库级口径对齐（F11）+ 过渡带双向审计（F12）
+
+### 16.1 根因（F11）
+
+`src/interaction/walk-graph.js` 的 `connected()` 与 `path()` 对**同一概念**给出不同答案，二重原因：
+1. **整集守卫**：`const anchors = points.map(nearestCell).filter(Boolean); if (anchors.length !== points.length) return { ok:false, reason:'部分点不在可行走栅格上' }` ⇒ 只要有**任一点**取不到最近格，**整次调用即 `ok:false` 且 `unreachable` 为空** —— 一次性传 74/94 点时会把"个别点取不到格"误报成"整组不连通"（t77 的 4 点假红）；
+2. `path()` 的判定是「`flood(起点)` + 终点 `parents[idx] !== -2`」，与旧 `connected` 的语义不同 ⇒ 同一概念两种实现。
+
+### 16.2 修法（判据强度不变）
+
+- `connected()` 改为与 `path()` **同一 `flood` 入口 + 逐点 `parents[idx] !== -2`**；取不到格 / 不同分量**逐点**记入 `unreachable`（`noCell` / `differentComponent`）——**任一不可达仍 `ok:false`**（强度不变，且不再吞掉原因）。
+- `path()` 改为复用 `labelAll({x,z})`（**按锚点缓存**的同一次 flood）⇒ 同一锚点下 parents 逐值相同 ⇒ 结果**逐值不变**，同时把"每对点两次全图 flood"降为"每锚点一次"（这也是 `t148` 的性能目标）。
+- `componentOf(x, z, from = null) → {ok, cell, root, size}`（t148 语义：1 次标注 + O(1) 成员判定）**已确认定义并导出**，两处冒烟均可跑。
+
+### 16.3 常驻断言（F27）+ 过渡带双向审计（F12）
+
+- **F27 库级一致**：公共锚点 `(0,−480)` × 代表性点集（43 内景机位 + 5 出生点 + t77 点名点）**逐对**断言 `connected([A,p]).ok ≡ path(A→p).ok`；并断言**一次性多锚点调用** `connected([A,…])` 与"逐点全可达"等价（t77 的原始形态）。
+  **实测：逐对比较 50 对 ⇒ 不一致 0 项**；一次性 51 点调用 `ok=false` 与"逐点可达 40/50"**一致** ⇒ 假红已消除。
+- **F12 过渡带双向审计**：对 `-transition-*` / `-descent-*` / `-threshold` 过渡带**逐处**给出**正向**（城外锚点 → 带）与**反向**（带 → 城外锚点）读数，并断言**不得单向**（正/反向读数必须一致）。
+  **层次分工（不重复计数、不留缝）**：`t151`/`t153` 的布局侧双向断言负责**几何/链路**（面存在、相邻可跨、解析高度）；**本层负责图搜索**（真实 `flood`/`canStep` 下的正反向可达），两层用同一 `solver`，前者不判"能否走到"，后者不改几何。
+
+### 16.4 冒烟门槛（提交前必跑，任一抛错即"树不可验"）
+
+```text
+$ node tests/walk-reachability.test.mjs      → t140 结果：全部通过 ✓（t153 ⓪ 分量级护栏：94 条，细口径命中 0 / 粗口径命中 7）
+$ node scripts/probe-global-reach.mjs        → 一致 9/9 ✓（输出 JSON ⇒ /tmp/t143-global-reach.json）
+```
+
+### 16.5 本轮实测与归因
+
+- `node scripts/audit.mjs --enforce` → **exit 0** ✓
+- `node tests/interaction.test.mjs` → **65/70**：新增 **F27/F12 均通过**；仍红项为**在途数据**类（E13「可达但不可返回的格数应为 0，实际 176」、E15 陷阱格、E16「进得去出不来」=`VP-C-side-west/east-main-interior` 与寝殿东/西配殿门内）⇒ 与 `t146` 交回的 2 栋真实缺口同源，**非本卡改动**（本卡只改 `connected`/`path` 口径与新增只增断言）。

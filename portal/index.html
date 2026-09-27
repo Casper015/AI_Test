@@ -500,11 +500,11 @@
         <a class="btn-launch" href="./gemini-3.8flash/" target="_blank">进入 3D 漫游 ➔</a>
       </div>
 
-      <!-- 7. Imperial Palace Tour -->
+      <!-- 7. GPT-6 Luna (Tour) -->
       <div class="card" style="--card-accent: #eab308;">
         <div class="card-top">
           <span class="card-tag" style="background: rgba(234, 179, 8, 0.2); color: #fde047;">交互沙盘巡游</span>
-          <h2 class="card-title">Imperial Palace Tour</h2>
+          <h2 class="card-title">GPT-6 Luna (Tour)</h2>
           <div class="card-tokens">中轴巡游 · 室内屋顶渐隐</div>
           <p class="card-desc">
             完整护城河、金水桥与中轴御道，进入太和殿与乾清宫时屋顶自动渐隐退入展示，沉浸式艺术化宫殿导览沙盘。
@@ -518,22 +518,23 @@
         <a class="btn-launch" href="./imperial-palace/" target="_blank">进入 3D 漫游 ➔</a>
       </div>
 
-      <!-- 8. Palace Batch 164358 -->
+      <!-- 8. GPT-6 Sol -->
       <div class="card" style="--card-accent: #ec4899;">
         <div class="card-top">
-          <span class="card-tag" style="background: rgba(236, 72, 153, 0.2); color: #f472b6;">几何合批优化</span>
-          <h2 class="card-title">Palace Batch 164358</h2>
+          <span class="card-tag" style="background: rgba(236, 72, 153, 0.2); color: #f472b6;">GPT-6 Sol 几何合批</span>
+          <h2 class="card-title">GPT-6 Sol</h2>
           <div class="card-tokens">静态网格合批 (1372 → 116)</div>
           <p class="card-desc">
-            针对复杂宫殿场景进行极致几何合批优化，将 1372 块网格合成为 20 组 116 个高效 Batch，保证 88 栋建筑拾取的同时帧率翻倍。
+            ChatGPT（GPT-6 Sol 会话）独立交付的高规制项目，针对复杂宫殿场景进行极致几何合批优化，将 1372 块网格合成为 20 组 116 个高效 Batch，保证 88 栋建筑拾取的同时帧率翻倍。
           </p>
           <ul class="feature-list">
+            <li>88 栋规制殿宇 · 20 座规整院落</li>
             <li>网格数量缩减 91.5%（1372 → 116）</li>
             <li>保留 88 栋建筑独立拾取与射线碰撞</li>
-            <li>通过 check-batch.mjs 自动化性能断言</li>
+            <li>结构检查、漫游路线连通与生产构建全绿</li>
           </ul>
         </div>
-        <a class="btn-launch" href="./palace-batch/" target="_blank">进入 3D 漫游 ➔</a>
+        <a class="btn-launch" href="./gpt6-sol/" target="_blank">进入 3D 漫游 ➔</a>
       </div>
     </div>
 
@@ -636,20 +637,20 @@
             <td><strong>7 处可进内景</strong> + 第一人称门洞穿行 + 堆秀山顶机位</td>
           </tr>
           <tr>
-            <td><strong>Imperial Palace Tour</strong></td>
-            <td>Codex 交互沙盘团队</td>
+            <td><strong>GPT-6 Luna (Tour)</strong></td>
+            <td>ChatGPT 交互沙盘团队</td>
             <td>多区域拆分</td>
-            <td>88 栋 / 20 院</td>
+            <td>68 栋 / 16 院</td>
             <td>check-layout.js 布局校验</td>
             <td>中轴巡游沙盘 + 室内屋顶渐隐展示</td>
           </tr>
           <tr>
-            <td><strong>Palace Batch 164358</strong></td>
-            <td>性能工程优化分支</td>
-            <td>合批管线深度重构</td>
+            <td><strong>GPT-6 Sol</strong></td>
+            <td>ChatGPT (GPT-6 Sol) 合批优化</td>
+            <td>独立工程交付</td>
             <td>88 栋 / 20 院</td>
-            <td>check-batch.mjs 几何与拾取双重校验</td>
-            <td>1372 → 116 网格合并 + 高帧率流畅体验</td>
+            <td>check-batch.mjs / check-walk.mjs 双重校验</td>
+            <td>1372 → 116 网格合批 + 漫游连通 + 极速帧率</td>
           </tr>
         </tbody>
       </table>

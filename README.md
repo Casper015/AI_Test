@@ -23,8 +23,8 @@
 | **`imperial-palace-dsh-1.1b`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/dsh-1.1b/) | **DeepSeek Harness** (DSH) | `deepseek-v4.1-flash` (Deep-Agent 架构) | **1,111,473,426** tokens<br>(1.11B) | 67 栋建筑<br>18 处院落 | • **超大规模纵深研发**：耗费 11 亿 Tokens<br>• 23 组严格的契约测试与真机环境探针<br>• 具有最严苛的工程交付回执与证据链 |
 | **`imperial-palace-gpt6luna`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/gpt6luna/) | **ChatGPT (Codex Work)** | `GPT-6 Luna` (多子 Agent 分区协作) | 独立会话推进 | **88 栋建筑**<br>20 处院落 | • 5 大区域（前朝/后廷/东西苑/御花园）子 Agent 分工并行<br>• `check.mjs` 自动化边界、顶点有限值与唯一连接校验<br>• 现代化 Vite 构建，内置小地图定位与御前漫游 (F 键) |
 | **`imperial gemini 3.8flash`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/gemini-3.8flash/) | **Gemini 3.8 Flash** | `gemini-3.8-flash` (7 专职子 Agent 协同) | 全程自主多智能体 | **96 栋建筑**<br>23 处院落 | • **160% 超额交付**：96 栋殿宇、23 处院落、**7 处可进殿堂**（金銮殿/东暖阁/三希堂/文渊阁等）<br>• 三大殿 y=4.5m 汉白玉基台，堆秀山御景亭 y=13.5m 极顶俯瞰<br>• 全程算法程序化，产物体积仅 216 KB |
-| **`imperial-palace`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/imperial-palace/) | **Codex Interactive** | 3D 导览交互沙盘 | 独立沙盘交互 | 88 栋建筑<br>20 处院落 | • 沉浸式中轴巡游沙盘，太和殿与乾清宫内景支持屋顶渐隐展示<br>• 支持昼/夕/夜三时辰光影与小地图定位 |
-| **`imperial-palace-2026-09-26-164358`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/palace-batch/) | **性能合批深度优化版** | 几何合批管线重构 | 静态网格合批优化 | 88 栋建筑<br>20 处院落 | • **网格数量削减 91.5%**（1372 → 116 组 Batch）<br>• 保留 88 栋建筑独立拾取与射线碰撞，帧率成倍提升 |
+| **`imperial-palace/luna`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/imperial-palace/) | **ChatGPT (Codex Work)** | `GPT-6 Luna (Tour)` | 交互沙盘巡游 | 68 栋建筑<br>16 处院落 | • 沉浸式中轴巡游沙盘，太和殿与乾清宫内景支持屋顶渐隐展示<br>• 支持昼/夕/夜三时辰光影与小地图定位 |
+| **`imperial-palace/sol`** | [🏛️ 在线体验](https://casper015.github.io/AI_Test/gpt6-sol/) | **ChatGPT (Codex Work)** | `GPT-6 Sol` (几何合批优化) | 静态网格合批优化 | **88 栋建筑**<br>20 处院落 | • **网格数量削减 91.5%**（1372 → 116 组 Batch）<br>• 保留 88 栋建筑独立拾取与射线碰撞，帧率成倍提升，漫游连通全绿 |
 
 ---
 
@@ -151,19 +151,19 @@ debug 然后接着完成 太多图片了
 
 ---
 
-### 7. Imperial Palace 3D 导览交互沙盘：`imperial-palace`
-* **工程路径**：`AI_Test/imperial-palace/`
+### 7. GPT-6 Luna 3D 导览交互沙盘：`imperial-palace/luna`
+* **工程路径**：`AI_Test/imperial-palace/luna/`
 * **工程特色**：
   - 聚焦中轴巡游与沉浸式沙盘交互，太和殿与乾清宫进入内景时屋顶支持优雅渐隐动画展示；
   - 提供金辉、落霞与寒月三时辰光影切换、全局小地图及相机定位。
 
 ---
 
-### 8. Palace Batch 164358 (性能合批深度优化版)：`imperial-palace-2026-09-26-164358`
-* **工程路径**：`AI_Test/imperial-palace-2026-09-26-164358/`
+### 8. GPT-6 Sol 几何合批优化版：`imperial-palace/sol`
+* **工程路径**：`AI_Test/imperial-palace/sol/`
 * **工程特色**：
   - **几何合批重构**：将全城 1372 块网格动态压缩合并为 20 组 116 个高效 Batch，Draw Call 锐减 91.5%；
-  - 保证 88 栋建筑独立拾取与射线碰撞的同时，在低配显卡与移动端实现 60 FPS 流畅满帧。
+  - 保证 88 栋建筑独立拾取与射线碰撞的同时，在低配显卡与移动端实现 60 FPS 流畅满帧，漫游连通与结构检查全绿。
 
 ---
 
@@ -198,12 +198,12 @@ python3 -m http.server 8126 --directory dist --bind 127.0.0.1
 cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial gemini 3.8flash"
 python3 -m http.server 8127 --directory dist --bind 127.0.0.1
 
-# 7. 启动 Imperial Palace 导览沙盘版本 (端口 8128)
-cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace"
+# 7. 启动 GPT-6 Luna 导览沙盘版本 (端口 8128)
+cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace/luna"
 python3 -m http.server 8128 --directory dist --bind 127.0.0.1
 
-# 8. 启动 Palace Batch 164358 静态合批版 (端口 8129)
-cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-2026-09-26-164358"
+# 8. 启动 GPT-6 Sol 静态合批版 (端口 8129)
+cd "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace/sol"
 python3 -m http.server 8129 --directory dist --bind 127.0.0.1
 ```
 

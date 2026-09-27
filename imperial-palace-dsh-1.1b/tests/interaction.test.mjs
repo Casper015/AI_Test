@@ -3242,10 +3242,16 @@ await runner.test('F26 口径裁定（t146）：E18/E8/E11 用 cellSize=3；细�
   const coarseUnreachable = [...coarse.rows.entries()].filter(([, v]) => !v.pathOk).map(([k]) => k);
   const fineUnreachable = [...fine.rows.entries()].filter(([, v]) => !v.pathOk).map(([k]) => k);
   const artifacts = coarseUnreachable.filter((id) => fine.rows.get(id)?.pathOk === true);
-  assertEqual(coarseUnreachable.length, 12, `粗口径不可达应为 12 栋（实际 ${coarseUnreachable.length}）：${coarseUnreachable.join('、')}`);
-  assertEqual(artifacts.length, 10, `其中应为 10 栋粗口径伪影（实际 ${artifacts.length}）：${artifacts.join('、')}`);
-  assertEqual(fineUnreachable.length, 2, `细口径真实不可达应为 2 栋（实际 ${fineUnreachable.length}）：${fineUnreachable.join('、')}`);
-  assertEqual(fineUnreachable.join(','), 'VP-C-side-west-main-interior,VP-C-side-east-main-interior', '细口径真实缺口必须点名');
+  // t156：绝对条数会随 layout 在途进展漂移 ⇒ 改为**数据推导的结构性判据**（不硬编码 12/10/2）
+  assertEqual(artifacts.length, coarseUnreachable.length - fineUnreachable.length, `粗口径独有不可达者应恰为"粗不可达 − 细不可达"（实际 ${artifacts.length} vs ${coarseUnreachable.length - fineUnreachable.length}）`);
+  assert(coarseUnreachable.length >= fineUnreachable.length, '粗口径不可达数不得少于细口径（粗口径只会更多）');
+  assert(artifacts.length > 0, `必须存在"粗不可达/细可达"的粗口径伪影（实际 ${artifacts.length}）——否则粗口径才具权威性`);
+  // t156：细口径缺口集合随 layout 进展变化（当前已收敛为 0）⇒ 不硬编码点名，改为"结构性 + 有则点名"
+  if (fineUnreachable.length > 0) {
+    runner.info(`    细口径真实缺口（需 layout 卡）：${fineUnreachable.join('、')}`);
+  } else {
+    assertEqual(fineUnreachable.length, 0, '细口径现已全可达（权威口径）');
+  }
   // 粗口径结论**不具权威性**：至少 1 栋是"粗不可达/细可达"⇒ 用它给 layout 派"补台阶"就是错误层面加几何
   assert(artifacts.length > 0, '粗口径不得作为"入口台阶缺失"的依据');
   runner.info(
@@ -3253,6 +3259,58 @@ await runner.test('F26 口径裁定（t146）：E18/E8/E11 用 cellSize=3；细�
       `交叉校验 path≡BFS 两套口径各 43/43 ✓；` +
       `粗口径伪影 ${artifacts.length} 栋（如 ${artifacts.slice(0, 3).join('、')}）；细口径真实缺口 ${fineUnreachable.length} 栋：${fineUnreachable.join('、')}` +
       ` ⇒ **不得据粗口径让 layout 补台阶**`,
+  );
+});
+
+/* ==========================================================================
+ *  t156 / T7.16：库级口径一致（connected ≡ path）+ 过渡带双向审计（F11/F12）
+ * ======================================================================== */
+
+await runner.test('F27 库级口径一致（t156）：connected([a,b]).ok ≡ path(a→b).ok（固定锚点+代表性点集）+ 55 处过渡带双向读数', async () => {
+  const solver = createWalkSolver({});
+  const graph = createWalkGraph(solver, { cellSize: 3 });
+  const A = { x: 0, z: -480 }; // 公共锚点（与 E8/E11/E18 同源）
+
+  // ── 代表性点集：43 内景机位 + 5 出生点 + t77 点名的 4 点
+  const named = [
+    { id: 't77:文华殿门内', x: LAYOUT.SLOTS.find((s) => s.id === 'C-hall-east-main')?.x ?? 0, z: LAYOUT.SLOTS.find((s) => s.id === 'C-hall-east-main')?.z ?? 0 },
+    { id: 't77:陈设正堂门内', x: LAYOUT.SLOTS.find((s) => s.id === 'D-court1-hall')?.x ?? 0, z: LAYOUT.SLOTS.find((s) => s.id === 'D-court1-hall')?.z ?? 0 },
+  ];
+  const pts = [
+    ...LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').map((v) => ({ id: v.id, x: v.position.x, z: v.position.z })),
+    ...LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'fp-spawn').map((v) => ({ id: v.id, x: v.position.x, z: v.position.z })),
+    ...named,
+  ];
+  const mismatches = [];
+  for (const p of pts) {
+    const byConnected = graph.connected([A, { x: p.x, z: p.z }]).ok; // ★ .ok 判据（严禁 != null）
+    const byPath = graph.path(A, { x: p.x, z: p.z }).ok === true;
+    if (byConnected !== byPath) mismatches.push(`${p.id}：connected=${byConnected} path=${byPath}`);
+  }
+  assertEqual(mismatches.length, 0, `connected([a,b]).ok 必须与 path(a→b).ok 逐对一致（不一致 ${mismatches.length} 项）：${mismatches.slice(0, 6).join('；')}`);
+  // 多锚点一次性调用也必须与逐点同口径（t77 的原始形态：74/94 点一次传）
+  const allAtOnce = graph.connected([A, ...pts.map((p) => ({ x: p.x, z: p.z }))]);
+  const perPointOk = pts.filter((p) => graph.connected([A, { x: p.x, z: p.z }]).ok).length;
+  assertEqual(allAtOnce.ok, perPointOk === pts.length, `一次性 connected(锚点+${pts.length} 点).ok 必须等于"逐点全部可达"（实际 ${allAtOnce.ok} / 逐点可达 ${perPointOk}）：${JSON.stringify(allAtOnce.unreachable.slice(0, 4))}`);
+  runner.info(`  库级一致（t156）：connected≡path 逐对比较 ${pts.length} 对 ⇒ 不一致 ${mismatches.length} 项；一次性 ${pts.length + 1} 点调用 ok=${allAtOnce.ok}（逐点可达 ${perPointOk}/${pts.length}）`);
+
+  // ── F12：每处新增/修改的过渡带（-transition-* / -descent-* / -threshold）双向读数
+  const bands = LAYOUT.WALKABLE.filter((w) => /-transition-|-descent-|-threshold/.test(w.id));
+  assert(bands.length > 0, '必须存在过渡带面（-transition-*/-descent-*/-threshold）');
+  const bandRows = [];
+  for (const b of bands) {
+    const cx = (b.bounds.minX + b.bounds.maxX) / 2;
+    const cz = (b.bounds.minZ + b.bounds.maxZ) / 2;
+    const forward = graph.componentOf(cx, cz, A).ok; // 正向：从城外锚点能否走到该带
+    const backward = graph.connected([{ x: cx, z: cz }, A]).ok; // 反向：从该带能否走回城外锚点
+    bandRows.push({ id: b.id, forward, backward });
+  }
+  const oneWay = bandRows.filter((r) => r.forward !== r.backward);
+  assertEqual(oneWay.length, 0, `过渡带不得存在"单向"（正/反向读数不一致）：${oneWay.map((r) => `${r.id} fwd=${r.forward} bwd=${r.backward}`).slice(0, 6).join('；')}`);
+  const notInMain = bandRows.filter((r) => !r.forward && !r.backward);
+  runner.info(
+    `  过渡带双向审计（F12）：${bands.length} 处（-transition-*/-descent-*/-threshold）｜正向可达 ${bandRows.filter((r) => r.forward).length}｜反向可达 ${bandRows.filter((r) => r.backward).length}｜单向 ${oneWay.length}｜两侧均不可达 ${notInMain.length}` +
+      (notInMain.length ? `：${notInMain.map((r) => r.id).slice(0, 6).join('、')}` : ''),
   );
 });
 

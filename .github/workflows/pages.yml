@@ -56,15 +56,15 @@ jobs:
           echo "Building Gemini 3.8 Flash..."
           (cd "imperial gemini 3.8flash" && npm ci && npm run build)
 
-          echo "Building Imperial Palace Tour..."
-          (cd imperial-palace && npm ci && npm run build)
+          echo "Building GPT-6 Luna (Tour)..."
+          (cd imperial-palace/luna && npm ci && npm run build)
 
-          echo "Building Palace Batch 164358..."
-          (cd imperial-palace-2026-09-26-164358 && npm ci && npm run build)
+          echo "Building GPT-6 Sol..."
+          (cd imperial-palace/sol && npm ci && npm run build)
 
       - name: Assemble multi-project exhibition directory
         run: |
-          mkdir -p _site/opencode-516k _site/opencode-424k _site/commandcode-36m _site/dsh-1.1b _site/gpt6luna _site/gemini-3.8flash _site/imperial-palace _site/palace-batch
+          mkdir -p _site/opencode-516k _site/opencode-424k _site/commandcode-36m _site/dsh-1.1b _site/gpt6luna _site/gemini-3.8flash _site/imperial-palace _site/gpt6-luna _site/gpt6-sol _site/palace-batch
           
           # Copy dist assets
           cp -r imperial-palace-opencode-516k/dist/* _site/opencode-516k/
@@ -73,8 +73,10 @@ jobs:
           cp -r imperial-palace-dsh-1.1b/dist/* _site/dsh-1.1b/
           cp -r imperial-palace-gpt6luna/dist/* _site/gpt6luna/
           cp -r "imperial gemini 3.8flash"/dist/* _site/gemini-3.8flash/
-          cp -r imperial-palace/dist/* _site/imperial-palace/
-          cp -r imperial-palace-2026-09-26-164358/dist/* _site/palace-batch/
+          cp -r imperial-palace/luna/dist/* _site/imperial-palace/
+          cp -r imperial-palace/luna/dist/* _site/gpt6-luna/
+          cp -r imperial-palace/sol/dist/* _site/gpt6-sol/
+          cp -r imperial-palace/sol/dist/* _site/palace-batch/
           
           # Copy portal homepage
           cp portal/index.html _site/index.html
