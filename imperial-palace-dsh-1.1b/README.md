@@ -353,6 +353,7 @@ DSH 研发团队由 1 位总架构指挥 Captain 与 8 位专业领域专职子 
 | 09-26 20:26 | `t157` | T1.64 修 8 处单向过渡带（进得去出不来）+ 布局侧双向断言 | ❌ 重试/交回 | layout.js, layout.test.mjs 等3个文件 |
 | 09-26 20:31 | `t158` | T1.65 float32 裕量修复 8 处单向带 + 畸形矩形 + F3 粒度双向断言 + 契约入库 | ❌ 重试/交回 | layout.js, layout.test.mjs 等3个文件 |
 | 09-26 20:39 | `t159` | T1.66 落地 F3 双向断言（三证齐备）+ 14 处两侧不可达带分类 | ❌ 重试/交回 | layout.test.mjs, handoff-layout-interiors.md |
+| 09-26 20:46 | `t160` | T1.67 t93 形式收口：残余已由后续几何修复消解 + 残余归 t115 | ⏳ 进行中 | handoff-retire-t93.md |
 
 ---
 
@@ -412,11 +413,12 @@ DSH 研发团队由 1 位总架构指挥 Captain 与 8 位专业领域专职子 
 | 09-26 17:48 | `t113` | T2.28 修正 WALKABLE 157 组成注释的归因（+2 属 t103 门槛面） | ✅ 完成 | core.test.mjs, handoff-t2-expectations.md |
 | 09-26 18:18 | `t122` | T2.29 修复 F1：?env= 覆盖绕过 Bloom（诊断通道不得改变被测语义） | ❌ 重试/交回 | environment.js, handoff-t2-env-override.md 等3个文件 |
 | 09-26 18:38 | `t127` | T2.30 导出 probeDoorClearance（门洞净宽实测出口）+ core pin 同步 161 | ✅ 完成 | layout-slice.js, core.test.mjs 等3个文件 |
-| 09-26 18:42 | `t129` | T2.31 加入抗锯齿（MSAA / SMAA·FXAA）+ 质量档接入与 §12 重测 | ⏸ 挂起 | renderer.js, core-antialias.test.mjs 等3个文件 |
+| 09-26 18:42 | `t129` | T2.31 加入抗锯齿（MSAA / SMAA·FXAA）+ 质量档接入与 §12 重测 | ✅ 完成 | renderer.js, core-antialias.test.mjs 等3个文件 |
 | 09-26 18:46 | `t130` | T2.32 core 侧 pin 同步：WALKABLE 161 → 169（LAYOUT 1.1.15） | ✅ 完成 | core.test.mjs, handoff-t2-expectations.md |
 | 09-26 18:58 | `t132` | T2.33 只读探针：同一平面高处优先取的机制、全量影响面与两案量化 | ✅ 完成 | probe-walk-rule.mjs, report-walk-rule.md |
 | 09-26 19:08 | `t133` | T2.34 三项收尾落地：core pin 171 + CONTRACTS §12 排障口径 + §12.1 成对不变式 | ✅ 完成 | core.test.mjs, CONTRACTS.md |
 | 09-26 19:11 | `t136` | T2.35 core pin 同步：WALKABLE 171 → 167（LAYOUT 1.1.17） | ✅ 完成 | core.test.mjs, handoff-t2-expectations.md |
+| 09-26 20:47 | `t161` | T2.37 t122 形式收口：反证成立 + 实质交付 + 残余归属 | ⏸ 挂起 | handoff-retire-t122.md |
 
 ---
 
@@ -480,7 +482,7 @@ DSH 研发团队由 1 位总架构指挥 Captain 与 8 位专业领域专职子 
 | 09-26 07:31 | `t29` | T4.1 B 区台阶与 kit 修复对齐：撤销/校验 alignStairFlights 并调整断言 | ✅ 完成 | forecourt.js, zone-forecourt.test.mjs 等3个文件 |
 | 09-26 14:19 | `t62` | T8.1 B/D 区 18 栋内景布陈设（复用 kit.interiorSet） | ✅ 完成 | forecourt.js, west-courts.js 等5个文件 |
 | 09-26 14:19 | `t65` | T2.17 内核多内景支持：interiorBoundsFor 按机位解析 + interiorViewpointId 全链路 | ✅ 完成 | camera.js, state.js 等5个文件 |
-| 09-26 17:53 | `t115` | T8.2 五套 zone 测试期望同步到 LAYOUT 1.1.10（WALKABLE 112→157） | ⏸ 挂起 | zone-forecourt.test.mjs, handoff-zone-expectations.md |
+| 09-26 17:53 | `t115` | T8.2 五套 zone 测试期望同步到 LAYOUT 1.1.10（WALKABLE 112→157） | in_progress | zone-forecourt.test.mjs, handoff-zone-expectations.md |
 
 ---
 
@@ -598,7 +600,7 @@ DSH 研发团队由 1 位总架构指挥 Captain 与 8 位专业领域专职子 
 | 09-26 02:59 | `t12` | V1 G2 场景完整性与跨区连接一致性独立验证 | ✅ 完成 | verify-completeness.test.mjs, verify-completeness.mjs 等4个文件 |
 | 09-26 02:59 | `t13` | V2 G3/G4 八视角与第一人称走查、性能与风格验收 | ❌ 重试/交回 | verify-experience.test.mjs, verify-walk.mjs 等12个文件 |
 | 09-26 14:19 | `t66` | V3 47 栋内景端到端独立验证（点击→面板→F 入内 + 可读性 + 性能 + 碰撞） | ⏸ 挂起 | verify-interiors.test.mjs, verify-interiors.mjs 等3个文件 |
-| 09-26 14:39 | `t77` | V1.1 验收套件期望同步 + 43 处内景连通性独立复验 | ❌ 重试/交回 | verify-completeness.test.mjs, verify-experience.test.mjs 等3个文件 |
+| 09-26 14:39 | `t77` | V1.1 验收套件期望同步 + 43 处内景连通性独立复验 | ⏳ 进行中 | verify-completeness.test.mjs, verify-experience.test.mjs 等3个文件 |
 | 09-26 16:17 | `t94` | V1.2 灯位池真实路径核对（浏览器 ?stats=1，含南/北城门内景） | ❌ 重试/交回 | report-experience.md, verify-experience.test.mjs |
 | 09-26 16:31 | `t96` | V1.3 灯位池硬断言 + 金銮殿高光截断复测（噪声底）+ F15/F16 登记 | ❌ 重试/交回 | verify-experience.test.mjs, report-experience.md |
 | 09-26 16:35 | `t100` | V1.5 门外权威 Δ 清单（10 ∪ 13 台，生产口径逐栋，供过渡登记） | ✅ 完成 | report-completeness.md |
@@ -766,7 +768,7 @@ DSH 研发团队由 1 位总架构指挥 Captain 与 8 位专业领域专职子 
 | 09-26 14:28 | `t74` | **foundation-lead** | T1.26 布局内景注册（切片 B2）：23 座 sideHall 派生门规格 | ✅ 完成 | layout.js, layout.test.mjs 等3个文件 |
 | 09-26 14:38 | `t75` | **foundation-lead** | T1.27 门洞通道可行走面：使 43 处内景与室外连通（Q6 裁定 a） | ✅ 完成 | layout.js, layout.test.mjs 等3个文件 |
 | 09-26 14:39 | `t76` | **core-engineer** | T2.18 core 侧测试期望同步（扩容前硬编码 → LAYOUT 1.1.4 实际值） | ✅ 完成 | core.test.mjs, core-interior.test.mjs 等4个文件 |
-| 09-26 14:39 | `t77` | **verifier** | V1.1 验收套件期望同步 + 43 处内景连通性独立复验 | ❌ 重试/交回 | verify-completeness.test.mjs, verify-experience.test.mjs 等3个文件 |
+| 09-26 14:39 | `t77` | **verifier** | V1.1 验收套件期望同步 + 43 处内景连通性独立复验 | ⏳ 进行中 | verify-completeness.test.mjs, verify-experience.test.mjs 等3个文件 |
 | 09-26 14:46 | `t78` | **core-engineer** | T2.19 修复 focus 取景空白（城门楼/院门）并对 53 槽位逐一验证 | ✅ 完成 | camera.js, core-camera.test.mjs 等7个文件 |
 | 09-26 14:48 | `t79` | **core-engineer** | T2.20 修复 WALKABLE_KINDS 缺 'passage' 导致的全树 0 区域装载 + 跨模块 kind 守卫 | ✅ 完成 | context.js, core-kinds.test.mjs 等4个文件 |
 | 09-26 14:48 | `t80` | **ui-engineer** | T7.4 修复 F7：信息面板不得用估值高度（totalHeight）当权威 | ✅ 完成 | index.js, catalog.js 等4个文件 |
@@ -804,7 +806,7 @@ DSH 研发团队由 1 位总架构指挥 Captain 与 8 位专业领域专职子 
 | 09-26 17:38 | `t112` | **ui-engineer** | T7.9 E13/F21 断言同步到 t103 后语义（亭不再空气墙 + 提示分支） | ✅ 完成 | interaction.test.mjs, report-airwall.md 等3个文件 |
 | 09-26 17:48 | `t113` | **core-engineer** | T2.28 修正 WALKABLE 157 组成注释的归因（+2 属 t103 门槛面） | ✅ 完成 | core.test.mjs, handoff-t2-expectations.md |
 | 09-26 17:53 | `t114` | **kit-engineer** | T3.11 kit.test 期望同步（旧化 roughnessBias 6 条 + 亭 no-opening 与 t103 冲突） | ✅ 完成 | kit.test.mjs, handoff-kit-expectations.md |
-| 09-26 17:53 | `t115` | **zone-forecourt** | T8.2 五套 zone 测试期望同步到 LAYOUT 1.1.10（WALKABLE 112→157） | ⏸ 挂起 | zone-forecourt.test.mjs, handoff-zone-expectations.md |
+| 09-26 17:53 | `t115` | **zone-forecourt** | T8.2 五套 zone 测试期望同步到 LAYOUT 1.1.10（WALKABLE 112→157） | in_progress | zone-forecourt.test.mjs, handoff-zone-expectations.md |
 | 09-26 18:04 | `t116` | **ui-engineer** | T7.10 修复生产走查图关节连通（18 栋不可达 / 相接却不可跨） | ✅ 完成 | walk-graph.js, interaction.test.mjs 等4个文件 |
 | 09-26 18:05 | `t117` | **foundation-lead** | T1.41 两座水中亭门洞声明与实际不一致（登记 8m / 实测 0.0m） | ✅ 完成 | layout.js, layout.test.mjs 等3个文件 |
 | 09-26 18:06 | `t118` | **foundation-lead** | T1.42 契约登记 door.passable / door.blockedBy 语义（声明必须与实际一致） | ✅ 完成 | CONTRACTS.md, handoff-contracts-door-passable.md |
@@ -818,7 +820,7 @@ DSH 研发团队由 1 位总架构指挥 Captain 与 8 位专业领域专职子 
 | 09-26 18:35 | `t126` | **foundation-lead** | T1.47 同类遮蔽普查 + 两栋有界开槽（授权减法例外）+ F5/F7 落地 | ❌ 重试/交回 | layout.js, layout.test.mjs 等3个文件 |
 | 09-26 18:38 | `t127` | **core-engineer** | T2.30 导出 probeDoorClearance（门洞净宽实测出口）+ core pin 同步 161 | ✅ 完成 | layout-slice.js, core.test.mjs 等3个文件 |
 | 09-26 18:38 | `t128` | **foundation-lead** | T1.48 C 两栋通道面遮蔽开槽 + 遮蔽常驻守卫 + F5 实测化 + 契约计数 161 | ✅ 完成 | layout.js, layout.test.mjs 等4个文件 |
-| 09-26 18:42 | `t129` | **core-engineer** | T2.31 加入抗锯齿（MSAA / SMAA·FXAA）+ 质量档接入与 §12 重测 | ⏸ 挂起 | renderer.js, core-antialias.test.mjs 等3个文件 |
+| 09-26 18:42 | `t129` | **core-engineer** | T2.31 加入抗锯齿（MSAA / SMAA·FXAA）+ 质量档接入与 §12 重测 | ✅ 完成 | renderer.js, core-antialias.test.mjs 等3个文件 |
 | 09-26 18:46 | `t130` | **core-engineer** | T2.32 core 侧 pin 同步：WALKABLE 161 → 169（LAYOUT 1.1.15） | ✅ 完成 | core.test.mjs, handoff-t2-expectations.md |
 | 09-26 18:56 | `t131` | **foundation-lead** | T1.49 修复 F8 回归（C 两栋接近路线）+ F4/F6 残差 + 通路存在回归守卫 | ❌ 重试/交回 | layout.js, layout.test.mjs 等3个文件 |
 | 09-26 18:58 | `t132` | **core-engineer** | T2.33 只读探针：同一平面高处优先取的机制、全量影响面与两案量化 | ✅ 完成 | probe-walk-rule.mjs, report-walk-rule.md |
@@ -849,6 +851,8 @@ DSH 研发团队由 1 位总架构指挥 Captain 与 8 位专业领域专职子 
 | 09-26 20:26 | `t157` | **foundation-lead** | T1.64 修 8 处单向过渡带（进得去出不来）+ 布局侧双向断言 | ❌ 重试/交回 | layout.js, layout.test.mjs 等3个文件 |
 | 09-26 20:31 | `t158` | **foundation-lead** | T1.65 float32 裕量修复 8 处单向带 + 畸形矩形 + F3 粒度双向断言 + 契约入库 | ❌ 重试/交回 | layout.js, layout.test.mjs 等3个文件 |
 | 09-26 20:39 | `t159` | **foundation-lead** | T1.66 落地 F3 双向断言（三证齐备）+ 14 处两侧不可达带分类 | ❌ 重试/交回 | layout.test.mjs, handoff-layout-interiors.md |
+| 09-26 20:46 | `t160` | **foundation-lead** | T1.67 t93 形式收口：残余已由后续几何修复消解 + 残余归 t115 | ⏳ 进行中 | handoff-retire-t93.md |
+| 09-26 20:47 | `t161` | **core-engineer** | T2.37 t122 形式收口：反证成立 + 实质交付 + 残余归属 | ⏸ 挂起 | handoff-retire-t122.md |
 
 ---
 

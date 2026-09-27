@@ -629,6 +629,8 @@ export const QUALITY = Object.freeze({
       textureAnisotropy: 8,
       corridorDetail: true,
       foliageInstances: 1.0,
+      aa: 'msaa', // t129：高档 MSAA ×4
+      aaSamples: 4,
     }),
     medium: Object.freeze({
       id: 'medium',
@@ -642,6 +644,8 @@ export const QUALITY = Object.freeze({
       textureAnisotropy: 4,
       corridorDetail: true,
       foliageInstances: 0.85,
+      aa: 'msaa', // t129：默认档 MSAA ×2（实测性价比最优，见 docs/handoff-t2-antialias.md）
+      aaSamples: 2,
     }),
     low: Object.freeze({
       id: 'low',
@@ -655,6 +659,8 @@ export const QUALITY = Object.freeze({
       textureAnisotropy: 2,
       corridorDetail: false,
       foliageInstances: 0.6,
+      aa: 'off', // t129：低档关 AA（填充率最紧）
+      aaSamples: 0,
     }),
   }),
   default: 'medium',

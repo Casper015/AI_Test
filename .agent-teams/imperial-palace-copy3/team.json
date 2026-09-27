@@ -17,7 +17,7 @@
       },
       "executionPrompt": "项目：紫禁天朝·完整皇宫 3D 交互项目。\n根目录（含空格，命令必须加引号）：\"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace copy 3\"（下称 ROOT）。产物只能写在 ROOT 内；严禁修改同级 imperial-palace/、imperial-palace copy/、imperial-palace copy 2/ 及 AI_Test 其他任何文件（仅可只读参考）。\n必读：ROOT/imperial-palace-plan.md（§2 布局与边界、§3 风格基线、§5 各区要求、§6 接口、§7.1 分工、§8 验收）、ROOT/README.md、ROOT/assets/reference/palace-layout.png。\n开工前在 ROOT/docs/handoffs/<task-id>.md 写开工回执（已读版本/可写范围/依赖/冲突），完成后写交付回执（文件清单、接口、实测命令与真实输出、未验证项）。\n技术约束：Node v26；唯一依赖是本地内置 ROOT/public/vendor/three（three r169 + addons）。禁止 npm install（npm 缓存不可写），不得要求必需的网络资源。\n纪律：只改任务 inScope 内文件；index.html、main.js、src/shared/* 各有唯一负责人，你要改动他人文件先报告主理人；完成前必须自己跑通 verify 命令并粘贴真实输出；不得伪造数据；无法验证的项写“未验证”。\n你的职责是冻结全队共同依赖：布局注册表（建筑槽位、院落、连接 ID、区域边界、道路）、风格与预算 config、接口契约文档、测试与构建脚手架。你的产物被下游 8 个任务直接依赖，数值必须一次说清、可被机器校验。",
       "joinedAt": 1790416546390,
-      "status": "idle"
+      "status": "working"
     },
     {
       "id": "7b462cad-db0b-4237-9155-c18404e2fa49",
@@ -15410,9 +15410,9 @@
       "dependencies": [
         "t92"
       ],
-      "attempt": 1,
+      "attempt": 2,
       "createdAt": 1790470401548,
-      "updatedAt": 1790480752265,
+      "updatedAt": 1790480829537,
       "kind": "repair",
       "objective": "同步五套 zone 测试中因 LAYOUT 1.1.10（WALKABLE 112→157：t102 的 43 级过渡台阶 + t103 的 2 条门槛面）而陈旧的固定期望，逐条给出旧→新与依据；特别处理 tests/zone-forecourt.test.mjs 的 walkable 27 与\"走入门内 ≥4\"；不得放宽判据、不得改宽断言。",
       "inScope": [
@@ -15461,8 +15461,8 @@
         "计划 §6.1 碰撞数据格式与可行走面",
         "计划 §2.3 路径连通与连接规则"
       ],
-      "attemptId": "e931acf2-0a87-4b13-a843-ce3accd48957",
-      "reassigning": false
+      "reassigning": false,
+      "attemptId": "ba366291-8324-4b42-8334-2a7ea102dfc5"
     },
     {
       "id": "t116",
@@ -17009,7 +17009,7 @@
       "id": "t129",
       "subject": "T2.31 加入抗锯齿（MSAA / SMAA·FXAA）+ 质量档接入与 §12 重测",
       "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。依赖 t122（同属 `src/core/**` 的后期处理链：t122 改 `environment.js` 的 Bloom 覆盖路径，本卡改 `renderer.js` 的 composer，串行避免后期链语义冲突）。\n\n**来源：用户新增需求**——\"所有都做完之后加入一个抗锯齿的滤镜，现在锯齿很严重\"。\n\n**主理人实测的现状（已确认成因）**：\n```\nrenderer.js:5   EffectComposer + RenderPass + UnrealBloomPass + OutputPass\nrenderer.js:217 antialias: config.RENDERER.antialias        ← 上下文标志\nrenderer.js:297 new EffectComposer(renderer)                ← 渲染目标 samples 默认 0\n```\n⇒ **`antialias:true` 只对直接渲染到画布生效；走 `EffectComposer`（渲染到 RenderTarget 再合成）后它不再生效** ⇒ 这就是锯齿严重的经典成因。\n\n**主理人裁定**：本卡**先诊断（架构证据 + 锯齿截图 + 可量化边缘指标基线）**，再在 **① MSAA（给 composer 渲染目标设 `samples`）** 与 **② 后处理 AA（SMAAPass / FXAA）** 之间**择一或组合并给实测理由**；接进既有 `QUALITY.tiers` 且 `?stats=1` 必须报告生效模式；**§12 可读性必须重新实测（阈值不放宽）**、**§8.2 门禁不变（调用/三角面不得因 AA 上升）**、**性能代价三档实测如实报告**（不可接受则给建议交回裁定）。**排期**：作为最后一项功能，但**必须早于 t14 发布落地**（我会把它接进 t14 依赖）。\n\n必做：\n1. 诊断（file:line 证据 + 锯齿截图 + 可量化边缘指标基线）。\n2. 实现（MSAA 或 SMA A/FXAA，给选择理由 + 前后对照截图与指标）。\n3. 质量档接入 + `?stats=1` 报告 AA 模式与 samples；默认档选择给实测理由。\n4. §12 代表性子集（≥6 格）+ 3 内景前后对照，证明仍达标；退化则量化交回。\n5. audit --enforce exit 0 且调用/三角面不升；浏览器内三档帧时间/帧率对照如实报告。\n6. 不破坏 `?mask=sky`/`skyMaskPng`、§11.3、`--allow-no-sky` 禁令、`?dpr` 语义；诊断覆盖须显式报告且不改被测语义。\n7. 回归四条 + 新增 core-antialias 测试；断言只增不减；只改 inScope。",
-      "status": "claimed",
+      "status": "completed",
       "assignee": "core-engineer",
       "dependencies": [],
       "attempt": 2,
@@ -17068,7 +17068,9 @@
         "计划 §3.1 共同风格基线（画面质量）"
       ],
       "reassigning": false,
-      "attemptId": "a61412d4-5514-4d5b-ae4a-d9624bee057f"
+      "attemptId": "a61412d4-5514-4d5b-ae4a-d9624bee057f",
+      "evidence": "node tests/core-antialias.test.mjs 4/4 PASS; node tests/core.test.mjs 45/45 PASS; node scripts/audit.mjs --enforce exit 0 (draw calls 333 <= 350)",
+      "verifiedAt": 1790480960000
     },
     {
       "id": "t130",
@@ -20416,9 +20418,92 @@
           "evidence": "`t159 只读分量剖面 · 带 55 处 · 两侧均不可达 0 处` ⇒ t156 审计的 14 处在我的口径下**不可复现**（需其确切参数）"
         }
       ]
+    },
+    {
+      "id": "t160",
+      "subject": "T1.67 t93 形式收口：残余已由后续几何修复消解 + 残余归 t115",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。形式收口（清除平台标志 `t93 failed without a follow-up repair`）：登记 t93 的真实失败原因（唯一残余 = zone-forecourt 一条断言，且不在其 inScope）、其核心目标已达成（配额单一权威源收口）、该残余已由 t134/t151/t158 的几何修复自然消解（给当前实测），残余归属 t115。不改历史、不改代码、不夸大。只新建一个回执文件；audit --enforce exit 0。",
+      "status": "claimed",
+      "assignee": "foundation-lead",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1790480814953,
+      "updatedAt": 1790480815455,
+      "kind": "repair",
+      "objective": "为 t93 补形式收口：登记其真实失败原因（唯一残余是一条 zone-forecourt 断言，不在其 inScope）、核心目标（配额单一权威源）已达成、该残余已由 t134/t151/t158 几何修复消解（附当前树实测）、残余归 t115；不改历史/代码，只新建回执并确认 audit exit 0。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t93.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/",
+        "imperial-palace-dsh-1.1b/tests/",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**登记 t93 的真实失败原因与承接关系**（平台标志：`t93 failed without a follow-up repair`）：① 判 failed 的**真实原因** = **唯一残余是一条 zone-forecourt 断言**（`:687`\"从地坪走可入门内 ≥4\"实测 3），而该缺口**不在 t93 的 inScope**（需 layout 侧 ROAD/几何）；② **它的核心目标已达成**：`D_BUDGET_APPROVED = BUDGET.drawCalls.perZone.D`、`D_BUDGET_EFFECTIVE` 去掉 `Math.max()` 临时余量、历史值改名 `D_BUDGET_DIAGNOSTIC_INITIAL`（仅打印）；③ **该残余已由后续几何修复自然消解**：`t134`（通道面 y 恢复 1.5/1.7）+`t151`（加法下坡带）+`t158`（float32 裕量梯链）⇒ 请给出**当前树实测**（`zone-forecourt` 该条读数、`WALKABLE 171`、`LAYOUT 1.1.20`）；④ **残余归属**：五套 zone 的计数/期望同步归 **t115**（本次已唤醒）。",
+        "**不得改写历史、不得夸大**：不出现\"已全部闭合\"之类断言；不改既有回执与产物；`docs/handoff-ledger-closeout.md` 为只读输入。",
+        "**只改 inScope**（本卡新建 `docs/handoff-retire-t93.md`）；**不触碰** `src/**`、`tests/**`、`docs/CONTRACTS.md`。",
+        "`node scripts/audit.mjs --enforce` **exit 0**（唯一 verify）；若红，如实列出并归因。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t93.md"
+      ],
+      "sourceTaskId": "t93",
+      "sourceFindingIds": [
+        "platform-blocker-t93-failed-without-followup-repair"
+      ],
+      "attemptId": "93e071be-17fb-4ac9-811f-5e9075e07b66",
+      "reassigning": false
+    },
+    {
+      "id": "t161",
+      "subject": "T2.37 t122 形式收口：反证成立 + 实质交付 + 残余归属",
+      "description": "ROOT = \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\"。形式收口（清除平台标志 `t122 failed without a follow-up repair`）：登记 t122 真实失败原因（core.test 红来自外部并发 pin 变动，非本卡）、其反证（?env= 未绕过 Bloom，t106 的 F1 前提不成立，我方批卡依据被推翻已承认）、实质交付（core-environment +3 用例 12/12 含方向性铁律）、残余归属（§12.5 由 t133 入库、pin 由 t136/t152 同步）。附当前树实测；不改历史/代码；只新建回执。",
+      "status": "pending",
+      "assignee": "core-engineer",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1790480828872,
+      "updatedAt": 1790480828872,
+      "kind": "repair",
+      "objective": "为 t122 补形式收口：登记真实失败原因（外部并发 pin 变动致 core.test 红）、反证结论（?env= 未绕过 Bloom）与其入库位置（§12.5）、实质交付（core-environment +3/12 含方向性铁律）、pin 同步链（t136→t152）；附当前树实测；不改代码，只新建回执。",
+      "inScope": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t122.md"
+      ],
+      "outOfScope": [
+        "imperial-palace-dsh-1.1b/src/",
+        "imperial-palace-dsh-1.1b/tests/",
+        "imperial-palace-dsh-1.1b/docs/CONTRACTS.md",
+        "imperial-palace-commandcode-36m/",
+        "imperial-palace-opencode-424k/",
+        "imperial-palace-opencode-516k/"
+      ],
+      "acceptance": [
+        "**登记 t122 的真实失败原因与承接关系**（平台标志：`t122 failed without a follow-up repair`）：① 判 failed 的**真实原因** = 其 verify 之一 `core.test` 的非零退出码来自**外部并发改动**（`t130` 的 pin 由 169→171 期间的在途状态），**非本卡引入**；② **其反证结论成立且已入库**：`?env=` **没有**绕过 Bloom（`presetOf` 为逐键 spread；`environment.js:564`）⇒ `t106` 的 F1 前提**不成立**（我据此批卡的依据被推翻，已在回执承认）；③ **实质交付**：`tests/core-environment.test.mjs` **+3 用例 / 12 组通过**（8 组覆盖 × `bloom` 7 字段逐值不变 + 未知键零影响 + **方向性铁律**）；④ **残余归属**：`?env=` 的排障口径与内景过曝四步顺序已由 `t133` 写入 `CONTRACTS §12.5`；跨 owner 的 pin 已由 `t136` 同步到 **167 / LAYOUT 1.1.17**（其后 `t152` 又同步到 171）；请给出**当前树实测**（`LAYOUT 1.1.20`、`WALKABLE 171`、`core-environment` 12/12、`core.test` 45/45）。",
+        "**不得改写历史、不得夸大**；不改既有回执与产物。",
+        "**只改 inScope**（本卡新建 `docs/handoff-retire-t122.md`）；**不触碰** `src/**`、`tests/**`、`docs/CONTRACTS.md`。",
+        "`node tests/core-environment.test.mjs`、`node tests/core.test.mjs`、`node scripts/audit.mjs --enforce` 全绿（如实输出）。"
+      ],
+      "verify": [
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node tests/core-environment.test.mjs && node tests/core.test.mjs",
+        "cd \"/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b\" && node scripts/audit.mjs --enforce"
+      ],
+      "deliverables": [
+        "imperial-palace-dsh-1.1b/docs/handoff-retire-t122.md"
+      ],
+      "sourceTaskId": "t122",
+      "sourceFindingIds": [
+        "platform-blocker-t122-failed-without-followup-repair"
+      ]
     }
   ],
-  "taskSeq": 159,
+  "taskSeq": 161,
   "phase": "running",
   "approvedAt": 1790418804498
 }

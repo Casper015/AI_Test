@@ -193,6 +193,52 @@ export function encodePngBase64(width, height, rgba) {
 }
 
 
+/**
+ * t129：**抗锯齿计划**（纯函数，可 Node 单测）。
+ *
+ * 诊断（本卡实测）：`renderer.js:217` 的 `antialias: config.RENDERER.antialias` 是 **WebGL 上下文标志**，
+ * 只对"直接渲染到画布"生效；本项目的画面走 `EffectComposer`（:297，渲染到 RenderTarget 再合成），
+ * 而 EffectComposer 渲染目标 **samples 默认 0** ⇒ 合成路径上**没有 MSAA**，
+ * 这就是"锯齿严重"的成因。修法：给 composer 的两个渲染目标设 `samples`（three r169 在 WebGL2 下走多重采样 RT + blit）。
+ *
+ * 档位（`config.QUALITY.tiers.*`）：`low = off / 0`、`medium = msaa / 2`、`high = msaa / 4`；默认 `medium`。
+ * 诊断覆盖 `?aa=`（**只影响 AA，不改其它被测语义**，引 t122 教训）：`off` / `msaa` / 数字（0..8）；
+ * 未知取值 ⇒ **保持档位计划并在 `reason` 里显式报告**（不静默改变）。
+ */
+export function antialiasPlanFor(tierId = CONFIG.QUALITY.default, { aa = null, samples = null, tiers = CONFIG.QUALITY.tiers } = {}) {
+  const t = tiers[tierId] ?? tiers[CONFIG.QUALITY.default];
+  const base = {
+    tier: t.id,
+    mode: t.aa ?? 'off',
+    samples: Math.max(0, Math.min(8, Math.round(t.aaSamples ?? 0))),
+    requested: aa ?? null,
+    reason: 'tier',
+  };
+  const hasOverride = aa !== null && aa !== undefined && String(aa).trim() !== '';
+  if (!hasOverride) {
+    if (samples !== null && samples !== undefined) {
+      const n = Number(samples);
+      if (Number.isFinite(n)) {
+        const clamped = Math.max(0, Math.min(8, Math.round(n)));
+        return { ...base, mode: clamped === 0 ? 'off' : 'msaa', samples: clamped, reason: 'option:samples' };
+      }
+    }
+    return base;
+  }
+  const raw = String(aa).trim().toLowerCase();
+  if (raw === 'off' || raw === 'none' || raw === '0') return { ...base, mode: 'off', samples: 0, reason: 'override:off' };
+  if (raw === 'msaa' || raw === 'on') {
+    const fallback = base.samples > 0 ? base.samples : 2;
+    return { ...base, mode: 'msaa', samples: Math.max(1, Math.min(8, Math.round(samples ?? fallback))), reason: 'override:msaa' };
+  }
+  const n = Number(raw);
+  if (Number.isFinite(n)) {
+    const clamped = Math.max(0, Math.min(8, Math.round(n)));
+    return { ...base, mode: clamped === 0 ? 'off' : 'msaa', samples: clamped, reason: 'override:numeric' };
+  }
+  return { ...base, reason: 'override:unknown-value' };
+}
+
 export function createRenderSystem({
   container,
   events = null,
@@ -280,6 +326,8 @@ export function createRenderSystem({
       bloomPass.setSize(Math.min(size.width, cap * 2) / 2, Math.min(size.height, cap * 2) / 2);
     }
     return { width: size.width, height: size.height, dpr: ratio };
+    // t129：resize 后重设多重采样（防御性；three 的 setSize 会保留 samples）
+    if (typeof applyAntialias === 'function') applyAntialias(antialiasPlan);
   }
 
   /* ------------------------------ 后处理链 ------------------------------ */
@@ -295,6 +343,19 @@ export function createRenderSystem({
   bloomPass.name = 'palace-bloom';
   const outputPass = new OutputPass();
   const composer = new EffectComposer(renderer);
+  /**
+   * t129：给 composer 的渲染目标设 `samples`（**唯一允许创建 composer 的位置**）。
+   * EffectComposer 的 RT 默认 `samples = 0` ⇒ 合成路径没有 MSAA；
+   * `?aa=` 诊断覆盖只改这里，并在 `antialiasInfo()`/`getStats()` 里显式报告实际生效值。
+   */
+  let antialiasPlan = antialiasPlanFor(config.QUALITY.default, { aa: typeof location !== 'undefined' && location.search ? new URLSearchParams(location.search).get('aa') : null });
+  function applyAntialias(plan) {
+    antialiasPlan = plan;
+    composer.renderTarget1.samples = plan.samples;
+    composer.renderTarget2.samples = plan.samples;
+    return antialiasPlan;
+  }
+  applyAntialias(antialiasPlan);
   composer.addPass(renderPass);
   composer.addPass(bloomPass);
   composer.addPass(outputPass);
@@ -335,12 +396,15 @@ export function createRenderSystem({
     bloomEnabled = q.bloom;
     renderer.shadowMap.enabled = q.shadowEnabled && config.LIGHTING.shadows.enabled;
     applySize();
+    applyAntialias(antialiasPlanFor(tier, { aa: antialiasPlan.requested }));
     return {
       tier,
       dpr: effectiveDpr(),
       shadowMapSize: q.shadowMapSize,
       bloom: bloomEnabled,
       maxRealtimeLights: q.maxRealtimeLights,
+      /** t129：实际生效的抗锯齿（模式 + samples），供 ?stats=1 / t13 / t14 读取 */
+      antialias: { mode: antialiasPlan.mode, samples: antialiasPlan.samples, reason: antialiasPlan.reason },
     };
   }
 
@@ -786,6 +850,7 @@ export function createRenderSystem({
   }
 
   function getStats() {
+    // t129：AA 计划在 stats 里也上报（不改既有字段）
     const sorted = [...frameTimes].sort((a, b) => a - b);
     const avg = sorted.length > 0 ? sorted.reduce((s, v) => s + v, 0) / sorted.length : 0;
     const p95 = sorted.length > 0 ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] : 0;
@@ -822,6 +887,8 @@ export function createRenderSystem({
         toneMapping: renderer.toneMapping,
         exposure,
         outputColorSpace: renderer.outputColorSpace,
+        /** t129：实际生效的抗锯齿（模式 + samples + 依据），供 ?stats=1 / t13 / t14 读取 */
+        antialias: { mode: antialiasPlan.mode, samples: antialiasPlan.samples, reason: antialiasPlan.reason, contextFlagEffective: false },
       },
       viewport: { width: size.width, height: size.height },
       resizes: resizeCount,
@@ -895,6 +962,10 @@ export function createRenderSystem({
     },
     get dpr() {
       return effectiveDpr();
+    },
+    /** 诊断：实际生效的抗锯齿计划与模式 */
+    antialiasInfo() {
+      return { mode: antialiasPlan.mode, samples: antialiasPlan.samples, reason: antialiasPlan.reason, tier };
     },
     /** 诊断：像素比率的解析详情（dprOverride 是否被判定为非法） */
     dprInfo() {
