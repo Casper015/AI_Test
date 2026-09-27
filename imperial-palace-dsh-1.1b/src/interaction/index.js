@@ -112,6 +112,12 @@ export function createInteraction({
     stuckMoved: 0,
     stuckSpeed: 0,
     stuckIntentSource: 'internal',
+    lastKeySeen: null,
+    lastKeyEffective: null,
+    jumps: 0,
+    jumpRefusedAirborne: 0,
+    jumpRefusedCooldown: 0,
+    jumpUnavailable: 0,
     inputEvents: 0,
     traversalGuarded: false,
     traversalReadyAtTick: null,
@@ -596,11 +602,23 @@ export function createInteraction({
 
   function handleResolvedKey(resolved, event) {
     stats.keyRequests += 1;
+    /* t2 诊断读数：最近一次**实际生效**的按键解析（含判定时的第一人称态）——排查"同键两层判定"用 */
+    stats.lastKeyEffective = { code: resolved.code, kind: resolved.kind, local: resolved.local ?? null, fpActive: rig.isFp, at: Date.now() };
     if (resolved.local) {
       if (resolved.local === 'exitPointerLock') {
         fp.exitPointerLock();
       } else if (resolved.local === 'notifyTourPaused') {
         pushHint({ tone: 'warn', kind: 'tour-pause', title: '导览已暂停', detail: '按 Space 或「继续」恢复导览。' }, { kind: 'tour-pause' });
+      } else if (resolved.local === 'jump') {
+        // t2：空格跳跃 —— 交给 core 的第一人称跳跃内核（唯一实现；本层不自己算物理）
+        const result = typeof rig.jump === 'function' ? rig.jump('keyboard:Space') : { ok: false, reason: 'no-jump-kernel' };
+        if (!result || result.ok === false) {
+          if (result && result.reason === 'airborne') stats.jumpRefusedAirborne += 1;
+          else if (result && result.reason === 'cooldown') stats.jumpRefusedCooldown += 1;
+          else stats.jumpUnavailable += 1;
+        } else {
+          stats.jumps += 1;
+        }
       } else if (resolved.local === 'escapeStuck') {
         escapeToSafePoint('key:G');
       } else if (resolved.local === 'enterInterior' || resolved.local === 'notifyInteriorUnavailable') {
@@ -633,6 +651,7 @@ export function createInteraction({
 
   function onKeyDown(event) {
     stats.keyEvents += 1;
+    stats.lastKeySeen = { code: event?.code ?? '', target: event?.target === win ? 'window' : 'other', at: Date.now() };
     const code = event?.code ?? '';
     if (MOVEMENT_CODES.includes(code) && !rig.isFp) return; // 非第一人称时移动键不拦截（core 内部自会忽略）
     if (code === 'Escape') {
@@ -657,6 +676,34 @@ export function createInteraction({
       stats.cooperativeSkips += 1;
       if (resolved.local) handleResolvedKey({ ...resolved, request: null }, event);
       else record({ kind: 'key', code, action: `${resolved.kind}:core-owned`, type: resolved.request.type });
+      syncKeyCounters();
+      return;
+    }
+    /**
+     * t2：**协作路径下 F 不得被"已被 core 改过的状态"重判**。
+     *
+     * 场景：事件 target 就是 window（合成事件）时，本层与 core 是**同一节点**上的两个监听器，
+     * 按注册顺序触发、`stopPropagation()` 拦不住同节点监听器；core 的监听器注册更早 ⇒ core 先按 F
+     * 把第一人称切走（发 `view:request-mode`）；本层次再解析时读到的 `rig.isFp` 已是 false，
+     * 若有选中建筑就会判成「进入内景」⇒ **在第一人称里按 F 反而进了内景**（t2 真机实测：fp → interior，
+     * `lastKeyEffective.fpActive=false`）。
+     *
+     * 判定用两条"本轮派发内已发生"的硬读数（不是猜）：
+     *   · `coreAlreadyRequested(view:request-mode)`：core 本轮已改过视角；
+     *   · `fp.recentExit(50ms)`：本轮确实发生过第一人称退出。
+     *     ⚠ **不能按 reason 过滤**：state 层写状态的同一步会**同步**触发相机装置的 state 同步分支
+     *     （`exitFp({reason:'state-change'})`），它先于 state 层显式那句 `reason:'toggle'` 完成退出，
+     *     所以事件里登记的 reason 是 `state-change`（t2 真机读数 `lastFpToggleReason.reason`）。
+     * 真实键盘（target=body）不受影响：本层 capture 层先跑并 `stopPropagation()`，core 收不到该事件。
+     */
+    const coreHandledFpToggle = atKeyboardTarget(event)
+      && coreOwnedKey(code)
+      && coreAlreadyRequested(EVENTS.requestViewMode)
+      && !!fp.recentExit(COOPERATIVE_WINDOW_MS);
+    if (code === 'KeyF' && coreHandledFpToggle) {
+      stats.cooperativeSkips += 1;
+      stats.lastKeyCooperative = { code, reason: 'core-handled-fp-toggle', at: Date.now() };
+      record({ kind: 'key', code, action: 'view:core-owned', type: EVENTS.requestViewMode });
       syncKeyCounters();
       return;
     }
@@ -762,7 +809,13 @@ export function createInteraction({
       const moved = lastStuckPos ? Math.hypot(pos.x - lastStuckPos.x, pos.z - lastStuckPos.z) : 0;
       lastStuckPos = { x: pos.x, z: pos.z };
       const intent = movementKeys.size > 0;
-      const stuck = solver.noteStuckTick(dt, { intent, moved, threshold: STUCK_SECONDS, minMoved: STUCK_MIN_MOVED, minSpeed: STUCK_MIN_SPEED });
+      /**
+       * t2：**空中豁免** —— 跳跃飞行中水平位移本来就会停顿（例如原地跳、贴墙跳），
+       * 那不是"卡住"；把 airborne 如实传给求解器，由它把卡死计时清零（判据不放宽：
+       * 落地后仍是"有意图 + 无位移"照常计时）。
+       */
+      const airborne = typeof rig.isAirborne === 'boolean' ? rig.isAirborne : !!rig.describe?.().fpJumping;
+      const stuck = solver.noteStuckTick(dt, { intent, moved, threshold: STUCK_SECONDS, minMoved: STUCK_MIN_MOVED, minSpeed: STUCK_MIN_SPEED, airborne });
       stats.stuckIntent = stuck.intent;
       stats.stuckMoved = stuck.moved;
       stats.stuckSpeed = stuck.speed;

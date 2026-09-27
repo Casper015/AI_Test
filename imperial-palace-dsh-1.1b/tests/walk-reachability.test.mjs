@@ -29,15 +29,41 @@
  *     之后每门为 **O(1)** 成员判定 ⇒ 全测 **2 次 flood**。
  *   · `PROOF=1` 时额外跑**逐门对照**：`componentOf(...).ok` 必须与 `path(...).ok` 逐门一致
  *     （证明两套写法结果逐值相同；默认为快路径，不跑这步）。
+ *
+ * t21（**口径修正：把恒真假绿改成生产装配口径**；断言只增不减）：
+ *   · **修前的假绿**（独立审查 BLOCKER A1）：本文件原先 `createWalkSolver({ config, layout })` **不传 registry**
+ *     ⇒ `mergeObstacles` 只返回 `layout.OBSTACLES`（**93 条基线**）⇒ 测的是「**没有墙的城**」⇒ 171 个可行走面
+ *     必然全连通 ⇒ 「内景不可达 = 0」**恒真**（判据与守护对象脱钩）。
+ *   · **修后**：改用 `scripts/verify-walk.mjs` 的 `assembleCity()`（真 kit + core registry + B/C/D/E/F 5 区域
+ *     `registerZone`；solver 由其内部 `createWalkSolver({ registry })` 构造）⇒ **与游戏同一装配路径**。
+ *   · **改前/改后对照读数**（同一棵树 LAYOUT 1.1.22、同一判据）：
+ *       ｜口径｜建图障碍｜cellSize:1 主户外分量｜内景不可达｜
+ *       ｜A 无 registry（修前）｜ 93 ｜ 739,959 格 ｜ 0（**恒真**）｜
+ *       ｜B 生产装配（修后）  ｜ 751 ｜ 723,785 格 ｜ **0（真绿；t10 已修 E 侧阶梯留裕量）**｜
+ *     墙体层的敏感性实证：同格逐格对照两口径，**16,174 格**可走性相反/被切出主分量 ⇒ 本判据确实消费了墙体。
+ *   · **注意**：修前口径下该断言**恒真**，故「修前也是 0」**不构成**该断言有效的证据；有效性来自由上表的
+ *     「障碍 93 → 751」「分量 739,959 → 723,785」与 16,174 格差异。**不得**换回无 registry 构造回绿。
  */
 import { loadModule } from './harness.mjs';
+/** t21：**生产装配入口**（与游戏同一装配路径，非替身）——`scripts/verify-walk.mjs` 导出的 `assembleCity()`。 */
+import { assembleCity } from '../scripts/verify-walk.mjs';
 
 const LAYOUT = await loadModule('src/shared/layout.js');
 const CONFIG = await loadModule('src/shared/config.js');
 const { createWalkSolver } = await loadModule('src/interaction/walk-solver.js');
 const { createWalkGraph } = await loadModule('src/interaction/walk-graph.js');
 
-const solver = createWalkSolver({ config: CONFIG, layout: LAYOUT });
+/* ===== t21：口径修正——从「无 registry 的基线替身」改为「生产装配（含 registry 751 条障碍）」=====
+   修前（假绿）：`createWalkSolver({ config, layout })` **不传 registry** ⇒ `mergeObstacles` 只返回
+     `layout.OBSTACLES`（**93 条基线**：不可进入建筑/护城河/水池/假山），**完全不含**各区域
+     `registry.registerZone(...)` 派生的墙体碰撞盒 ⇒ 它测的是「**没有墙的城**」，171 个可行走面必然全连通
+     ⇒ 「43 处内景不可达 = 0」这句**恒真**（判据与守护对象脱钩；`report-false-green-sweep.md` 点名的类别）。
+   修后（本文件）：`assembleCity()` = 真 kit + core registry + 5 区域 `registerZone` ⇒ **与游戏同一装配路径**，
+     且 solver 由 `assembleCity` **内部**用 `createWalkSolver({ registry })` 构造 ⇒ 墙体碰撞盒必然在册。
+   注意：**不得**为了回绿而换回无 registry 构造、放宽判据、缩小点集，或把不可达点列为例外。 */
+const city = await assembleCity();
+const { solver, registry, createWalkGraph: createWalkGraphProd } = city;
+const baselineObstacles = LAYOUT.OBSTACLES.length;
 let failures = 0;
 const check = (name, ok, detail = '') => {
   console.log(`  ${ok ? '✓' : '✗'} ${name}${ok || !detail ? '' : ` :: ${detail}`}`);
@@ -46,6 +72,32 @@ const check = (name, ok, detail = '') => {
 
 console.log('t140 结果级可达性断言（生产 solver + 真实建图；只读）');
 console.log(`  LAYOUT ${LAYOUT.LAYOUT_VERSION} · 可行走面 ${LAYOUT.WALKABLE.length} · maxStepHeight ${CONFIG.INTERACTION.step.maxStepHeight} · snapDownDistance ${CONFIG.INTERACTION.step.snapDownDistance}`);
+
+/* ===== t21 自证：本文件测的就是**生产装配入口**，非替身（口径三要素见下） =====
+   口径三要素（如实标注）：
+     ① 网格参数：`cellSize:1` 细口径（`TERRAIN_EXTENT` 全域 841×1121 = 942,761 格；**显式提额**
+        `maxCells:3_000_000`，默认 400k 会抛错）+ `cellSize:2` 粗口径（默认上限内，非权威）；
+     ② 锚点：主户外分量起点 = `FP_ROUTE[0]` 南桥外 `OUTSIDE = (0,-480)`（与 E8/E11/E18 同源）；
+     ③ 点集与判据：有门槽位（`SLOTS.filter(s => s.door)` + 存在 `WK-<slot>-door-passage` 者）的
+        「门中 + 室内面中心」逐点 `componentOf(x,z,OUTSIDE).ok`（**`.ok` 布尔，严禁 `!= null` / `if (!p)`**）。 */
+{
+  const liveObstacles = registry.allObstacles().length;
+  const solverObstacles = solver.stats().obstacles; // 生产 solver **实际入库**的障碍数（宽相位网格来源）
+  console.log(`  t21 装配口径：LAYOUT.OBSTACLES 基线 ${baselineObstacles} 条 · registry.allObstacles() ${liveObstacles} 条`
+    + `（含 core 派生墙体层）· 生产 solver.stats().obstacles ${solverObstacles} 条 · 区域 ${city.zones.size} 个`
+    + `（${[...city.zones.keys()].join('/')}）`);
+  console.log('  t21 口径三要素：① cellSize:1（提额 3,000,000）+ cellSize:2（非权威）；② 锚点 FP_ROUTE[0] 南桥外 (0,-480)；③ 门中/室内面中心 componentOf(...).ok');
+  check('t21 口径①：测试用图的建图函数**逐字取自** `assembleCity()` 的 `createWalkGraph`（非另造替身）',
+    createWalkGraph === createWalkGraphProd, `assembleCity 导出 ${typeof createWalkGraphProd} / 本文件 import ${typeof createWalkGraph}`);
+  check('t21 口径②：registry 障碍必须 **严格多于** `layout.OBSTACLES` 基线（= 派生墙体层在册；恒真修复的根判据）',
+    liveObstacles > baselineObstacles, `registry ${liveObstacles} 条 vs 基线 ${baselineObstacles} 条`);
+  check('t21 口径③：生产 solver 实际入库障碍也必须 **严格多于** 基线（封死"无 registry 替身"回归）',
+    solverObstacles > baselineObstacles, `solver ${solverObstacles} 条 vs 基线 ${baselineObstacles} 条`);
+  check('t21 口径④：solver 入库数 === registry 在册数（证明测的是**同一份**生产装配，未走 `obstacles` 显式覆盖或宽松替身）',
+    solverObstacles === liveObstacles, `solver ${solverObstacles} 条 vs registry ${liveObstacles} 条`);
+  check('t21 敏感性实证：5 个区域全部**真装配**（缺失即 `assembleCity` 抛错，不会静默退化为无墙替身）',
+    city.zones.size === 5, `区域 ${city.zones.size}`);
+}
 
 const graphFine = createWalkGraph(solver, { cellSize: 1, layout: LAYOUT, config: CONFIG, maxCells: 3_000_000 });
 const graphCoarse = createWalkGraph(solver, { cellSize: 2, layout: LAYOUT, config: CONFIG });

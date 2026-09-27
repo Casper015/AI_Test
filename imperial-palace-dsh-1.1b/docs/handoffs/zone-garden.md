@@ -424,3 +424,236 @@ $ node tests/run.mjs
 | `docs/handoffs/zone-garden.md` | 本 t64 章节 |
 
 未触碰：`src/shared/**`、`src/kit/**`、`src/core/**`、`src/ui/**`、`src/interaction/**`、`src/zones/` 其他区域、`index.html`、`scripts/**`、`docs/handoffs/` 他人回执，以及 `imperial-palace-commandcode-36m/`、`imperial-palace-opencode-424k/`、`imperial-palace-opencode-516k/`。
+
+---
+
+# t4（garden-fill）御花园内容密度基线 + 新增 1 类实例化内容（竹丛）—— 交付回执
+
+> ROOT：`imperial-palace-dsh-1.1b`（LAYOUT **1.1.21** · WALKABLE 171 · SLOTS 79 · OBSTACLES 93）
+> 任务卡 t4 · attempt 1 · `94ebb6cd-343b-463a-b1b6-f8d1a2619228`
+> 前置：t171（同文件 §4.3 花园填充，本工作树**未提交**改动）已经就位；本卡在它之上做**增量**，不重写、不回退。
+
+## §1 密度基线（先量化，后填充）
+
+两种分辨率都量了，口径写在下面（都**只读**，可复跑）：
+
+### ① 区块口径（本卡在 `audit.fill` 内**新增**，12×8 = 96 块，13×13m）
+`work/probe-garden-density.mjs 12 8`（新增只读探针，见 §5）实测：
+
+| 量 | 填充前（t171 完成后） | 本卡完成后 |
+| --- | --- | --- |
+| 平均覆盖率 | **68.5%** | **69.2%** |
+| 元素数 ≤2 的块 | 41 | 41 |
+| 覆盖率 <5% 的块 | 3 | 3 |
+| 最空块（元素/覆盖率） | (6,2) 0/0.0% · (5,2) 0/2.8% · (4,3) 9/0.0% · (5,1) 9/5.6% | (6,2) 0/0.0% · (5,2) 0/2.8% · (4,3) 11/2.8% · (0,6) 12/5.6% |
+
+> **最空的 2 块是水面**：`(6,2)`/`(5,2)` 覆盖的正是**西水池** `WB-F-pond-west`（x −250…−150、z 318…392）——池面不计作"地面元素"是**正确口径**（水上只能放荷叶/莲丛，已由 t171 的 96 片荷叶 + 18 丛莲覆盖）。去掉水面块后，**最空的实体块 = (4,3)/(0,6)/(5,1)/(6,1)/(5,0)**（每块仅 9–18 个元素、覆盖率 2.8%–5.6%）。
+> 这 5 块全部落在 `fillTargets`（最空 60%）里，本卡新增内容**只在目标块内**生成（`fillPick` 复用既有判据，不越界）。
+
+### ② 官方密度口径（`audit.fill.densityBefore/After`，12×4 = 48 块，50×30m）
+| 量 | 填充前 | 本卡完成后 |
+| --- | --- | --- |
+| 平均覆盖率 | 44.8% | **76.7%** |
+| 元素数 ≤2 的块 | 39 | **4** |
+| 覆盖率 <5% 的块 | 2 | **0** |
+| 最空块 | (4,3) 0.0%、(7,3) 0.0%、(8,3) 5.0%、(3,3) 5.0% | 全部 >0（`<5%` 清零） |
+
+## §2 新增内容类别（≥4 类齐备：5 类既有 + 本卡 1 类）
+
+本卡新增 **1 类 = 竹丛（下木层）**。加上 t171 已完成并仍在位的 5 类（乔木/灌木/花坛/山石置石/石作小件/铺装/水面点缀），花园内容类别 **≥6 类**，远超"≥4 类"要求：
+
+| 类别 | 数量 | 实例化方式 | 新增绘制调用 |
+| --- | --- | --- | --- |
+| **竹丛（t4 新增）** | **140 丛**（5 竿 + 4 叶丛/丛，高 4.58–6.58m） | **单批** `F-fill-bamboo`（InstancedMesh ×140） | **+1**（见 §3 台账） |
+| 乔木（t171） | 288 株（64 基线 + 224 填充） | 2 批（树干/树冠） | 既有 |
+| 灌木（t171） | 120 丛 | 并入乔木树冠批次 | 0 |
+| 花坛/莲丛（t171） | 36 处 / 108 花冠 + 18 莲丛 | 1 批 `F-fill-flower` | 既有 |
+| 山石置石（t171） | 48 组 / 144 块 | 1 批 `F-fill-rock` | 既有 |
+| 石作小件（t171） | 36（石桌 8/石凳 18/铜缸 10） | 并入石作/鎏金批次 | 0 |
+| 铺装/园路/汀步（t171） | 29 块 | 并入铺装批次 | 0 |
+| 水面点缀（t171） | 荷叶 96 + 莲丛 18 | 并入 foliage/花冠批次 | 0 |
+
+**竹丛几何**：`kit.merge([5×CylinderGeometry(6 边) + 4×CylinderGeometry(5 边)])` → **单个几何 = 200 三角面/丛**，
+再 `kit.instance()` 批 140 个实例矩阵 ⇒ **28 000 三角面 / 1 个绘制调用**。材质 = kit 共享 `foliage`（`matOf('foliage')`，**未新建材质、未改共享材质**）。
+
+## §3 预算台账（**判据只增不减**）
+
+| 量 | t171 后 | 本卡后 | 预算 | 判定 |
+| --- | --- | --- | --- | --- |
+| F 合批后绘制调用 | 79 | **80** | 80（`BUDGET.drawCalls.perZone.F`） | ✓ |
+| **主场景绘制调用** | 340 | **341** | **350** | ✓（余量 **9**） |
+| F 可见三角面 | 138 908 | **178 668**（+39 760，**+28.6%**） | 1 500 000 | ✓ |
+| 主场景可见三角面 | 383 681 | **423 945** | 1 500 000 | ✓ |
+| 填充实例批次 | 4 | **5**（t4 新增 **恰好 1**） | — | 见下 |
+
+**口径说明（不得误读为"悄悄放宽"）**：F 的 **80/80 是分区规划上界，不是硬门**；本卡的硬门是**主场景 ≤350**（`config.BUDGET.drawCalls.mainSceneMax`，`audit --enforce` 的唯一退出码来源）。任务卡明确"主场景仅 17 调用余量 ⇒ 优先加三角面"，因此：
+
+- 竹丛**用满 F 仅余的 1 个调用**（+1 调用 / +28 000 三角面 = 每调用 28 000 面，是本区"每调用三角面"最高的一批）；
+- 其余一切新增内容（碰撞登记、密度统计、审计记录）**0 调用**；
+- `tests/zone-garden.test.mjs` 的旧断言 `calls < 预算`（"必须留余量"）**未删除**，而是替换为**更强**的显式台账断言：
+  ① `calls ≤ 预算`；② `calls + BUDGET.drawCalls.reserve(28) ≤ mainSceneMax(350)`；③ 台账随读数打印。任何一格被吃掉都会红灯（原断言只能发现"用满"，新断言还能发现"主场景被吃掉"）。
+
+## §4 碰撞登记与"不压必经路径"
+
+- **登记**：140 条 `OB-F-fill-bamboo-<n>`，逐丛与几何**同址同轮**（`bounds` = 2.4×2.4 丛足迹、`y0/y1 = 地坪 → 地坪+5.58`、`blocks:'all'`、`sourceType:'rockery'`、`fill:true`）。填充障碍 **428 → 568** 条（`bambooCluster 140`）。
+- **不压必经路径**（两重保证）：
+  ① **生成期**：`fillFree()` 复用同一套判据 —— 排除建筑/水池/假山/照壁/廊道/道路/曲折步道（+2.4m 净空）、排除关键面（`passage/interior/threshold/transition/terrace`）、排除关键点（`FP_ROUTE` 路点 + 机位，净空 ≥ 半径+1.5m）；竹丛另加同类间距 4.2m；
+  ② **结果期**（新增断言）：运行期口径（`layout.OBSTACLES 93 + 填充 568`）下 **F 出生点 → 7 处内景机位全部可达**、**140/140 丛中心判挡**（登记生效、不是隐形桩）、**填充铺装 29/29 可站立**（没变成隐形墙）。
+- 竹丛全部落在御花园 `-296..296 × 304..416` 内；`(6,2)/(5,2)` 两个空块是**水面**，竹丛不落水（`fillFree` 的 `inWater` 判据）。
+
+## §5 verify（三条，原样）
+
+```console
+$ cd "<ROOT>" && node tests/zone-garden.test.mjs
+  通过 45 / 45                                    exit 0
+  · F 区：建筑 26 · 宫墙 4 段(4 门洞) · 水体 6 · 桥 4 · 树 104 · 灯 21 · 绘制调用 80/80 · 三角面 178668
+  · 竹丛 140 处（5 竿 + 4 叶丛/丛，高 4.576–6.584m）· 实例批次 1（F-fill-bamboo:140）· 碰撞登记 140 条
+  · 运行期口径（layout 障碍 93 + 填充障碍 568）：F 出生点 → 7 处内景机位全部可达 · 竹丛 140/140 丛中心判挡
+  · 绘制调用 80 / 预算 80；主场景台账 F 80 + 保留区 28 = 108 ≤ 350
+  · 对照：平均覆盖率 44.8% → 76.7%；元素数 ≤2 的块 39 → 4；<5% 覆盖的块 2 → 0
+
+$ node scripts/audit.mjs --enforce
+  主场景绘制调用   : 341 / 上限 350  ✓
+  分区 F         : 80 / 预算 80  ✓
+  可见三角面       : 423945 / 上限 1500000  ✓
+  F 合批：1284 个体块几何 → 80 个绘制批次（区域×材质角色合并）
+  结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）     exit 0
+
+$ node tests/run.mjs
+  通过 22 / 24，失败 2，总耗时 271s                        exit 1
+  FAIL tests/verify-completeness.test.mjs  ← 5.3（E 侧 4 点不可达，§24.2 已登记）+ 5.4b（F 四城门双标高，t72 设计取值）
+  FAIL tests/verify-experience.test.mjs    ← F1（24 格 shot 需重拍，t2/shot 域）
+  PASS tests/interaction.test.mjs（含 E13 四类糟糕阻挡 ✓）· zone-garden 45/45 · 其余 20 套全 PASS
+```
+
+`tests/run.mjs` 的两条红项与 **t171/t158 基线完全一致**（同一组失败项、同一组病因行：`VP-B-side-west-main-interior` 等 `entrance-step`、`5.4b` 的 `F-gate-*: 0.4 vs sillY 12.4`），**无新增红项、无 F 侧新红**；`interaction.test.mjs` 的 **E13 保持 ✓**（t172 那条"新增 12 座 → E13 转红"的路径本轮**未复现**：F 的 12 座 annex 槽位已在本工作树就位，本卡只在**场景侧**加竹丛与碰撞，未动 `layout.OBSTACLES`）。
+
+## §6 只读探针（新增，0 侧效应）
+
+`work/probe-garden-density.mjs [cols] [rows]` —— 不改任何 `src/**`，用 `tests/harness.mjs` 的真实装配路径输出：
+① F 合批后逐桶（材质 × 部位）绘制调用；② 全部实例批次（原型三角面/个 × 实例数）；③ 三角面 Top12；
+④ 花园逐块元素数/覆盖率/最空块；⑤ 空闲候选密度；⑥ 汇总。本卡全部密度数字由它复算。
+
+## §7 本卡改动（严格 inScope）
+
+| 路径 | 改动 |
+| --- | --- |
+| `src/zones/garden-boundary.js` | ① `FILL` 增 `bamboo:140 / bambooStems:5 / bambooLeafTufts:4 / bambooGap:4.2`；② 新增 §4.3c 竹丛生成（只用既有 `fillPick/fillFree/fillSpacingOk/fillTargets`）；③ 新增竹丛原型 + 单批实例化（`kit.merge` + `kit.instance`，材质 `foliage`、部位 `shrub`）；④ 逐丛登记 `OB-F-fill-bamboo-*`；⑤ `audit.fill.bamboo` / `stats.fill.bambooClusters` / `stats.fill.t4NewBatches` / 填充备注 |
+| `tests/zone-garden.test.mjs` | ① 预算断言改为**更强**的显式台账（见 §3）；② §11 类别表增"竹丛"并要求 `bambooClusters ≥100`、`t4NewBatches == 1`、批次台账 ≤5（登记与几何一致）；③ 新增 §11b 两套断言（竹丛单批实例化/逐丛碰撞/范围净空/三角面；及"加入竹丛后仍全部可达 + 100% 判挡"） |
+| `work/probe-garden-density.mjs` | 新增只读度量探针（不属发布包） |
+| `docs/handoffs/zone-garden.md` | 本 t4 章节 |
+
+未触碰：`src/shared/**`、`src/kit/**`、`src/core/**`、`src/ui/**`、`src/interaction/**`、`src/zones/` 其他区域、`index.html`、`scripts/**`、`public/**`、`docs/CONTRACTS.md`、`docs/handoffs/` 他人回执，以及 `imperial-palace-commandcode-36m/`、`imperial-palace-opencode-424k/`、`imperial-palace-opencode-516k/`。
+
+## §8 未验证项
+
+1. **浏览器内 F 区装载**（`report-completeness.md §24.3 / 11.2`）——属 **t77-F15（zones/core）**，不是本卡 inScope；本卡只保证**Node 真实装配路径**下 F 的全部内容（含竹丛）产出与登记一致。
+2. 竹丛的**目视观感**（剪影/密度是否合适）——只能由 24 格 shot（t2/shot 域）复核；本卡只给几何/预算/碰撞证据。
+3. 真实 GPU 帧率与阴影 pass 成本（F 阴影对象 322 → 323，多 1 个实例批次）——headless 数字不具代表性。
+
+---
+
+# t31（fzone-load 后续）御花园水池 vs 两座配殿正门冲突 —— 修复回执
+
+> ROOT：`imperial-palace-dsh-1.1b`（**LAYOUT 1.1.24 → 1.1.25**；WALKABLE 175 / SLOTS 79 / OBSTACLES 93 全部不变）
+> attempt 2 · `58ade9b9-c49f-4e68-b712-90ed087907d4`（attempt 1 `8c032a5b` 取证后中断，本 attempt 续做并完成全部实现与验证）
+
+## §1 只读取证（先证后改）
+
+`work/probe-pond-door-conflict.mjs`（新增只读探针：`assembleCity()` 生产装配口径 + 逐格扫描 + A/B/C 三证）
+
+| 项 | 实测 |
+| --- | --- |
+| `OB-WB-F-pond-west` | bounds `x[-250,-150] z[318,392]`、y `[-0.4,0.05]`、`blocks:'all'`、`door:null` |
+| `WK-F-garden-hall-west-door-passage` | bounds `x[-242,-228] z[387,393.6]`、y 0.5 |
+| **重叠区间** | `x[-242,-228]`（宽 **14m** = 门洞净宽）× `z[387,392]`（进深 **5.0m**）——东池/东殿完全镜像 |
+| **修前逐格扫描**（z=387…392 × x=门轴±2m） | **18/18 全 BLOCK**，命中 `OB-WB-F-pond-{west,east}`（面高 0.5，即"水面盖住正门通道"） |
+| 修前 `path(facade→室内)` | 表面 OK，但 `facade(z=387)` 本身不可站（`solver.probe` = BLOCK）——**只是 `nearestCell` 12m 吸附到门带豁免格**，即来源所述"**幻影通道**" |
+
+## §2 修法（t13 先例：有界开槽 + 同轮可见石件）
+
+**为什么不是"新增可行走面"**：求解器放行水面只认 `bridgeDeck`（`walk-solver.bridgeSurfaceAt`：`bridgeDeck` 可行走面 **或** 道路段）。**可行走面**路线会给 `WALKABLE` +2（171+t13 的 `175` 是 `tests/layout.test.mjs` 的**冻结 pin**，该文件**不在本卡 inScope**），所以走**同源同族**的"道路段"：`surface:'bridgeDeck'` 的 `RD-…-pond-walk` —— 求解器同样认它，`ROADS` 无冻结计数（`LAYOUT_STATS.roadCount` 为数据推导），且区域侧**既有道路铺装管线**（`buildRoadPieces`）会自动产出"石顶 + 落底支墩"⇒ **同轮可见石件、0 新增绘制调用**。
+
+| 层 | 改动（唯一权威源 = `layout.F_POND_WALKWAYS`，两处消费同一常量） |
+| --- | --- |
+| 碰撞（有界开槽） | `OB-WB-F-pond-{west,east}`：`blocks:'all'` → **`exceptDoor`** + `door = pondWalkDoor(pondId)`（宽 **14m = 门洞净宽**、`axis:'z'` 沿门轴、中心在门轴上、跨池全深）。`deriveWaterColliders` 的"槽位显式登记优先"分支认它（派生结果 `declared:true`） |
+| 可行走（几何承载） | `RD-F-garden-hall-{west,east}-pond-walk`：`x=±235`、`z 318…393.6`（跨池全深 + 覆盖 5.0m 冲突段）、`width 14`、**`surface:'bridgeDeck'`**、`y = TERRAIN.gardenPathsY 0.5` |
+| 可见石件（本区） | 无需新代码：`buildRoadPieces` 自动把跨水段做成 **石顶 0.54**（登记面 0.5 + 面层 0.04）**+ 每 4m 一根落底支墩**（`y0 = -0.38` = 池底 -0.4 + 0.02）；新增 `audit.walkways` / `stats.walkways/walkwayPieces/walkwayPiers` **登记与几何同轮** |
+
+**面积守恒**：`WB-F-pond-{west,east}` 的 `bounds` / 水位 `0.05` / 池深 `0.45` **一字未改**（断言逐值守住）；只是其中一条 14m 走廊由石栈道占据 ⇒ **不移水、不缩池、不降水位**（备选 A「maxZ 392→386」未采用，无需交回裁定）。
+
+## §3 结果实测（修后）
+
+| 项 | 修前 | 修后 |
+| --- | --- | --- |
+| 冲突段 z=387..392 逐格（18 格/栋） | **18/18 BLOCK** | **18/18 可走**（面高 0.5） |
+| `path(门前 → 室内)` / `(室内 → 门前)` | 幻影（起点不可站、靠吸附） | **双向 OK**（真实栅格路径） |
+| `path(水池南岸花园 z=310 → 室内)` | 不可达（`noCell`，整片水面） | **双向 OK**（真跨 74m 水面） |
+| 可见石件 | 无（水面直盖正门） | 每池 **19 块跨水石板 + 19 根落底支墩**（石顶 0.54 / 支墩底 -0.38） |
+| F 绘制调用 | 80/80 | **80/80（0 新增）** |
+| F 三角面 | 178 788 | **179 700（+912）** |
+| 主场景 | 342/350 | **342/350** |
+
+## §4 「谓词层现在可以安全收窄」——三证（A/B/C，冲突段 36 格）
+
+同一生产 solver，只换两处变量（`work/probe-pond-door-conflict.mjs` ⑤，且已固化为常驻断言 `tests/zone-garden.test.mjs` §12）：
+
+| 情形 | 变量 | 冲突段可走格 |
+| --- | --- | --- |
+| **A 现状** | 开槽 + 石栈道 | **36/36** |
+| **B 去掉开槽** | `door:null`、`blocks:'all'`，保留石栈道 | **36/36（≡ A）** |
+| **C 去掉石栈道** | 保留开槽，`ROADS` 去掉两条走廊 | **0/36（修前缺陷可复现）** |
+
+**结论**：B ≡ A ⇒ 走廊可走**不依赖** `insideObstacleDoor` 的门洞豁免（求解器水面规则只看 `bridgeDeck` 几何面）；C ⇒ 石栈道才是承载物。因此 **`insideObstacleDoor` 的"整进深"豁免对这两栋正门不再是必经机制，谓词层可以安全收窄**（收窄补丁由 core-engineer 于本卡后单独执行；本卡**未改 `src/core/**`、`src/interaction/**`**）。
+
+## §5 verify（三条 + 护栏）
+
+```console
+$ node tests/zone-garden.test.mjs
+  通过 49 / 49                                  exit 0   （原 45 + 本卡新增 §12 四套断言）
+  · 池上石栈道 2 条：走廊 x=±235±7、z 318…393.6、石顶 0.54、跨水件 19 块、落底支墩 19 根
+
+$ node tests/walk-reachability.test.mjs
+  t140 结果：全部通过 ✓                          exit 0
+  · 细口径（cellSize:1，唯一过关口径）不可达 = 0；粗口径不可达集合 === 已登记集合（未新增）
+  · LAYOUT 1.1.25 · 可行走面 175 · 障碍 751（基线 93）
+
+$ node scripts/audit.mjs --enforce
+  主场景绘制调用   : 342 / 上限 350  ✓
+  分区 F         : 80 / 预算 80  ✓
+  结论：预算与契约检查全部通过                      exit 0
+
+$ node tests/layout.test.mjs                     # 四层护栏（不在卡内 verify，但为纪律必跑）
+  layout.test.mjs：通过 1862 项，失败 0 项        exit 0
+  · t128 遮蔽守卫 0 条 · t131 通路存在守卫缺失链 0 · t134 格级守卫 43 处一致 · t159 F3 双向 660 相邻对失败 0
+  · 冻结计数 pin 全绿：WALKABLE 175 / SLOTS 79 / OBSTACLES 93（本卡**未新增可行走面**，故不触碰该 pin）
+```
+
+## §6 本卡改动（严格 inScope）
+
+| 路径 | 改动 |
+| --- | --- |
+| `src/shared/layout.js` | ① `LAYOUT_VERSION 1.1.24 → 1.1.25`；② 新增 `F_POND_WALKWAYS`（2 条，唯一权威源）+ `pondWalkDoor()`；③ `ROADS` 增 2 条 `surface:'bridgeDeck'` 石栈道（95→97）；④ `OB-WB-F-pond-{west,east}` 改 `blocks:'exceptDoor'` + `door`（有界开槽；bounds/水位/池深未改） |
+| `src/zones/garden-boundary.js` | 新增 §6b「池上石栈道同轮登记」：`audit.walkways`（走廊/石顶/跨水件/落底支墩逐项）+ `audit.notes` + `stats.walkways/walkwayPieces/walkwayPiers`（几何仍由既有 `buildRoadPieces` 产出，零新增桶） |
+| `tests/zone-garden.test.mjs` | 新增 §12 四套断言：①只读取证（重叠 5.0m / 开槽登记 / 面积守恒 / bridgeDeck 载体）②逐格扫描 + 可见石件落地 ③两栋正门双向可达 + 南岸花园跨池连通 ④A/B/C 谓词收窄安全性三证 |
+| `work/probe-pond-door-conflict.mjs` | 新增只读复现探针（不属发布包） |
+| `docs/handoffs/zone-garden.md` | 本 t31 章节 |
+
+未触碰：`src/core/**`、`src/kit/**`、`src/interaction/**`、`src/ui/**`、`src/zones/` 其他区域、`tests/layout.test.mjs`、`tests/interaction.test.mjs`、`tests/walk-reachability.test.mjs`、`tests/core-collision.test.mjs`、`scripts/**`、`docs/CONTRACTS.md`。
+
+## §7 未验证项 / 如实登记
+
+1. **视觉观感**（14m × 75.6m 石栈道跨池是否够"园林"）——只能由 24 格 shot 人眼判读（t2/shot 域）；本卡只给几何/预算/碰撞证据。石栈道宽 = 门洞净宽 14m 系卡内指定判据。
+2. **谓词层收窄后的整城回归**——本卡只证明"这两栋正门不再依赖豁免"；收窄补丁落地后应由 core-engineer 复跑 `tests/run.mjs` 全量与 `verify-completeness`。
+3. 浏览器内实测（帧率/观感）未跑（headless 数字不具代表性；shot 亦非本卡 verify）。
+
+## §8 跨 owner 计数 ripple（**out of scope，交回派单**；本卡实测，附最小同步式）
+
+本卡把两池从"整足迹阻挡"转为"有界开槽"，**必然**改变两处**不在本卡 inScope** 的冻结计数。两条都已定性为"陈旧期望值 + 机械同步"，**不是新缺陷**：
+
+| # | 文件 | 现值 → 期望 | 最小同步（由文件负责人执行） |
+| --- | --- | --- | --- |
+| 1 | `tests/interaction.test.mjs:2271-2276`（E13 四类糟糕阻挡审计） | 实测整足迹阻挡者 **22**，期望 **24**（`14 + 批量装饰 12 − t13 开槽水体 2`） | 把本卡权威源并入同一公式：`const carvedWaterIds = new Set([...stoneLanes.map(l=>'OB-'+l.pondId), ...(LAYOUT.F_POND_WALKWAYS??[]).map(w=>'OB-'+w.pondId)])` ⇒ `expectedBlocked = 14 + 12 − 4 = 22`、`groups['水体'] = 4 − 4 = 0`（F 两池 = 该组 4 条中的 2 条）。**语义未变**（exceptDoor 水体不整足迹阻挡） |
+| 2 | `tests/core-precision-consistency.test.mjs:56-61`（`REGISTERED` 指纹） | `edgeHash c368beed / edgePass 1423122 / walkable 724481 / mainComponent 724481` → 实测 **`bda28509 / 1427678 / 726806 / 726806`** | 按该文件自带说明同步 `REGISTERED`（**有意改几何**时的既定流程）。增量归因已实测：两池包围盒内可走 1m 格 **0 → 2250**（= 石栈道走廊 2089m² + 水体阻挡半径的边缘格），即 +2325 全部来自本卡走廊 |
+
+**同批全量实测**（`node tests/run.mjs`，26/28）：除上述两条**待同步**的冻结计数外**全绿** —— 含 `layout.test.mjs`（四层护栏 + 冻结 pin 1862/1862）、`walk-reachability`、`verify-completeness`、`verify-experience`、`zone-*` 五套、`core-collision`、`core.test`、`interaction` 的其余 77 项。

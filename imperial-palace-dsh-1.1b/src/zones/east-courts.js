@@ -32,6 +32,7 @@
  */
 
 import { CONFIG, deriveSeed } from '../shared/config.js';
+import { STONE_STEP_LANES } from '../shared/layout.js';
 import { rampsFromRoads } from '../core/layout-slice.js';
 
 export const ZONE_ID = 'E';
@@ -530,6 +531,31 @@ export async function createZone(ctx) {
       });
       pondSummary.pavilionBase = 'E-pond-pavilion-base';
     }
+    /* t13：两级汀步石（**同轮建可见石件**；与 `layout.STONE_STEP_LANES` 逐值同源）。
+       石件自水面（`waterY`）直落石顶（0.65 / 0.90）⇒ 视觉上就是"水下石墩 + 出水两级踏步"，
+       与 D 池的汀步石、与四座入城桥用同一种 `kit.terrace` 实体，不新增材质/不新增 kind。
+       注：石件是**视觉**——通行性由 `WALKABLE` 的登记面（本卡在 layout 里新增 4 面）表达，
+       与 kit/区域不写通行性的既有纪律一致（kit.test 22.6）。 */
+    const stepLane = (STONE_STEP_LANES ?? []).find((l) => l.id === 'E-court3-pavilion') ?? null;
+    if (!stepLane) throw new Error('east-courts: layout.STONE_STEP_LANES 缺 E-court3-pavilion（汀步走廊未登记，视觉石件无处可依）');
+    const stepStones = [];
+    for (const step of (stepLane?.steps ?? [])) {
+      const stone = solid({
+        id: `${step.id}-visible`,
+        name: step.name,
+        bounds: { minX: stepLane.corridor.minX, maxX: stepLane.corridor.maxX, minZ: step.minZ, maxZ: step.maxZ },
+        y0: round(waterY),
+        y1: step.y,
+      });
+      const box = new THREE.Box3().setFromObject(stone);
+      stepStones.push({
+        id: step.id,
+        node: `${step.id}-visible`,
+        bounds: { minX: round(box.min.x), maxX: round(box.max.x), minY: round(box.min.y), maxY: round(box.max.y), minZ: round(box.min.z), maxZ: round(box.max.z) },
+      });
+    }
+    pondSummary.stepStones = stepStones;
+    pondSummary.corridor = stepLane ? { ...stepLane.corridor } : null;
     pondSummary.id = waterObstacle.buildingId;
     pondSummary.bounds = { ...wb };
     pondSummary.waterY = waterY;
@@ -877,18 +903,35 @@ export async function createZone(ctx) {
     y0: Math.min(o.y0, groundY),
   }));
   if (waterObstacle) {
-    layoutObstacles.push({
-      id: 'OB-E-pond-guard',
+    /* t13：水面拦阻拆成**走廊两翼**（水池盒顶面 0.05 < 地坪 0.4，垂直判定拦不住 ⇒ 必须按脚高补拦阻盒）。
+       开槽几何取 `layout.STONE_STEP_LANES`（唯一权威源），并按 `playerRadius` 让开走廊，
+       否则盒边会吃掉走廊两端各 0.35m 的可走宽度（t13 实测）。覆盖不变量：水面 \ 走廊 ⊆ 拦阻盒。 */
+    const lane = (STONE_STEP_LANES ?? []).find((l) => l.id === 'E-court3-pavilion') ?? null;
+    const c = lane?.corridor ?? null;
+    const guardY1 = round(groundY + INTERACTION.player.height + MODULES.stairsStepHeight);
+    const guardBase = {
       sourceType: 'water',
       zone: ZONE_ID,
       buildingId: waterObstacle.buildingId,
-      bounds: { ...waterObstacle.bounds },
-      y0: groundY,
-      y1: round(groundY + INTERACTION.player.height + MODULES.stairsStepHeight),
       blocks: 'all',
       door: null,
       note: '水池地面高度拦阻（水体障碍盒顶面低于地坪，无法用垂直判定拦人）',
-    });
+    };
+    if (c) {
+      const clear = INTERACTION.player.radius;
+      layoutObstacles.push(
+        { ...guardBase, id: 'OB-E-pond-guard-west', bounds: { minX: waterObstacle.bounds.minX, maxX: round(c.minX - clear), minZ: waterObstacle.bounds.minZ, maxZ: waterObstacle.bounds.maxZ }, y0: groundY, y1: guardY1 },
+        { ...guardBase, id: 'OB-E-pond-guard-east', bounds: { minX: round(c.maxX + clear), maxX: waterObstacle.bounds.maxX, minZ: waterObstacle.bounds.minZ, maxZ: waterObstacle.bounds.maxZ }, y0: groundY, y1: guardY1 },
+      );
+    } else {
+      layoutObstacles.push({
+        ...guardBase,
+        id: 'OB-E-pond-guard',
+        bounds: { ...waterObstacle.bounds },
+        y0: groundY,
+        y1: guardY1,
+      });
+    }
   }
   const colliders = {
     obstacles: [...layoutObstacles, ...wallObstacles],

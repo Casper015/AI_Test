@@ -845,6 +845,294 @@ export async function createZone(ctx) {
   sampleGardenTrees(vegGarden?.treeCount ?? 64);
   sampleBermTrees(vegBerm?.treeCount ?? 40);
 
+  /* ---------------------------------------------------------------- 4.3b 花园填充（t171）
+   * 用户原话"花园的部分太空了"。做法：**先量化、后填充**，且全部**实例化**或**并入既有材质批次**：
+   *   ① 12×4（50m×30m）网格量化御花园逐块内容密度（元素数 + 覆盖率）⇒ 得出**最空的块**；
+   *   ② 只在最空的 60% 块里补 5 类内容（植被 / 山石置石 / 石作小件 / 铺装园路 / 水面点缀）中的 ≥4 类；
+   *   ③ F 区预算 80（填充前 72）⇒ 新增几何优先并入既有材质批次（0 调用）或单批实例化（每类 1–2 调用）。
+   * 位置确定性：独立 rng 流（`kit.makeRng(deriveSeed(ZONE_ID,'garden-fill'))`），**不扰动**既有树/灯/屋的随机序列。
+   */
+  const FILL = {
+    rect: rect(-296, 296, 304, 416),                 // 可填充范围（御花园 tile T-F-garden 内缩 4m）
+    cols: 12, rows: 4,                               // 50m × 30m 网格（与密度基线同口径）
+    trees: 224,                                      // 乔木：64 → 288 株（4.0 株/1000m²）
+    shrubs: 120,                                     // 灌木（树冠单批实例化）
+    flowerBeds: 36, flowerPerBed: 3,                 // 花坛 36 处 × 3 丛（花冠单批实例化）
+    rockClusters: 48, rocksPerCluster: 3,            // 山石/置石 48 组 × 3 块（1 批实例化）
+    stoneTables: 8, stoneBenches: 18, bronzeVats: 10, // 石作小件（并入既有石/金材质批次）
+    lilyPads: 96, lotus: 18,                         // 水面点缀（荷叶并入 foliage 批次；莲丛用花冠批次）
+    stepStones: 24, plazaSize: 6.4,                  // 铺装/园路
+    /* t4：竹丛（**本卡唯一新增实例批次**——F 合批后 1 个调用余量正好用尽；见 §4.3c 预算口径） */
+    bamboo: 140, bambooStems: 5, bambooLeafTufts: 4, bambooGap: 4.2,
+    treeGap: 5.2, shrubGap: 3.6, rockGap: 4.2, stoneGap: 2.6,
+  };
+  const fillRng = typeof kit.makeRng === 'function' ? kit.makeRng(deriveSeed(ZONE_ID, 'garden-fill')) : rng;
+  const FILL_BW = rectWidth(FILL.rect) / FILL.cols;
+  const FILL_BD = rectDepth(FILL.rect) / FILL.rows;
+  const fillPoints = { trees: [], shrubs: [], flowers: [], rocks: [], bamboo: [], lotus: [], lilies: [] };
+  const fillStones = [];                              // 石作小件（桌/凳/缸）
+  const fillPaving = [];                              // 填充铺装（支路 / 小广场 / 汀步）
+  /** 必须保持可通行的"关键面"（门洞通道/室内/门槛/过渡/台基）——填充物一律不许压上去。 */
+  const FILL_KEEP_KINDS = new Set(['passage', 'interior', 'threshold', 'transition', 'terrace']);
+  const fillKeepRects = (zoneLayout.walkable ?? []).filter((w) => FILL_KEEP_KINDS.has(w.kind)).map((w) => w.bounds);
+  /** 必须保持净空的"关键点"（F 区走查路点 + 机位）——填充物离它们 ≥ 半径 + 1.5m。 */
+  const fillKeepPoints = [
+    ...(L.FP_ROUTE ?? [])
+      .filter((p) => p.position && Math.abs(p.position.x) <= 320 && Math.abs(p.position.z) <= 470)
+      .map((p) => ({ x: p.position.x, z: p.position.z })),
+    ...(zoneLayout.viewpoints ?? []).filter((v) => v.position).map((v) => ({ x: v.position.x, z: v.position.z })),
+  ];
+  const fillPlaced = () => [
+    ...Object.values(fillPoints).flat().map((p) => ({ x: p.x, z: p.z, r: p.r ?? 1.2, kind: p.kind ?? 'plant' })),
+    ...fillStones.map((s) => ({ x: s.x, z: s.z, r: s.r, kind: s.kind })),
+    ...fillPaving.map((p) => ({ x: p.x, z: p.z, r: p.r, kind: 'paving' })),
+  ];
+
+  /**
+   * 填充可用性（一处判据、所有类别共用）：
+   * 在范围内 ∧ 非水面（水面点缀单独放行）∧ 复用既有避让池（建筑/水池/假山/照壁/廊道/道路/步道 + 2.4m 净空）
+   * ∧ 不压关键面/关键点 ∧ 与已放置的填充物保持间距。
+   */
+  function fillFree(x, z, r, { water = false, soft = false } = {}) {
+    if (x < FILL.rect.minX + r || x > FILL.rect.maxX - r || z < FILL.rect.minZ + r || z > FILL.rect.maxZ - r) return false;
+    const inWater = waterAt(x, z) !== null;
+    if (water ? !inWater : inWater) return false;
+    if (soft) {
+      // 铺装/汀步/荷叶：只避开**实体足迹**（建筑/假山/照壁/廊道，各留 1m），允许与既有步道/道路交叠（铺装叠铺装）
+      for (const b of audit.buildings) {
+        if (x > b.rect.minX - 1 - r && x < b.rect.maxX + 1 + r && z > b.rect.minZ - 1 - r && z < b.rect.maxZ + 1 + r) return false;
+      }
+      for (const pr of audit.props) {
+        if (!pr.rect) continue;
+        if (x > pr.rect.minX - 0.6 - r && x < pr.rect.maxX + 0.6 + r && z > pr.rect.minZ - 0.6 - r && z < pr.rect.maxZ + 0.6 + r) return false;
+      }
+    } else if (blockedForTrees(x, z)) return false;
+    for (const wr of fillKeepRects) {
+      if (x > wr.minX - r - 0.8 && x < wr.maxX + r + 0.8 && z > wr.minZ - r - 0.8 && z < wr.maxZ + r + 0.8) return false;
+    }
+    for (const p of fillKeepPoints) if (Math.hypot(p.x - x, p.z - z) < r + 1.5) return false;
+    for (const p of fillPlaced()) if (Math.hypot(p.x - x, p.z - z) < r + p.r) return false;
+    if (!water && landTopAt(x, z) === null) return false;
+    return true;
+  }
+
+  /** 间距（同类/异类各自下限；值全部 ≤ 既有 TREE_MIN_SEPARATION=5，不放松既有判据）。 */
+  function fillSpacingOk(x, z, { treeGap = FILL.treeGap, shrubGap = FILL.shrubGap, rockGap = FILL.rockGap, stoneGap = FILL.stoneGap } = {}) {
+    for (const p of treePoints) if (p.area === 'garden' && Math.hypot(p.x - x, p.z - z) < treeGap) return false;
+    for (const p of fillPoints.trees) if (Math.hypot(p.x - x, p.z - z) < treeGap) return false;
+    for (const p of fillPoints.shrubs) if (Math.hypot(p.x - x, p.z - z) < shrubGap) return false;
+    for (const p of fillPoints.rocks) if (Math.hypot(p.x - x, p.z - z) < rockGap) return false;
+    for (const p of fillStones) if (Math.hypot(p.x - x, p.z - z) < stoneGap) return false;
+    return true;
+  }
+
+  /** 逐块内容密度（填充前后同口径；元素数 + 覆盖率，6m 采样）。 */
+  function gardenDensity() {
+    const coverRects = [
+      ...avoidRects,
+      ...audit.path.map((p) => p.rect),
+      ...audit.water.map((w) => w.rect),
+      ...audit.buildings.map((b) => b.rect),
+      ...audit.props.filter((p) => p.rect).map((p) => p.rect),
+      ...fillPaving.map((p) => p.rect),
+    ];
+    const pointList = [
+      ...treePoints.filter((p) => p.area === 'garden').map((p) => ({ x: p.x, z: p.z, r: 3 })),
+      ...audit.props.filter((p) => p.kind === 'lantern').map((p) => ({ x: (p.rect.minX + p.rect.maxX) / 2, z: (p.rect.minZ + p.rect.maxZ) / 2, r: 1 })),
+      ...fillPlaced().map((p) => ({ x: p.x, z: p.z, r: Math.max(1, p.r) })),
+    ];
+    const out = [];
+    for (let ix = 0; ix < FILL.cols; ix += 1) {
+      for (let iz = 0; iz < FILL.rows; iz += 1) {
+        const x0 = FILL.rect.minX + ix * FILL_BW;
+        const z0 = FILL.rect.minZ + iz * FILL_BD;
+        const b = rect(x0, x0 + FILL_BW, z0, z0 + FILL_BD);
+        const inB = (p) => p.x >= b.minX && p.x < b.maxX && p.z >= b.minZ && p.z < b.maxZ;
+        const trees = treePoints.filter((p) => p.area === 'garden' && inB(p)).length;
+        const fill = fillPlaced().filter(inB).length;
+        let cov = 0;
+        let tot = 0;
+        for (let x = b.minX + 3; x < b.maxX; x += 6) {
+          for (let z = b.minZ + 3; z < b.maxZ; z += 6) {
+            tot += 1;
+            let hit = false;
+            for (const rr of coverRects) if (containsPoint(rr, x, z)) { hit = true; break; }
+            if (!hit) {
+              for (const p of pointList) if (Math.hypot(p.x - x, p.z - z) <= p.r) { hit = true; break; }
+            }
+            if (hit) cov += 1;
+          }
+        }
+        const coverage = +(cov / Math.max(1, tot)).toFixed(3);
+        out.push({ ix, iz, x0: round3(x0), z0: round3(z0), trees, fill, coverage, score: +(trees + fill * 1.5 + coverage * 40).toFixed(2) });
+      }
+    }
+    return out;
+  }
+
+  const fillDensityBefore = gardenDensity();
+  const fillRankedBefore = [...fillDensityBefore].sort((a, b) => a.score - b.score);
+  /** 目标块 = 最空的 60%（29/48 块）——填充只落在这里，可复现、可审计。 */
+  const fillTargets = fillRankedBefore.slice(0, Math.ceil(fillRankedBefore.length * 0.6));
+  const fillEmptiestBefore = fillRankedBefore.slice(0, 8);
+
+  /** 在目标块内取一个可用点（确定性 rng）。 */
+  function fillPick(r, spacingFn = fillSpacingOk, opts = {}, tries = 3000) {
+    for (let guard = 0; guard < tries; guard += 1) {
+      const b = fillRng.pick(fillTargets);
+      const x = fillRng.range(b.x0 + 2.5, b.x0 + FILL_BW - 2.5);
+      const z = fillRng.range(b.z0 + 2.5, b.z0 + FILL_BD - 2.5);
+      if (!fillFree(x, z, r, opts)) continue;
+      if (spacingFn && !spacingFn(x, z)) continue;
+      return { x: +x.toFixed(3), z: +z.toFixed(3) };
+    }
+    return null;
+  }
+
+  /* ① 乔木：追加 224 株（独立批次实例化；不进 audit.trees 的 layout 基线口径） */
+  for (let guard = 0; guard < FILL.trees * 60 && fillPoints.trees.length < FILL.trees; guard += 1) {
+    const p = fillPick(2.6);
+    if (!p) continue;
+    const y = landTopAt(p.x, p.z);
+    if (y === null) continue;
+    fillPoints.trees.push({ x: p.x, z: p.z, y, r: 2.6, kind: 'tree', area: 'garden-fill' });
+  }
+  /* ② 灌木 120 丛（树冠单批实例化） */
+  for (let guard = 0; guard < FILL.shrubs * 60 && fillPoints.shrubs.length < FILL.shrubs; guard += 1) {
+    const p = fillPick(1.1, (x, z) => fillSpacingOk(x, z, { treeGap: 4.0, shrubGap: FILL.shrubGap }));
+    if (!p) continue;
+    const y = landTopAt(p.x, p.z);
+    if (y === null) continue;
+    fillPoints.shrubs.push({ x: p.x, z: p.z, y, r: 1.1, kind: 'shrub' });
+  }
+  /* ③ 花坛 36 处（每处 3 丛花冠 + 一圈石缘；花冠并入单批实例化） */
+  for (let guard = 0; guard < FILL.flowerBeds * 80 && fillPoints.flowers.length < FILL.flowerBeds; guard += 1) {
+    const p = fillPick(2.6, (x, z) => fillSpacingOk(x, z, { treeGap: 5.0, shrubGap: 4.4, rockGap: 2.0 }));
+    if (!p) continue;
+    const y = landTopAt(p.x, p.z);
+    if (y === null) continue;
+    fillPoints.flowers.push({ x: p.x, z: p.z, y, r: 2.6, kind: 'flowerBed' });
+  }
+  /* ④ 山石/置石 48 组（每组 3 块，1 批实例化；登记碰撞） */
+  for (let guard = 0; guard < FILL.rockClusters * 80 && fillPoints.rocks.length < FILL.rockClusters; guard += 1) {
+    const p = fillPick(2.2, (x, z) => fillSpacingOk(x, z, { treeGap: 5.0, shrubGap: 4.0, rockGap: FILL.rockGap }));
+    if (!p) continue;
+    const y = landTopAt(p.x, p.z);
+    if (y === null) continue;
+    fillPoints.rocks.push({ x: p.x, z: p.z, y, r: 2.2, kind: 'rockCluster' });
+  }
+  /* ⑤ 石作小件：石桌 8 + 石凳 18 + 铜缸 10（并入既有石/金材质批次，0 新调用；登记碰撞） */
+  for (let guard = 0; guard < FILL.stoneTables * 200 && fillStones.filter((s) => s.kind === 'stoneTable').length < FILL.stoneTables; guard += 1) {
+    const p = fillPick(1.6, (x, z) => fillSpacingOk(x, z, { treeGap: 4.4, shrubGap: 3.0, rockGap: 3.0, stoneGap: 4.0 }));
+    if (!p) continue;
+    const y = landTopAt(p.x, p.z);
+    if (y === null) continue;
+    fillStones.push({ id: `F-fill-table-${fillStones.filter((s) => s.kind === 'stoneTable').length + 1}`, kind: 'stoneTable', x: p.x, z: p.z, y, r: 1.6, w: 2.4, d: 2.4, h: 0.72 });
+  }
+  for (let guard = 0; guard < FILL.stoneBenches * 200 && fillStones.filter((s) => s.kind === 'stoneBench').length < FILL.stoneBenches; guard += 1) {
+    const p = fillPick(1.0, (x, z) => fillSpacingOk(x, z, { treeGap: 4.0, shrubGap: 2.6, rockGap: 2.6, stoneGap: 2.2 }));
+    if (!p) continue;
+    const y = landTopAt(p.x, p.z);
+    if (y === null) continue;
+    fillStones.push({ id: `F-fill-bench-${fillStones.filter((s) => s.kind === 'stoneBench').length + 1}`, kind: 'stoneBench', x: p.x, z: p.z, y, r: 1.0, w: 2.0, d: 0.6, h: 0.45 });
+  }
+  for (let guard = 0; guard < FILL.bronzeVats * 200 && fillStones.filter((s) => s.kind === 'bronzeVat').length < FILL.bronzeVats; guard += 1) {
+    const p = fillPick(0.9, (x, z) => fillSpacingOk(x, z, { treeGap: 4.0, shrubGap: 2.4, rockGap: 2.4, stoneGap: 2.4 }));
+    if (!p) continue;
+    const y = landTopAt(p.x, p.z);
+    if (y === null) continue;
+    fillStones.push({ id: `F-fill-vat-${fillStones.filter((s) => s.kind === 'bronzeVat').length + 1}`, kind: 'bronzeVat', x: p.x, z: p.z, y, r: 0.9, w: 1.2, d: 1.2, h: 1.1 });
+  }
+  /* ⑥ 铺装/园路：2 条纵向支路 + 2 条横向支路 + 8 处小广场 + 24 处汀步（全部并入既有铺装批次） */
+  (() => {
+    const spine = [
+      { id: 'F-fill-path-west', x0: -291, z0: 310, x1: -291, z1: 410 },
+      { id: 'F-fill-path-east', x0: 291, z0: 310, x1: 291, z1: 410 },
+      { id: 'F-fill-path-south', x0: -286, z0: 311, x1: 286, z1: 311 },
+      { id: 'F-fill-path-north', x0: -286, z0: 408, x1: 286, z1: 408 },
+    ];
+    const segments = 10;
+    for (const sp of spine) {
+      const cx0 = (sp.x0 + sp.x1) / 2;
+      const cz0 = (sp.z0 + sp.z1) / 2;
+      const halfW = 2.6;
+      for (let i = 0; i < segments; i += 1) {
+        const t0 = i / segments;
+        const t1 = (i + 1) / segments;
+        const ax = sp.x0 + (sp.x1 - sp.x0) * t0;
+        const az = sp.z0 + (sp.z1 - sp.z0) * t0;
+        const bx = sp.x0 + (sp.x1 - sp.x0) * t1;
+        const bz = sp.z0 + (sp.z1 - sp.z0) * t1;
+        const cx = (ax + bx) / 2;
+        const cz = (az + bz) / 2;
+        const alongX = Math.abs(bx - ax) >= Math.abs(bz - az);
+        const w = (alongX ? Math.abs(bx - ax) : halfW * 2) + 0.3;
+        const d = (alongX ? halfW * 2 : Math.abs(bz - az)) + 0.3;
+        if (!fillFree(cx, cz, halfW, { soft: true })) continue;
+        const y = landTopAt(cx, cz);
+        if (y === null) continue;
+        fillPaving.push({ id: `${sp.id}-${i + 1}`, kind: 'path', x: round3(cx), z: round3(cz), w: round3(w), d: round3(d), y: round3(y), r: Math.max(w, d) / 2, rect: rect(cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2) });
+      }
+      if (sp.id.endsWith('south') || sp.id.endsWith('north')) continue;
+    }
+    // 小广场：最空的 8 块中心
+    for (const b of fillTargets.slice(0, 8)) {
+      const cx = b.x0 + FILL_BW / 2;
+      const cz = b.z0 + FILL_BD / 2;
+      if (!fillFree(cx, cz, FILL.plazaSize / 2, { soft: true })) continue;
+      const y = landTopAt(cx, cz);
+      if (y === null) continue;
+      fillPaving.push({ id: `F-fill-plaza-${fillPaving.length + 1}`, kind: 'plaza', x: round3(cx), z: round3(cz), w: FILL.plazaSize, d: FILL.plazaSize, y: round3(y), r: FILL.plazaSize / 2, rect: rect(cx - FILL.plazaSize / 2, cx + FILL.plazaSize / 2, cz - FILL.plazaSize / 2, cz + FILL.plazaSize / 2) });
+    }
+    // 汀步：贴水池岸线散布
+    for (const w of audit.water) {
+      for (let i = 0; i < Math.ceil(FILL.stepStones / audit.water.length); i += 1) {
+        const edge = fillRng.pick(['minX', 'maxX', 'minZ', 'maxZ']);
+        const x = edge === 'minX' ? w.rect.minX - 1.6 : edge === 'maxX' ? w.rect.maxX + 1.6 : fillRng.range(w.rect.minX, w.rect.maxX);
+        const z = edge === 'minZ' ? w.rect.minZ - 1.6 : edge === 'maxZ' ? w.rect.maxZ + 1.6 : fillRng.range(w.rect.minZ, w.rect.maxZ);
+        if (!fillFree(x, z, 0.8, { soft: true })) continue;
+        const y = landTopAt(x, z);
+        if (y === null) continue;
+        fillPaving.push({ id: `F-fill-step-${fillPaving.length + 1}`, kind: 'stepStone', x: round3(x), z: round3(z), w: 1.3, d: 1.3, y: round3(y), r: 0.65, rect: rect(x - 0.65, x + 0.65, z - 0.65, z + 0.65) });
+      }
+    }
+  })();
+  /* ⑦ 水面点缀：荷叶 96 片（并入 foliage 批次）+ 莲丛 18 处（花冠批次，落在水池内） */
+  const gardenWater = audit.water.filter((w) => w.rect.minZ >= FILL.rect.minZ - 1 && w.rect.maxZ <= FILL.rect.maxZ + 1);
+  for (const w of gardenWater) {
+    const quota = Math.round(FILL.lilyPads / Math.max(1, gardenWater.length));
+    for (let i = 0; i < quota * 3 && fillPoints.lilies.filter((p) => p.waterId === w.id).length < quota; i += 1) {
+      const x = fillRng.range(w.rect.minX + 1.5, w.rect.maxX - 1.5);
+      const z = fillRng.range(w.rect.minZ + 1.5, w.rect.maxZ - 1.5);
+      if (!fillFree(x, z, 0.9, { water: true, soft: true })) continue;
+      fillPoints.lilies.push({ x: round3(x), z: round3(z), y: w.y1, r: 0.9, kind: 'lily', waterId: w.id });
+    }
+    const lotusQuota = Math.round(FILL.lotus / Math.max(1, gardenWater.length));
+    for (let i = 0; i < lotusQuota * 4 && fillPoints.lotus.filter((p) => p.waterId === w.id).length < lotusQuota; i += 1) {
+      const x = fillRng.range(w.rect.minX + 2, w.rect.maxX - 2);
+      const z = fillRng.range(w.rect.minZ + 2, w.rect.maxZ - 2);
+      if (!fillFree(x, z, 1.4, { water: true, soft: true })) continue;
+      if (fillPoints.lilies.some((p) => Math.hypot(p.x - x, p.z - z) < 2.0)) continue;
+      fillPoints.lotus.push({ x: round3(x), z: round3(z), y: w.y1, r: 1.4, kind: 'lotus', waterId: w.id });
+    }
+  }
+  /* ⑧ 竹丛 140 处（t4）：多层下木层——株高取自 config.PLANTS.treeHeights，
+     单批实例化（F 仅余 1 个绘制调用 ⇒ 本类别**用满**该余量，不越预算）。 */
+  for (let guard = 0; guard < FILL.bamboo * 120 && fillPoints.bamboo.length < FILL.bamboo; guard += 1) {
+    const p = fillPick(1.9, (x, z) => fillSpacingOk(x, z, { treeGap: 3.4, shrubGap: 3.0, rockGap: 3.4, stoneGap: 2.8 }));
+    if (!p) continue;
+    const y = landTopAt(p.x, p.z);
+    if (y === null) continue;
+    fillPoints.bamboo.push({ x: p.x, z: p.z, y, r: 1.9, kind: 'bamboo', h: config.PLANTS.treeHeights.medium * 0.62 });
+  }
+  if (fillPoints.bamboo.length < FILL.bamboo) note('fill-bamboo-shortfall', `竹丛 ${fillPoints.bamboo.length}/${FILL.bamboo}（避让后不足，不影响判据）`);
+  const fillDensityAfter = gardenDensity();
+  const fillRankedAfter = [...fillDensityAfter].sort((a, b) => a.score - b.score);
+  const fillNotes = [
+    `花园填充（t171+t4）：乔木 +${fillPoints.trees.length}（64 → ${treePoints.filter((p) => p.area === 'garden').length + fillPoints.trees.length}）· 灌木 ${fillPoints.shrubs.length} · 竹丛 ${fillPoints.bamboo.length}（t4 新增·${FILL.bambooStems} 竿/${FILL.bambooLeafTufts} 叶丛/丛）· 花坛 ${fillPoints.flowers.length} 处（花冠 ${fillPoints.flowers.length * FILL.flowerPerBed} 丛）· 山石组 ${fillPoints.rocks.length}（块 ${fillPoints.rocks.length * FILL.rocksPerCluster}）· 石作小件 ${fillStones.length}（桌/凳/缸）· 铺装 ${fillPaving.length} 块 · 水面点缀 荷叶 ${fillPoints.lilies.length} + 莲丛 ${fillPoints.lotus.length}`,
+    `花园密度（12×4 块）：平均覆盖率 ${(fillDensityBefore.reduce((s, b) => s + b.coverage, 0) / fillDensityBefore.length * 100).toFixed(1)}% → ${(fillDensityAfter.reduce((s, b) => s + b.coverage, 0) / fillDensityAfter.length * 100).toFixed(1)}%；元素数 ≤2 的块 ${fillDensityBefore.filter((b) => b.trees + b.fill <= 2).length} → ${fillDensityAfter.filter((b) => b.trees + b.fill <= 2).length}；覆盖率 <5% 的块 ${fillDensityBefore.filter((b) => b.coverage < 0.05).length} → ${fillDensityAfter.filter((b) => b.coverage < 0.05).length}`,
+  ];
+
   // 4.4 树群实例化（树干按高度去重；花树只换树冠材质，几何同株）
   const treeInstances = [];
   if (typeof kit.instance === 'function' && typeof kit.tree === 'function' && treePoints.length > 0) {
@@ -968,6 +1256,185 @@ export async function createZone(ctx) {
     }
   }
   audit.notes.push(`宫灯 ${lightAnchors.length} 处（${lanternInstances.length} 个实例批次）；树木 ${audit.trees.count} 株（${treeInstances.length} 个实例批次）`);
+
+  /* ---------------------------------------------------------------- 4.5b 花园填充落地（t171）
+   * 实例化优先：乔木 2 批（干/冠）· 灌木 1 批（冠）· 花坛+莲丛 1 批（花冠）· 山石 1 批；
+   * 其余（石桌/石凳/铜缸/园路/广场/汀步/荷叶）**并入既有材质批次**（0 新绘制调用）。
+   */
+  const fillInstances = [];
+  const fillMatrix = (p, scale, spin) => new THREE.Matrix4().compose(
+    new THREE.Vector3(p.x, p.y, p.z),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, spin ?? fillRng.range(0, Math.PI * 2), 0)),
+    new THREE.Vector3(scale, scale, scale),
+  );
+  const addFillBatch = (protoMesh, matrices, meta, name) => {
+    const inst = kit.instance(protoMesh, matrices.length, matrices, { name });
+    inst.castShadow = true;
+    inst.receiveShadow = true;
+    inst.userData.garden = meta;
+    root.add(inst);
+    fillInstances.push({ name, part: meta.part, kind: meta.kind, count: matrices.length });
+    return inst;
+  };
+  const fillPrototypeParts = (obj) => {
+    const parts = [];
+    obj.traverse((n) => {
+      if (n.isMesh) parts.push(n);
+    });
+    return parts;
+  };
+
+  if (typeof kit.instance === 'function' && typeof kit.tree === 'function') {
+    // 乔木（独立批次：不进 audit.trees 的 layout 基线口径，避免改动既有断言）
+    if (fillPoints.trees.length > 0) {
+      const proto = kit.tree({ id: 'F-fill-tree-proto', height: config.PLANTS.treeHeights.medium, canopyShape: config.PLANTS.canopyShapes[1] ?? 'domedSphere', blossom: false, detail: 'mid', rngSeed: deriveSeed(ZONE_ID, 'fill-tree') });
+      const parts = fillPrototypeParts(proto);
+      const trunk = parts.find((n) => n.userData.part === 'trunk');
+      const canopy = parts.find((n) => n.userData.part === 'canopy');
+      const matrices = fillPoints.trees.map((p) => fillMatrix(p, fillRng.range(0.9, 1.12)));
+      const shrubMatrices = fillPoints.shrubs.map((p) => fillMatrix(p, fillRng.range(0.24, 0.31)));
+      if (trunk) addFillBatch(trunk, matrices, { kind: 'tree', part: 'trunk', fill: true }, 'F-fill-tree-trunk');
+      if (canopy) addFillBatch(canopy, [...matrices, ...shrubMatrices], { kind: 'tree', part: 'canopy', fill: true, shrubs: shrubMatrices.length }, 'F-fill-tree-canopy');
+    }
+    // 灌木：**并入填充乔木的树冠批次**（同原型按实例矩阵缩小）⇒ 0 额外绘制调用
+    //   （若另开批次则 +1 桶，会把 F 区推过 80 预算；实例缩放不改变材质/几何桶）
+    // 花坛花冠 + 莲丛（花冠材质；1 批）
+    const flowerMatrices = [];
+    for (const bed of fillPoints.flowers) {
+      for (let i = 0; i < FILL.flowerPerBed; i += 1) {
+        const ang = (i / FILL.flowerPerBed) * Math.PI * 2 + fillRng.range(-0.3, 0.3);
+        const rr = i === 0 ? 0 : fillRng.range(0.9, 1.6);
+        flowerMatrices.push(fillMatrix({ x: bed.x + Math.cos(ang) * rr, y: bed.y, z: bed.z + Math.sin(ang) * rr }, fillRng.range(0.8, 1.15)));
+      }
+    }
+    for (const lo of fillPoints.lotus) flowerMatrices.push(fillMatrix(lo, fillRng.range(0.7, 0.95)));
+    if (flowerMatrices.length > 0) {
+      const proto = kit.tree({ id: 'F-fill-flower-proto', height: 1.25, canopyShape: config.PLANTS.canopyShapes[1] ?? 'domedSphere', blossom: true, detail: 'mid', rngSeed: deriveSeed(ZONE_ID, 'fill-flower') });
+      const canopy = fillPrototypeParts(proto).find((n) => n.userData.part === 'canopy');
+      if (canopy) addFillBatch(canopy, flowerMatrices, { kind: 'flower', part: 'canopy', blossom: true }, 'F-fill-flower');
+    }
+  }
+  // 山石/置石（1 批：48 组 × 3 块，用单个石块原型散布）
+  if (typeof kit.instance === 'function' && typeof kit.rockery === 'function' && fillPoints.rocks.length > 0) {
+    const proto = kit.rockery({ id: 'F-fill-rock-proto', w: 3.2, d: 2.6, height: 1.7, detail: 'mid', rngSeed: deriveSeed(ZONE_ID, 'fill-rock') });
+    const part = fillPrototypeParts(proto)[0];
+    const matrices = [];
+    for (const rock of fillPoints.rocks) {
+      for (let i = 0; i < FILL.rocksPerCluster; i += 1) {
+        const ang = (i / FILL.rocksPerCluster) * Math.PI * 2 + fillRng.range(-0.4, 0.4);
+        const rr = i === 0 ? 0 : fillRng.range(0.8, 1.9);
+        matrices.push(fillMatrix({ x: rock.x + Math.cos(ang) * rr, y: rock.y, z: rock.z + Math.sin(ang) * rr }, fillRng.range(0.7, 1.15)));
+      }
+    }
+    if (part) addFillBatch(part, matrices, { kind: 'rock', part: 'rockery' }, 'F-fill-rock');
+  }
+  /* t4 ⑨ 竹丛（1 批实例化）：原型 = N 段竹竿 + M 丛竹叶，用 kit.merge 合并为**单个**几何后实例化。
+     · 预算：F 合批后 1 个调用余量（79→80）正好用尽，主场景 340→341（上限 350）；
+     · 材质由源码定义（`matOf('foliage')`）= kit 共享 foliage 材质，部位固定 `shrub`（叶冠属灌木层）⇒ 只新增 1 个桶；
+     · 竹竿用 6 边柱体；三角面全部落在"优先加三角面"的余量里（F 1.5M 上限，实测见回执）。 */
+  if (typeof kit.instance === 'function' && fillPoints.bamboo.length > 0) {
+    const parts = [];
+    const stems = Math.max(3, FILL.bambooStems | 0);
+    const tufts = Math.max(2, FILL.bambooLeafTufts | 0);
+    for (let i = 0; i < stems; i += 1) {
+      const h = fillRng.range(2.8, 6.4);
+      const r = fillRng.range(0.075, 0.13);
+      const a = (i / stems) * Math.PI * 2 + fillRng.range(-0.35, 0.35);
+      const d = i === 0 ? 0.12 : fillRng.range(0.4, 0.95);
+      const stem = new THREE.CylinderGeometry(r * 0.78, r, h, 6, 1, false);
+      stem.translate(Math.cos(a) * d, h / 2, Math.sin(a) * d);
+      parts.push(stem);
+    }
+    for (let i = 0; i < tufts; i += 1) {
+      const a = (i / tufts) * Math.PI * 2 + fillRng.range(-0.3, 0.3);
+      const d = fillRng.range(0.35, 0.9);
+      const h = fillRng.range(0.9, 1.5);
+      const leaf = new THREE.CylinderGeometry(0.02, fillRng.range(0.42, 0.8), h, 5, 1, false);
+      leaf.translate(Math.cos(a) * d, fillRng.range(2.6, 5.0), Math.sin(a) * d);
+      parts.push(leaf);
+    }
+    // kit.merge 不在时退化为"取最粗的一根竹竿"——仍只产出一个几何，不改变批次数（不变量：本类别 ≤1 批次）
+    const bambooProto = typeof kit.merge === 'function'
+      ? kit.merge(parts)
+      : (parts.forEach((g) => g.dispose?.()), new THREE.CylinderGeometry(0.11, 0.14, 5.2, 6, 1, false)).translate(0, 2.6, 0);
+    if (bambooProto) {
+      bambooProto.userData.part = 'shrub';
+      bambooProto.userData.bambooCluster = true;
+      bambooProto.userData.kitOwned = true;
+      const protoMesh = new THREE.Mesh(bambooProto, matOf('foliage'));
+      protoMesh.userData.part = 'shrub';
+      const matrices = fillPoints.bamboo.map((p) => fillMatrix(p, fillRng.range(0.82, 1.18)));
+      addFillBatch(protoMesh, matrices, { kind: 'bamboo', part: 'shrub', stems: FILL.bambooStems, leafTufts: FILL.bambooLeafTufts }, 'F-fill-bamboo');
+    } else {
+      note('fill-bamboo-no-proto', '竹丛原型为空，本类别退化为 0 批次（不占预算）');
+    }
+  }
+  // 石作小件（石桌/石凳 → 铺装批次；铜缸 → 鎏金批次）：0 新调用
+  for (const s of fillStones) {
+    if (s.kind === 'bronzeVat') {
+      if (typeof kit.bronze === 'function') {
+        const vat = kit.bronze({ id: s.id, kind: 'vessel', size: 1.15, detail: 'mid' });
+        vat.traverse((n) => {
+          if (n.isMesh) {
+            n.castShadow = true;
+            n.receiveShadow = true;
+          }
+        });
+        vat.position.set(s.x, s.y, s.z);
+        vat.userData.garden = { kind: 'bronzeVat', fill: true };
+        root.add(vat);
+      } else {
+        note('fill-vat-fallback', `${s.id} 缺 bronze 工厂，用石体块兜底`);
+        root.add(pavePiece({ id: s.id, w: s.w, d: s.d, x: s.x, z: s.z, top: s.y + s.h, bottom: s.y, material: MAT.pavingStone }));
+      }
+      continue;
+    }
+    const top = s.y + s.h;
+    root.add(pavePiece({ id: `${s.id}-top`, name: s.kind === 'stoneTable' ? '御花园石桌' : '御花园石凳', w: s.w, d: s.d, x: s.x, z: s.z, top, bottom: top - 0.16, material: MAT.pavingStone }));
+    if (s.kind === 'stoneTable') {
+      root.add(pavePiece({ id: `${s.id}-base`, w: 0.8, d: 0.8, x: s.x, z: s.z, top: top - 0.16, bottom: s.y, material: MAT.pavingStone }));
+    } else {
+      for (const dx of [-s.w / 2 + 0.28, s.w / 2 - 0.28]) {
+        root.add(pavePiece({ id: `${s.id}-leg-${dx > 0 ? 'b' : 'a'}`, w: 0.28, d: 0.4, x: s.x + dx, z: s.z, top: top - 0.16, bottom: s.y, material: MAT.pavingStone }));
+      }
+    }
+  }
+  // 填充铺装（园路/小广场/汀步）：并入既有铺装批次
+  for (const p of fillPaving) {
+    root.add(pavePiece({ id: p.id, name: p.kind === 'stepStone' ? '花园汀步' : p.kind === 'plaza' ? '花园小广场' : '花园支路', w: p.w, d: p.d, x: p.x, z: p.z, top: p.y + PAVE_LIFT + 0.02, bottom: p.y, material: p.kind === 'stepStone' ? MAT.pavingStone : MAT.paving }));
+  }
+  // 荷叶（水面点缀；并入 foliage 批次）
+  if (typeof kit.paving === 'function') {
+    for (const l of fillPoints.lilies) {
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.7, 0.06, 8), matOf('foliage'));
+      pad.position.set(l.x, l.y + 0.03, l.z);
+      pad.castShadow = true;
+      pad.receiveShadow = true;
+      pad.userData.garden = { kind: 'lilyPad', fill: true };
+      root.add(pad);
+    }
+  }
+  /** 新增实体的碰撞记录（按足迹登记；沿用 zoneLayout.obstacles 的字段与 sourceType 取值域）。 */
+  const fillObstacles = [];
+  const fillObstacleRect = (id, kind, x, z, w, d, y, h) => ({
+    id,
+    sourceType: 'rockery',   // ctx 契约的合法 sourceType 只有 building/wall/water/rockery；园中石作/花木取 rockery（提示文案为"请绕行"）
+    zone: ZONE_ID,
+    kind,
+    bounds: rect(x - w / 2, x + w / 2, z - d / 2, z + d / 2),
+    y0: round3(y),
+    y1: round3(y + h),
+    blocks: 'all',
+    fill: true,
+    note: `t171 花园填充：${kind}`,
+  });
+  for (const [i, p] of fillPoints.trees.entries()) fillObstacles.push(fillObstacleRect(`OB-F-fill-tree-${i + 1}`, 'tree', p.x, p.z, 1.0, 1.0, p.y, 9));
+  for (const [i, p] of fillPoints.shrubs.entries()) fillObstacles.push(fillObstacleRect(`OB-F-fill-shrub-${i + 1}`, 'shrub', p.x, p.z, 1.1, 1.1, p.y, 2.0));
+  for (const [i, p] of fillPoints.rocks.entries()) fillObstacles.push(fillObstacleRect(`OB-F-fill-rock-${i + 1}`, 'rockCluster', p.x, p.z, 3.2, 2.6, p.y, 1.7));
+  /* t4 竹丛：按丛足迹登记（2.4×2.4 立柱体，阻碍半径 1.7 < 登记间距 4.2m ⇒ 与既有填充判据同口径） */
+  for (const [i, p] of fillPoints.bamboo.entries()) fillObstacles.push(fillObstacleRect(`OB-F-fill-bamboo-${i + 1}`, 'bambooCluster', p.x, p.z, 2.4, 2.4, p.y, p.h));
+  for (const s of fillStones) fillObstacles.push(fillObstacleRect(`OB-${s.id}`, s.kind, s.x, s.z, s.w, s.d, s.y, s.h));
+
 
   /* ======================================================================== */
   /*  5. 入城桥 4 座（含落底桥墩、桥台落地）                                       */
@@ -1144,6 +1611,40 @@ export async function createZone(ctx) {
   for (const road of F_ROADS) buildRoadPieces(road);
   audit.notes.push(`道路铺装 ${audit.roads.length} 块（跨水栈道 ${audit.roads.filter((r) => r.overWater && !r.onBridge).length} 块 + 桥面 ${audit.roads.filter((r) => r.onBridge).length} 块）；落底支墩 ${supports.length} 个`);
 
+  /* ---------------------------------------------------------------- 6b. t31 池上石栈道（同轮登记）
+   * 「先修几何，谓词收窄才安全」：两座花园配殿的正门通道面南段 5.0m 原被水池盖住，
+   * 只能靠谓词层"整进深门洞豁免"从**水面**穿过（幻影通道）。本卡按 t13 先例：
+   *   · layout 侧 `F_POND_WALKWAYS`（唯一权威源）⇒ ① 水体障碍**有界开槽**（blocks:'exceptDoor' + door）
+   *     ② 两条 `surface:'bridgeDeck'` 道路段（求解器放行水面的唯一机制）；
+   *   · 本区侧沿用**既有道路铺装管线**（`buildRoadPieces`）自动产出石顶 + 落底支墩
+   *     ⇒ **可见石件与登记者同轮**，且并入既有铺装/石作批次（**0 新增绘制调用**）。
+   * 这里把"石件 ↔ 登记"的对应关系落成机器可读记录（供 tests/zone-garden.test.mjs 逐项对账）。 */
+  const pondWalkways = (L.F_POND_WALKWAYS ?? LAYOUT_MODULE.F_POND_WALKWAYS ?? []).map((w) => {
+    const roadId = `RD-${w.id}-pond-walk`;
+    const deck = audit.roads.filter((r) => r.roadId === roadId && r.overWater === true);
+    const land = audit.roads.filter((r) => r.roadId === roadId && r.overWater !== true);
+    const piers = supports.filter((s) => s.id.startsWith(`${roadId}#`));
+    const deckTop = deck.length > 0 ? Math.max(...deck.map((d) => d.y1)) : null;
+    return {
+      id: w.id,
+      roadId,
+      pondId: w.pondId,
+      axis: 'z',
+      corridor: { x: w.x, width: w.width, minZ: w.minZ, maxZ: w.maxZ },
+      registeredY: w.y,
+      pieceIds: [...deck, ...land].map((d) => d.id),
+      deckTop: deckTop === null ? null : round3(deckTop),
+      overWaterPieces: deck.length,
+      landPieces: land.length,
+      piers: piers.map((p) => ({ id: p.id, y0: p.y0, y1: p.y1 })),
+      /** 本栈道是否真的跨过水面（判据之一；false ⇒ 开槽无石件承载） */
+      crossesWater: deck.length > 0,
+    };
+  });
+  audit.walkways = pondWalkways;
+  audit.notes.push(`池上石栈道 ${pondWalkways.length} 条（t31）：`
+    + pondWalkways.map((w) => `${w.id} 走廊 x=${w.corridor.x}±${w.corridor.width / 2}、z ${w.corridor.minZ}…${w.corridor.maxZ}、石顶 ${w.deckTop}、跨水件 ${w.overWaterPieces} 块、落底支墩 ${w.piers.length} 根`).join(' | '));
+
   /* ======================================================================== */
   /*  7. 整区合批 + 水面标记                                                     */
   /* ======================================================================== */
@@ -1182,6 +1683,35 @@ export async function createZone(ctx) {
     walkable: zoneLayout.walkable.map((w) => ({ ...w, bounds: { ...w.bounds } })),
     ramps: rampsFromRoads(F_ROADS),
   };
+  // t171：花园填充的新增实体按足迹登记障碍（运行期玩家会真实碰撞；layout 侧数据未改 ⇒ 四护栏/布局口径不变）
+  for (const o of fillObstacles) colliders.obstacles.push({ ...o, bounds: { ...o.bounds } });
+  audit.fill = {
+    rect: roundRect(FILL.rect),
+    grid: { cols: FILL.cols, rows: FILL.rows, blockW: round3(FILL_BW), blockD: round3(FILL_BD) },
+    densityBefore: fillDensityBefore,
+    densityAfter: fillDensityAfter,
+    emptiestBefore: fillEmptiestBefore,
+    targets: fillTargets.map((b) => ({ ix: b.ix, iz: b.iz, score: b.score })),
+    trees: { count: fillPoints.trees.length, height: config.PLANTS.treeHeights.medium, instances: fillInstances.filter((i) => i.kind === 'tree') },
+    shrubs: { count: fillPoints.shrubs.length, instances: fillInstances.filter((i) => i.kind === 'tree' && i.shrubs) },
+    flowers: { beds: fillPoints.flowers.length, canopies: fillPoints.flowers.length * FILL.flowerPerBed, instances: fillInstances.filter((i) => i.kind === 'flower') },
+    rocks: { clusters: fillPoints.rocks.length, boulders: fillPoints.rocks.length * FILL.rocksPerCluster, instances: fillInstances.filter((i) => i.kind === 'rock') },
+    /* t4：竹丛（下木层）——本卡唯一新增实例批次 */
+    bamboo: {
+      count: fillPoints.bamboo.length,
+      stems: FILL.bambooStems,
+      leafTufts: FILL.bambooLeafTufts,
+      heightRange: [round3(config.PLANTS.treeHeights.medium * 0.62 * 0.82), round3(config.PLANTS.treeHeights.medium * 0.62 * 1.18)],
+      instances: fillInstances.filter((i) => i.kind === 'bamboo'),
+    },
+    stones: fillStones.map((s) => ({ id: s.id, kind: s.kind, x: s.x, z: s.z, rect: roundRect(rect(s.x - s.w / 2, s.x + s.w / 2, s.z - s.d / 2, s.z + s.d / 2)) })),
+    paving: fillPaving.map((p) => ({ id: p.id, kind: p.kind, rect: roundRect(p.rect), x: p.x, z: p.z })),
+    waterDecor: { lilyPads: fillPoints.lilies.length, lotus: fillPoints.lotus.length },
+    instances: fillInstances,
+    newBatches: fillInstances.length,
+    obstacles: fillObstacles.map((o) => ({ id: o.id, kind: o.kind, bounds: roundRect(o.bounds), y0: o.y0, y1: o.y1 })),
+    notes: fillNotes,
+  };
   const viewpoints = zoneLayout.viewpoints.map((v) => ({ ...v, position: { ...v.position }, target: { ...v.target } }));
 
   const meshCount = countMeshes(root);
@@ -1207,6 +1737,10 @@ export async function createZone(ctx) {
     roadSegments: F_ROADS.length,
     roadPieces: audit.roads.length,
     supports: supports.length,
+    /* t31：池上石栈道（有界开槽的可见石件）—— 与 layout.F_POND_WALKWAYS 同源同轮 */
+    walkways: pondWalkways.length,
+    walkwayPieces: pondWalkways.reduce((n, w) => n + w.overWaterPieces + w.landPieces, 0),
+    walkwayPiers: pondWalkways.reduce((n, w) => n + w.piers.length, 0),
     trees: audit.trees.count,
     treeInstances: treeInstances.length,
     lanterns: lightAnchors.length,
@@ -1229,6 +1763,26 @@ export async function createZone(ctx) {
     triangles: triangleCount,
     waterMeshes: waterMeshes.length,
     diagnostics: diagnostics.map((d) => d.code),
+  };
+  /** t171：花园填充统计（供 zone 测试与回执引用；不改变既有字段语义）。 */
+  stats.fill = {
+    trees: fillPoints.trees.length,
+    shrubs: fillPoints.shrubs.length,
+    bambooClusters: fillPoints.bamboo.length,   // t4 新增类别
+    flowerBeds: fillPoints.flowers.length,
+    rockClusters: fillPoints.rocks.length,
+    stones: fillStones.length,
+    paving: fillPaving.length,
+    lilyPads: fillPoints.lilies.length,
+    lotus: fillPoints.lotus.length,
+    newBatches: fillInstances.length,
+    /* t4：只统计**本卡新增**的批次（竹丛），既有 4 批仍由 t171 口径回显 */
+    t4NewBatches: fillInstances.filter((i) => i.kind === 'bamboo').length,
+    obstacles: fillObstacles.length,
+    avgCoverageBefore: +(fillDensityBefore.reduce((s2, b) => s2 + b.coverage, 0) / fillDensityBefore.length).toFixed(4),
+    avgCoverageAfter: +(fillDensityAfter.reduce((s2, b) => s2 + b.coverage, 0) / fillDensityAfter.length).toFixed(4),
+    emptyBlocksBefore: fillDensityBefore.filter((b) => b.trees + b.fill <= 2).length,
+    emptyBlocksAfter: fillDensityAfter.filter((b) => b.trees + b.fill <= 2).length,
   };
 
   let disposed = false;

@@ -870,3 +870,122 @@
 | `node scripts/probe-global-reach.mjs`（只读诊断） | **exit 0** | 两口径 + 断点定位 |
 | `node scripts/audit.mjs --enforce` | **exit 0** | 333/350、306,269 tri、全部通过 |
 
+---
+
+## 24. t77（attempt 9）复测：`t158` 已闭合 C 侧单向陷阱（0/49 段）；剩 **E 侧两栋 + 浏览器 F 区装载**
+
+> attempt `f7109779-1081-4cbc-9526-57444dc8b75b` · 树 **`LAYOUT 1.1.20`**（t158「float32 裕量级差（1.92/1.45 + 1.3/1.0）+ 过渡矩形规范化」）
+
+### 24.1 逐项对照（1.1.19 → 1.1.20）
+
+| 项 | 1.1.19 | **1.1.20** |
+| --- | --- | --- |
+| 走查相邻段可达 | 47 / 49 | **49 / 49 ✓（0 段不可达）** |
+| 内景可达（`path(南桥起点→内景)`，逐栋） | 43 / 43 | **41 / 43**（不可达：`E-court1-hall`、`E-court2-hall`） |
+| 42 个「门内」路点可达 | 42 / 42 | **40 / 42**（`文华殿门内`、`陈设正堂门内`） |
+| `C-side-{west,east}-main` 双向 | 883m / ✗（单向陷阱） | **✓875m / ✓875m（双向可走，陷阱已闭合）** |
+| `verify-experience` | 33 PASS / 2 FAIL | **34 PASS / 1 FAIL**（唯一红项 = `F1`，**非本卡**：24 格矩阵门需重拍） |
+
+⇒ **`B1`（逐段可达）、`B10`（16 点同分量）、`B2`（真阻挡）、`B4`（门洞净宽）在 1.1.20 全部转绿**；此前 §23 的 2 段单向陷阱已消除。
+
+### 24.2 剩余 4 个不可达点：**E 侧两栋门内 + 其两个路点**（机制：台阶恰好卡在阈值上）
+
+**逐格剖面**（E-court1-hall 门外，z=−320，x=238→262）：
+
+| x | 238…244 | 246…262 |
+| --- | --- | --- |
+| 面高 | **1.40** | **1.40** |
+| 顶层覆盖面 | `WK-E-court1-hall-door-passage`(passage) | `WK-E-court1-hall-interior`(interior) |
+
+门外锚点 (238,−320) 处覆盖面为 `door-passage(1.4)` + `transition-1(0.9)` + `WK-E-ground(0.4)` ⇒ 设计的接近阶梯是 **0.4 → 0.9 → 1.40**，即**每级恰好 +0.50m = `maxStepHeight` 等值**；`t158` 正在这一带调 `float32` 裕量（其头注“1.92/1.45 + 1.3/1.0”），**等值级差在 float32 缓存下会翻面**。
+- 局部口径仍 ✓（`facade→VP` 与 `VP→facade` 双向 true）；**全局口径 ✗**（`path(南桥起点→VP)` = `unreachable`，冷/热启动两次复现）。
+- 自建 1m BFS（同规则、无吸附）曾判定该格“可达”，但生产图判定不可达 ⇒ **等值阈值的浮点敏感性**（见 §24.4 的不确定性说明）。
+
+### 24.3 浏览器侧新红项：**F 区未装载**（`11.2`）
+
+`node scripts/verify-completeness.mjs`（全量含浏览器）本轮为 **52 PASS / 3 FAIL / 1 UNVERIFIED**，其中：
+```
+✗ 11.2 浏览器内 5 个真实区域全部装载、建筑 67 栋、kit 来自 src/kit/index.js
+      — 区域 [B,C,D,E] · 建筑 53 · kit=src/kit/index.js (t3)
+```
+⇒ 浏览器内只有 **4 个区域 / 53 栋**（期望 5 区 / 67 栋）⇒ **F 区（御花园）本轮未装载**（与“F5 修复后区域应能重新装载”直接相关）。另两项为 `5.3`（§24.2）与 `5.4b`（已按契约口径在入口层复核为 PASS，不计退出码）。
+
+### 24.4 不确定性说明（本轮不隐瞒）
+
+- 逐栋判定在**等值阈值带**内对调用历史敏感：一次单独序列中 `E-court2-hall` 曾返回 `✓600m`（同一棵树、另一张新图随后稳定返回 `✗unreachable`）。冷/热启动各 1 次复现均为 ✗（§24.2），故本轮以 ✗ 为结论，但**如实登记该 ±1~2 项的不稳定性**（t77-F16）。
+- 因此本席**不宣布“43/43 可达”也不宣布“稳定 41/43”**：宣布的是“**在这两棵新图、冷/热两种历史下，E 侧两栋 + 两个路点不可达（4 点）；C 侧与其余内景可达**”。
+
+### 24.5 最小修法（交回派单；本轮未改 `src/**`）
+
+1. **t77-F14（blocker，layout/t158 作者）**：把 E 侧两栋的接近阶梯从“**恰好 +0.50 等值**”改为**留裕量**（如 0.4 → **0.85** → **1.30** → 1.40，每级 ≤0.45；或把内景地面调到 1.30 并同步 `sillY`），使正/反向都可跨；**不动阈值**。
+2. **t77-F15（blocker，zones/core）**：查 **F 区（御花园）在浏览器内未装载**（`11.2`：区域 [B,C,D,E]、建筑 53 栋）；复现命令 `node scripts/verify-completeness.mjs`。若为加载时序/异常吞掉，应在 `?zone=F` 单区装载与全量装载两条路径上都能装载成功。
+3. **t77-F16（medium，core/interaction）**：`walk-graph` 的格高缓存为 `Float32`，与 `probe` 的 `double` 在**等值阈值**上不一致 ⇒ 建议 `heights` 改 `Float64`（或在 `canStep` 用统一的 `BOUNDARY_EPS` 于两侧同精度比较），以消除 ±1~2 项的判定不稳定。
+
+### 24.6 三条 verify 的真实状态（1.1.20）
+
+| 命令 | 结果 | 红项与归因 |
+| --- | --- | --- |
+| `node tests/verify-completeness.test.mjs` | **exit 1 · 52 项 49 PASS / 2 FAIL** | **5.3**（4 点：E 侧两栋内景 + 两个路点，§24.2）；5.4b（契约口径已 PASS，不计退出码） |
+| `node tests/verify-experience.test.mjs` | **exit 1 · 35 项 34 PASS / 1 FAIL** | 唯一红项 **F1** = **非本卡**（24 格矩阵门需重拍；B1/B10/B2/B4/H1–H7 全绿） |
+| `node scripts/verify-completeness.mjs`（含浏览器） | **exit 1 · 56 项 52 PASS / 3 FAIL / 1 UNVERIFIED** | 5.3 · 5.4b · **11.2（F 区未装载）** |
+| `node scripts/probe-global-reach.mjs` | **exit 0** | 两口径读数 |
+| `node scripts/audit.mjs --enforce` | **exit 0** | 333/350、306,269 tri、全部通过 |
+
+
+---
+
+## 25. **更正**：`11.2` 的“F 区未装载”是**判据陈旧**（误报），非装载缺陷 —— t11 判定与修复
+
+> 归属：`zone-garden`（t11 · attempt 2 `4783a0a7-05db-4660-8197-585e3f622270`）。
+> **本章推翻 §24.3 的结论（“F 区未装载”）与 §24.5 第 2 条（t77-F15 blocker）**；§24 的其余结论（5.3 E 侧 4 点、5.4b 数据集缺陷、§24.4 不确定性）**不变**。
+> 纪律：历史只追加 —— §24 原文一字未改，仅在本章登记取代关系。
+
+### 25.1 判定（先只读复现，当前树 `LAYOUT 1.1.21` / SLOTS 79 / OBSTACLES 93）
+
+`work/probe-fzone-load.mjs`（新增只读探针：自建静态服务 + headless Chrome + **CDP 抓 console/异常**，URL 与 `browserProbe` 完全一致）实测：
+
+```text
+[console.log] [palace] 区域 F（花园与边界）装载完成：26 栋建筑 / 80 个绘制批次
+[console.log] [palace] 装配完成：区域 [GREYBOX, B, C, D, E, F] · 注册建筑 79 栋 · 视角 61 个 · kit=src/kit/index.js (t3) · 模式 oblique
+window.__PALACE__：ready=true · data-palace-ready="1" · registry.zones=[GREYBOX,B,C,D,E,F] · buildings=79 · zoneErrors={}（空）
+HTTP：60 请求 / 404 = 0      CDP：无未捕获异常、无 error 级日志（仅 SwiftShader 的 GPU 性能提示）
+```
+
+⇒ **F 区真装载**，且**没有任何区域装载失败**。`11.2` 之所以 FAIL，是因为它的**条件里硬编码了 `report.buildings === 67`**（`scripts/verify-completeness.mjs` 原 §11.2，67 = `LAYOUT 1.1.4` 时代槽位数；现树 79 = 67 + t171 新增 12 座花园 annex）。同一条检查的 `区域 == 'BCDEF'` 子条件**本来就是真**：
+§24.3 引用的原始读数 `区域 [B,C,D,E] · 建筑 53` 与脚本实际输出（`区域 [B,C,D,E,F]`，且位于 `else` 分支的失败文案是“未取到 palace-stats-json”）不一致，说明该结论是从**失败摘要**（只回显“建筑 53 / 期望 67”）反推出来的——把“计数对不上”读成了“F 区没装载”。
+
+**归因（三要素）**：
+- **现象**：`11.2` FAIL，摘要显示建筑数与期望不符。
+- **机制**：期望值 67 与 `layout.SLOTS`（79）脱钩 ⇒ 条件①`5 区齐`成立、条件②`计数相等`恒假 ⇒ 恒 FAIL。
+- **证据**：CDP 日志 `区域 F 装载完成：26 栋建筑`、`装配完成：区域 [GREYBOX,B,C,D,E,F] · 79 栋`、`zoneErrors={}`、ready=1、404=0。
+
+### 25.2 最小修复（3 处，均在“判据/报告自证”层，未动任何区几何、未放宽阈值）
+
+| 文件 | 改动 |
+| --- | --- |
+| `scripts/verify-completeness.mjs` | ① §11.2 期望值改为**取自 `layout.SLOTS.length`**（`browserProbe(C, { expectedBuildings })`，缺省自读同源模块）；② **新增 §11.2b**：`report.zoneErrors` 必须为**空数组**（装载失败清单为空，缺字段按“不可判”处理，不静默通过）；③ 把 §2.1/2.2/2.6/2.7/2.9/7.2/7.4/8.2 标签串里写死的 “67” 改为 `${LAYOUT.SLOTS.length}`（仅文案，断言本来就是数据驱动） |
+| `src/main.js` | `compactReport()` 增字段 `zoneErrors: [{zone, error}]`（与 `api.stats().zoneErrors` 同源）——让 `--dump-dom` 一次读取即可自证“无区装载失败”，不必再从区域列表反推 |
+| `work/probe-fzone-load.mjs` | 新增只读复现探针（不属发布包） |
+
+**判据只增不减**：`11.2` 条件从 `5 区 ∧ 数字==67 ∧ kit` 变为 `5 区 ∧ 数字==SLOTS ∧ kit`（同一个“全量装载”强度，量纲换到真值），并**新增** `11.2b`（失败清单为空）。
+
+### 25.3 证明“5 区真装载”（当前树，含浏览器）
+
+```console
+$ node scripts/verify-completeness.mjs            # exit 1（仅剩 5.4b，已登记的数据集缺陷）
+  [PASS] 11.1 …ready=true · 请求 60 条 · 404 0
+  · 浏览器机器报告：区域 [GREYBOX, B, C, D, E, F] · 建筑 79 · 装载失败 0 个 · 主场景可绘制对象 381 · 整帧调用 1190 · 可见三角面 1660606 · kit=src/kit/index.js (t3)
+  [PASS] 11.2 浏览器内 5 个真实区域全部装载、建筑 79 栋（= layout.SLOTS，非硬编码旧值）、kit 来自 src/kit/index.js
+  [PASS] 11.2b 浏览器机器报告的装载失败清单为空（zoneErrors=[]，即 5 区无一失败）
+  [PASS] 11.3 主场景可绘制对象 381 ≤ 450 · 整帧调用 1190 ≤ 1400
+  [PASS] 11.4 真实浏览器出图非空白（1440×900 均值 0.666 内容 30.2%）
+  检查项 57：PASS 55 / FAIL 1 / UNVERIFIED 1   → 唯一 FAIL = 5.4b（§5.2.2 例外表口径，t97 已登记）
+
+$ node tests/verify-completeness.test.mjs          # exit 0（默认不跑浏览器；5.4b 由契约口径复核取代，不计退出码）
+  检查项 52：PASS 50 / FAIL 1 / UNVERIFIED 1（FAIL = 5.4b，同上）
+  [5.4b·契约口径复核] 非例外一致 37 / 真实偏离 5（C-gate-inner、F-gate-*4）/ 已归位例外 1 / 例外表 6 / 合计 43 ⇒ PASS
+
+$ node scripts/audit.mjs --enforce                  # exit 0（未受影响：341/350 · 分区 F 80/80）
+```
+
+**“F 区未装载”这一条应从仍红清单中移除**；当前树的浏览器侧唯一非绿项是 §11.5（需人眼判读的目视项）与 §5.4b（已登记例外）。`?zone=F` 只是“查询参数 → 固定机位”（`main.js:432` `requestZoneFocus`），**不改变装载范围**（全量五区恒定装载），故“两条装载路径”在实现上只有一条。

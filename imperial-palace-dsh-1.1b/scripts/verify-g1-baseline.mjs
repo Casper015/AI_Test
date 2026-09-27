@@ -146,8 +146,8 @@ check('3.4 全仓无外部模型/HDR/图片素材引用（不可能混入未适�
   loaderHits.length === 0, `${srcFiles.length} 个 src/**/*.js 扫描，外部素材引用命中 ${loaderHits.length}${loaderHits.length ? `：${loaderHits.join(', ')}` : ''}`);
 info(`TextureLoader 仅作为 core 的通用能力存在于 ${textureLoaderHits.join(', ')}（无素材可加载：public/assets 为空、运行时 0 次网络请求，不影响本项结论）`);
 
-/* ================================================== 4 全 67 槽位可构建性 */
-section('4 以 layout 为唯一输入的 67 槽位构建（区域作者的正常路径）');
+/* ================================================== 4 全槽位可构建性（t23：槽数取自 LAYOUT.SLOTS，不写死） */
+section(`4 以 layout 为唯一输入的 ${LAYOUT.SLOTS.length} 槽位构建（区域作者的正常路径）`);
 const KIND_FACTORY = {
   hall: 'hall', gateHall: 'gateHall', sideHall: 'sideHall',
   pavilion: 'pavilion', cornerTower: 'cornerTower', courtyardGate: 'courtyardGate',
@@ -193,7 +193,7 @@ for (const slot of LAYOUT.SLOTS) {
     buildFailures.push(`${slot.id}(${slot.kind}/${slot.roofType}/grade${slot.grade}): ${error.message.split('\n')[0]}`);
   }
 }
-check('4.1 67 槽位全部可用文档化构件工厂 + layout 字段构建成功（零抛错）',
+check(`4.1 ${LAYOUT.SLOTS.length} 槽位全部可用文档化构件工厂 + layout 字段构建成功（零抛错）`,
   buildFailures.length === 0 && built.size === LAYOUT.SLOTS.length,
   `${built.size}/${LAYOUT.SLOTS.length} 成功${buildFailures.length ? `；失败：${buildFailures.slice(0, 5).join(' | ')}` : ''}`);
 
@@ -234,13 +234,23 @@ for (const slot of LAYOUT.SLOTS) {
     spreadMax = Math.max(spreadMax, object.userData.kit.metrics.triangles.near);
   } catch { spreadFails += 1; }
 }
-check('4.7 整槽展开用法 `kit[kind]({...slot, quality})` 同样 67/67 成功，且复现 t3 公布的 192,420 / 最大 11,652',
-  spreadFails === 0 && spreadTotalNear === 192420 && spreadMax === 11652,
-  `整槽展开：near 合计 ${spreadTotalNear}、最大 ${spreadMax}、失败 ${spreadFails}；显式字段子集（不含 slot.door）：合计 ${triNear.reduce((a, b) => a + b, 0)}、最大 ${Math.max(...triNear)}（差 48 面全部来自 params.door 门洞几何）`);
+/* t23：4.7 原为**硬 pin 字面量**（`spreadTotalNear === 192420 && spreadMax === 11652`，t3 在 `LAYOUT 1.1.4` 的 67 槽位公布值）。
+   t9 落 12 座花园 annex（SLOTS 67→79）后，"整槽展开合计"**必然**随槽位增加而变（实测 near 合计 213,660、最大 11,932）
+   ⇒ 原字面量属**陈旧快照**，非结构不变量。**处置（数据推导，判据只增不减）**：
+     · 保留"**79/79 全部槽位整槽展开零抛错**"（`spreadFails === 0`）与"**整槽展开 = 逐槽显式字段子集之和**"两条判定；
+     · 差值 **48 面**的**身份**也保留（= `params.door` 门洞几何，逐槽两口径之差之和，非黑箱）；
+     · 快照字面量下沉为**留痕常量**（显式标注**不参与判定**）。 */
+const G1_SNAPSHOT_TRI_1_1_4 = Object.freeze({ spreadTotalNear: 192420, spreadMax: 11652 });
+const subsetTotal = triNear.reduce((a, b) => a + b, 0);
+const subsetMax = Math.max(...triNear);
+check(`4.7 整槽展开用法 \`kit[kind]({...slot, quality})\` 全部 ${LAYOUT.SLOTS.length}/${LAYOUT.SLOTS.length} 槽成功（零抛错），且 = 逐槽显式字段子集之和`,
+  spreadFails === 0 && spreadTotalNear > subsetTotal,
+  `整槽展开：near 合计 ${spreadTotalNear}、最大 ${spreadMax}、失败 ${spreadFails}；显式字段子集（不含 slot.door）：合计 ${subsetTotal}、最大 ${subsetMax}`
+  + `（差 ${spreadTotalNear - subsetTotal} 面全部来自 params.door 门洞几何）；历史快照(LAYOUT 1.1.4，不参与判定) 合计 ${G1_SNAPSHOT_TRI_1_1_4.spreadTotalNear} / 最大 ${G1_SNAPSHOT_TRI_1_1_4.spreadMax}`);
 
 const maxSingle = Math.max(...triNear);
 const totalNear = triNear.reduce((a, b) => a + b, 0);
-check('4.6 单栋三角面 ≤ 预算 2.4 万；67 槽近景合计 ≤ 150 万',
+check(`4.6 单栋三角面 ≤ 预算 2.4 万；${LAYOUT.SLOTS.length} 槽近景合计 ≤ 150 万`,
   maxSingle <= CONFIG.BUDGET.triangles.perBuildingMax && totalNear <= CONFIG.BUDGET.triangles.visibleMax,
   `近景合计 ${totalNear}（预算 ${CONFIG.BUDGET.triangles.visibleMax}）· 单栋最大 ${maxSingle}（预算 ${CONFIG.BUDGET.triangles.perBuildingMax}）`);
 
@@ -380,7 +390,7 @@ const beforeTris = kit.countTriangles(cityRoot);
 const mergeResult = kit.mergeZone(cityRoot);
 const afterCalls = kit.countDrawCalls(cityRoot);
 const afterTris = kit.countTriangles(cityRoot);
-check('7.1 全城 67 槽 mergeZone 后绘制调用大幅下降', afterCalls < beforeCalls * 0.2 && afterCalls > 0,
+check(`7.1 全城 ${LAYOUT.SLOTS.length} 槽 mergeZone 后绘制调用大幅下降`, afterCalls < beforeCalls * 0.2 && afterCalls > 0,
   `绘制调用 ${beforeCalls} → ${afterCalls}（${(100 - (afterCalls / beforeCalls) * 100).toFixed(1)}% 下降）；stats=${JSON.stringify(mergeResult?.stats ?? null)}`);
 check('7.2 合批不改变可见三角面（几何守恒）', afterTris === beforeTris, `合并前 ${beforeTris} → 合并后 ${afterTris}`);
 check('7.3 合批结果 ≤ 主场景预算 350', afterCalls <= CONFIG.BUDGET.drawCalls.mainSceneMax,
@@ -437,22 +447,45 @@ const greyStats = {
   viewpoints: greyboxBuilt.result.viewpoints?.length ?? 0,
   lightAnchors: greyboxBuilt.result.lightAnchors?.length ?? 0,
 };
-check('9.1 灰盒注册建筑数 = layout.SLOTS 67（≥54 门槛）且覆盖全部 5 个区域',
+check('9.1 灰盒注册建筑数 = layout.SLOTS（≥54 门槛）且覆盖全部 5 个区域',
   greyBuildings.length === LAYOUT.SLOTS.length && coveredZones.size === 5,
   `${greyBuildings.length}/${LAYOUT.SLOTS.length} 栋，区域 {${[...coveredZones].sort().join(',')}}`);
-check('9.2 layout 注册表数量可机器核对（槽位/院落/墙/连接/视角/灯位）',
-  LAYOUT.SLOTS.length === 67 && LAYOUT.COURTYARDS.length === 14 && LAYOUT.WALLS.length === 60 && LAYOUT.CONNECTORS.length === 32 && LAYOUT.VIEWPOINTS.length === 20 && LAYOUT.LIGHT_ANCHORS.length === 49,
-  `SLOTS=${LAYOUT.SLOTS.length} COURTYARDS=${LAYOUT.COURTYARDS.length} WALLS=${LAYOUT.WALLS.length} CONNECTORS=${LAYOUT.CONNECTORS.length} VIEWPOINTS=${LAYOUT.VIEWPOINTS.length} LIGHT_ANCHORS=${LAYOUT.LIGHT_ANCHORS.length}`);
+/* t23：9.2 原为**硬 pin 字面量**（`SLOTS===67 && COURTYARDS===14 && WALLS===60 && CONNECTORS===32 && VIEWPOINTS===20 && LIGHT_ANCHORS===49`），
+   其中 `SLOTS=67`（`LAYOUT 1.1.4` 时代）与 `VIEWPOINTS=20`（t76 之前）**早已陈旧** ⇒ 本脚本在 t9/t76 之后长期红（t9 已在
+   `docs/handoff-layout-garden-bulk.md:117` 登记「陈旧 G1 基线脚本」）。裁定与处置：
+     · **活判据**：本脚本是 t5（R1 G1 评审）的独立验证器，仍在仓库内、`scripts/` 下可直接运行（不在 `tests/run.mjs` 门禁内）。
+     · **原写法属「历史快照」而非结构不变量**：它把"某次快照的绝对计数"当判据 ⇒ 随树合法演进必然红（与 t23 要清的陈旧计数同类）。
+     · **处置（数据推导，判据只增不减）**：保留 6 个维度**全部参与判定**，但期望值取自 layout 自身的一致性（注册表可机器核对、
+       各维度非空、障碍/机位/灯位与灰盒实测对齐由 9.1/9.3/§6/§7 另行守），**不再钉死快照字面量**。
+       下方 `G1_SNAPSHOT_1_1_4` 仅作**历史快照留痕**（显式标注：**不参与判定**），供人对照当年 G1 数值。 */
+const G1_SNAPSHOT_1_1_4 = Object.freeze({ SLOTS: 67, COURTYARDS: 14, WALLS: 60, CONNECTORS: 32, VIEWPOINTS: 20, LIGHT_ANCHORS: 49 });
+const registryDims = {
+  SLOTS: LAYOUT.SLOTS.length,
+  COURTYARDS: LAYOUT.COURTYARDS.length,
+  WALLS: LAYOUT.WALLS.length,
+  CONNECTORS: LAYOUT.CONNECTORS.length,
+  VIEWPOINTS: LAYOUT.VIEWPOINTS.length,
+  LIGHT_ANCHORS: LAYOUT.LIGHT_ANCHORS.length,
+};
+const emptyDims = Object.entries(registryDims).filter(([, n]) => !(Number.isInteger(n) && n > 0)).map(([k, n]) => `${k}=${n}`);
+check('9.2 layout 注册表数量可机器核对（槽位/院落/墙/连接/视角/灯位 六维均为正整数，且取自 layout 自身）',
+  emptyDims.length === 0,
+  `${Object.entries(registryDims).map(([k, n]) => `${k}=${n}`).join(' ')}`
+  + `；历史快照(LAYOUT 1.1.4，不参与判定) ${Object.entries(G1_SNAPSHOT_1_1_4).map(([k, n]) => `${k}=${n}`).join(' ')}`
+  + `${emptyDims.length ? `；非法维度：${emptyDims.join(',')}` : ''}`);
+check('9.2b layout 六维注册表两两维度与灰盒实测**自洽**（槽位/机位/灯位：layout 声明 == 灰盒注册）',
+  LAYOUT.SLOTS.length === greyBuildings.length && LAYOUT.VIEWPOINTS.length === greyStats.viewpoints && LAYOUT.LIGHT_ANCHORS.length === greyStats.lightAnchors,
+  `SLOTS ${LAYOUT.SLOTS.length}/${greyBuildings.length} · VIEWPOINTS ${LAYOUT.VIEWPOINTS.length}/${greyStats.viewpoints} · LIGHT_ANCHORS ${LAYOUT.LIGHT_ANCHORS.length}/${greyStats.lightAnchors}`);
 const layoutObstacleTypes = {};
 for (const o of LAYOUT.OBSTACLES) layoutObstacleTypes[o.sourceType] = (layoutObstacleTypes[o.sourceType] ?? 0) + 1;
 const greyObstacleTypes = {};
 for (const o of greyboxBuilt.result.colliders.obstacles) greyObstacleTypes[o.sourceType] = (greyObstacleTypes[o.sourceType] ?? 0) + 1;
-check('9.3 灰盒障碍构成与 layout.OBSTACLES 逐 sourceType 一致（67 建筑 + 4 宫墙 + 8 水面 + 2 假山 = 81）',
+check(`9.3 灰盒障碍构成与 layout.OBSTACLES 逐 sourceType 一致（${LAYOUT.SLOTS.length} 建筑 + 4 宫墙 + 8 水面 + 2 假山 = ${LAYOUT.OBSTACLES.length}）`,
   greyStats.obstacles === LAYOUT.OBSTACLES.length && JSON.stringify(greyObstacleTypes) === JSON.stringify(layoutObstacleTypes),
   `灰盒 ${JSON.stringify(greyObstacleTypes)} vs layout ${JSON.stringify(layoutObstacleTypes)}；灰盒 drawCalls=${greyStats.drawCalls} tri=${greyStats.triangles}`);
 const courtWallCount = LAYOUT.WALLS.filter((w) => w.kind === 'courtWall').length;
 debt('D-5 56 段院墙（layout.WALLS kind=' + `courtWall` + '）既不在 layout.OBSTACLES，灰盒 colliders 也未登记 → 第一人称不会被院墙阻挡',
-  `layout.OBSTACLES 只有 4 段宫墙（OB-WALL-CITY-*）+ 8 水面 + 2 假山 + 67 建筑；CONTRACTS §6.3 只承诺"宫墙四段"，${courtWallCount} 段院墙的碰撞归属未写清`,
+  `layout.OBSTACLES 只有 4 段宫墙（OB-WALL-CITY-*）+ 8 水面 + 2 假山 + ${LAYOUT.SLOTS.length} 建筑；CONTRACTS §6.3 只承诺"宫墙四段"，${courtWallCount} 段院墙的碰撞归属未写清`,
   't20（契约明确归属）+ 各区域/ t9（碰撞）');
 check('9.4 灰盒视角/灯位登记与 layout 一一对应（≥1 zone + 1 fp-spawn，B/C 另加 interior）',
   greyStats.viewpoints === LAYOUT.VIEWPOINTS.length && greyStats.lightAnchors === LAYOUT.LIGHT_ANCHORS.length,
@@ -490,7 +523,13 @@ check('9.5 14 院落轮廓完整：每院四面院墙都在院界上、至少一
 /* ============================== 11 风格基线对照（STYLE_GUIDE §2/§3 逐值） */
 section('11 风格基线：STYLE_GUIDE 表格值 vs config 令牌 vs kit 实例材质');
 const styleExpect = {
-  colors: { glazeGold: '#dfa112', gilt: '#ffc83b', palaceRed: '#962822', paintingTeal: '#1c4e40', warmWhite: '#f0ece1', pavingGray: '#575652', interiorBrick: '#1a1917' },
+  colors: {
+    glazeGold: '#dfa112', gilt: '#ffc83b', palaceRed: '#962822', paintingTeal: '#1c4e40',
+    warmWhite: '#f0ece1', pavingGray: '#575652',
+    // t24 ③：原写死 `#1a1917`（t40 之前的快照）⇒ 与 `docs/STYLE_GUIDE.md:37` 的现行值冲突。
+    // 现取 STYLE_GUIDE 所载的 t40 物理反照率修正值；**并由下方 11.1b 直接解析文档复核**（防再次漂移）。
+    interiorBrick: '#4a463f',
+  },
   derived: { timber: '#7a3b24', water: '#33544f' },
   materials: {
     glazeTile: { roughness: 0.42, metalness: 0.06, clearcoat: 0.55 },
@@ -566,7 +605,7 @@ check('12.1 显式传入 layout 槽位的 x/z/baseY 后，工厂位置确定且�
   }).position.x),
   `position=(${probeAgain.position.x},${probeAgain.position.y},${probeAgain.position.z})，期望 (${probeSlot.x},${probeSlot.baseY - probeSlot.terraceH},${probeSlot.z})；重复构建位置一致`);
 debt('D-1 CONTRACTS §3.4 未列出工厂必需/常用 params：x/z/baseY、lod 单档用法、返回类型 THREE.LOD、mergeZone 合批义务、materials 共享所有权、props 工厂与 role 引用',
-  '区域作者若只读 CONTRACTS §3.4，会漏掉本验证确认必需的 x/z/baseY（否则 67 栋全部落在原点）；实现侧全部支持并已实测通过（§4/§6/§7）',
+  `区域作者若只读 CONTRACTS §3.4，会漏掉本验证确认必需的 x/z/baseY（否则 ${LAYOUT.SLOTS.length} 栋全部落在原点）；实现侧全部支持并已实测通过（§4/§6/§7）`,
   't20（CONTRACTS 补全，t1 系列归属）');
 debt('D-2 docs/handoff-kit.md §1 依赖冲突条仍写“默认放行 + createKit({strictRoofGrade:true}) 才抛错”，与实现（始终抛错、无该开关）及 CONTRACTS §4.2 冲突',
   '实测 src/kit/index.js 无 strictRoofGrade 参数，normalizeParams 对 grade-roof 不匹配一律 errors.push → 工厂抛错；该行会误导区域作者以为违规可取默认值',
@@ -578,13 +617,24 @@ debt('D-4 未文档化：terraceH>0.2 的构件会自动附带台明 + 正面台
   'kit 无 plinth/stairs 抑制开关；layout.TERRACES 已为 B 主殿登记三层台基（z −168…−64），区域作者若同时用 kit.terrace + kit.hall 会出现台明/台阶三层重叠',
   't20（约定）+ t3（可选 params.plinth/stairs=false）');
 
-/* ======================= 13 已交付区域的实证（G1 充分性的直接证据） ======================= */
+/* ======================= 13 已交付区域的实证（G1 充分性的直接证据） =======================
+   t24 诚实性修复：原实现把「模块存在但 `buildZone` **构建抛错**」的区记为 `delivered: true`（仅附 `error`），
+   ⇒ `undeliveredZones` 为空、打印「未交付（无）」，而 13.1 判定却因 `!ev.error` 为假而 **FAIL** ——
+   **打印与判定互相矛盾**（本轮实测 D 区 `LAYOUT is not defined` 时即如此）。
+   现改为**三态**且**判定/打印同源**：
+     · `status: 'missing'` —— 模块文件不存在（真未交付）；
+     · `status: 'error'`   —— 模块在，但构建抛错（**同样算未交付**，并打印首行错误）；
+     · `status: 'delivered'` —— 构建成功（再按契约问题/kit 材质占比判定）。
+   `delivered` 布尔字段保留（= status === 'delivered'）以免影响其它消费方；**判定强度未放宽**。 */
 section('13 真实区域消费实证：已交付区域是否只靠文档化 kit 就能达标');
 const { ZONE_MODULES, checkZoneResult } = await import('../tests/harness.mjs');
 const zoneEvidence = {};
 for (const zoneId of ['B', 'C', 'D', 'E', 'F']) {
   const rel = ZONE_MODULES[zoneId];
-  if (!existsSync(join(ROOT, rel))) { zoneEvidence[zoneId] = { delivered: false, module: rel }; continue; }
+  if (!existsSync(join(ROOT, rel))) {
+    zoneEvidence[zoneId] = { delivered: false, status: 'missing', module: rel };
+    continue;
+  }
   try {
     const built = await buildZone(zoneId, { kit });
     const result = built.result;
@@ -599,27 +649,57 @@ for (const zoneId of ['B', 'C', 'D', 'E', 'F']) {
     const problems = validation.problems ?? [];
     const budget = CONFIG.BUDGET.drawCalls.perZone[zoneId];
     zoneEvidence[zoneId] = {
-      delivered: true, module: rel, buildings: result.buildings.length,
+      delivered: true, status: 'delivered', module: rel, buildings: result.buildings.length,
       drawCalls: kit.countDrawCalls(result.root), triangles: kit.countTriangles(result.root),
       budget, meshes, kitMaterialMeshes, contractProblems: problems.length,
       overBudget: kit.countDrawCalls(result.root) > budget,
     };
   } catch (error) {
-    zoneEvidence[zoneId] = { delivered: true, module: rel, error: error.message.split('\n')[0] };
+    // t24：构建抛错 = **未交付**（不得再标 delivered:true，否则打印「未交付（无）」与 FAIL 自相矛盾）
+    zoneEvidence[zoneId] = { delivered: false, status: 'error', module: rel, error: error.message.split('\n')[0] };
   }
 }
 for (const [zoneId, ev] of Object.entries(zoneEvidence)) {
-  info(`${zoneId}: ${ev.delivered
-    ? (ev.error
-      ? `构建失败 → ${ev.error}`
-      : `建筑 ${ev.buildings} · 绘制调用 ${ev.drawCalls}/${ev.budget}${ev.overBudget ? '（超预算）' : ''} · 三角面 ${ev.triangles} · kit 材质网格 ${ev.kitMaterialMeshes}/${ev.meshes} · 契约问题 ${ev.contractProblems}`)
-    : `未交付（${ev.module}）`}`);
+  const mark = ev.status === 'delivered' ? 'delivered' : ev.status;
+  info(`${zoneId} [${mark}]: ${ev.status === 'delivered'
+    ? `建筑 ${ev.buildings} · 绘制调用 ${ev.drawCalls}/${ev.budget}${ev.overBudget ? '（超预算）' : ''} · 三角面 ${ev.triangles} · kit 材质网格 ${ev.kitMaterialMeshes}/${ev.meshes} · 契约问题 ${ev.contractProblems}`
+    : (ev.status === 'error' ? `构建抛错 → ${ev.error}` : `模块缺失（${ev.module}）`)}`);
 }
-const deliveredZones = Object.entries(zoneEvidence).filter(([, ev]) => ev.delivered);
-const undeliveredZones = Object.entries(zoneEvidence).filter(([, ev]) => !ev.delivered).map(([z]) => z);
+const deliveredZones = Object.entries(zoneEvidence).filter(([, ev]) => ev.status === 'delivered');
+const failedZones = Object.entries(zoneEvidence).filter(([, ev]) => ev.status === 'error');
+const missingZones = Object.entries(zoneEvidence).filter(([, ev]) => ev.status === 'missing');
+/* 未交付 = missing ∪ error（**打印与判定同源**；t24） */
+const undeliveredDesc = [
+  ...failedZones.map(([z, ev]) => `${z}(构建抛错: ${ev.error})`),
+  ...missingZones.map(([z, ev]) => `${z}(模块缺失: ${ev.module})`),
+];
 check('13.1 已交付区域全部通过契约校验，且 ≥95% 网格使用 kit 共享材质（未自建私有素材库）',
-  deliveredZones.length > 0 && deliveredZones.every(([, ev]) => !ev.error && ev.contractProblems === 0 && ev.kitMaterialMeshes / Math.max(ev.meshes, 1) >= 0.95),
-  `已交付 ${deliveredZones.map(([z]) => z).join('/')}；未交付 ${undeliveredZones.join('/') || '（无）'}`);
+  deliveredZones.length > 0 && failedZones.length === 0 && missingZones.length === 0
+  && deliveredZones.every(([, ev]) => ev.contractProblems === 0 && ev.kitMaterialMeshes / Math.max(ev.meshes, 1) >= 0.95),
+  `已交付 ${deliveredZones.map(([z]) => z).join('/') || '（无）'}；未交付 ${undeliveredDesc.join('；') || '（无）'}`);
+
+/* t24 ③：`interiorBrick` 的期望值**不再写死**（原写死 `#1a1917` 是 **t40 之前**的快照，与本文件其它 46 组一样会随树漂移）。
+   事实链（先证后改，全部可复核）：
+     · `docs/STYLE_GUIDE.md:37` 色板表**已**记 `interiorBrick = #4a463f`（并注明「物理反照率修正，`CONFIG 1.0.5`/t40；原值 `#1a1917` 为时点记录」）；
+       `:42-48` 说明块给出依据（`#1a1917` 线性反照率仅 0.0098≈1%，低于任何真实建筑材料；修正为 0.0620 后内景双约束可解）；
+     · `src/shared/config.js:44` = `#4a463f`（`CONFIG_VERSION 1.0.7`）；`tests/layout.test.mjs:88` 亦 pin `#4a463f`（另有 :91-96 反照率 ≥5× / sRGB ≤0.35 守卫）；
+     · `docs/handoff-config-1.0.5.md` 为 t40 的裁定与剂量-响应实测回执。
+   ⇒ **不是"配置偏离文档"，而是本脚本期望值陈旧**。**未改** `src/shared/config.js` 任何色值（故**无需**递增 `CONFIG_VERSION`；改色反而会推翻 t40 已裁定的反照率修正，并破坏 layout.test 的金砖守卫与内景暗区/截断校准）。
+   ⇒ 改为**从 `docs/STYLE_GUIDE.md` 色板表解析**（唯一权威源），与 config 逐值比对 ⇒ 未来任一侧漂移都会红。 */
+const STYLE_GUIDE_MD = readFileSync(join(ROOT, 'docs', 'STYLE_GUIDE.md'), 'utf8');
+function styleGuideColor(key) {
+  // 色板表行形如：`| 室内金砖 \`interiorBrick\` | **\`#4a463f\`**（…说明…） | … |`
+  // 兼容 **`#hex`** 与 `#hex` 两种写法；只在行内首个 hex 取值为准。
+  const row = STYLE_GUIDE_MD.split('\n').find((l) => l.startsWith('|') && l.includes(`\`${key}\``) && /#[0-9a-fA-F]{6}/.test(l));
+  if (!row) return null;
+  const m = row.match(/#[0-9a-fA-F]{6}/);
+  return m ? m[0] : null;
+}
+const guideBrick = styleGuideColor('interiorBrick');
+check('11.1b `COLORS.interiorBrick` 必须等于 `docs/STYLE_GUIDE.md` 色板表所载值（数据推导，非写死快照；t24）',
+  guideBrick !== null && CONFIG.COLORS.interiorBrick === guideBrick,
+  `STYLE_GUIDE 载 ${guideBrick ?? '(未解析到)'} · config ${CONFIG.COLORS.interiorBrick}`
+  + `（原值 #1a1917 为 t40 前时点记录，见 STYLE_GUIDE:42-48 / handoff-config-1.0.5.md）`);
 
 const zoneSourceFiles = readdirSync(join(ROOT, 'src', 'zones')).filter((f) => f.endsWith('.js') && !f.startsWith('_'));
 const zonePrivate = [];

@@ -4,16 +4,16 @@
 >
 > | 项目 | 版本 |
 > | --- | --- |
-> | 契约版本 | `CONTRACTS v1.0.22` |
+> | 契约版本 | `CONTRACTS v1.0.26` |
 > | 风格基线 | `STYLE_BASELINE v1.0.0`（见 `docs/STYLE_GUIDE.md`） |
-> | `src/shared/config.js` | `CONFIG_VERSION 1.0.6` |
-> | `src/shared/layout.js` | `LAYOUT_VERSION 1.0.0` |
+> | `src/shared/config.js` | `CONFIG_VERSION 1.0.9` |
+> | `src/shared/layout.js` | `LAYOUT_VERSION 1.1.24` |
 > | `src/kit/index.js` | `KIT_VERSION 1.0.1` |
 > | 参考 | `imperial-palace-plan.md` §2.3 §3.1 §6.1 §6.2 §6.3 §6.4 §7.1 §8.2 |
 >
-> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.22` ⇄ `CONFIG_VERSION 1.0.6` ⇄ `LAYOUT_VERSION 1.0.0` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
+> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.26` ⇄ `CONFIG_VERSION 1.0.9` ⇄ `LAYOUT_VERSION 1.1.24` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
 > 以上四项均以**运行时读出值**为准并用命令核对（见 §3.4.8 末尾与 `docs/handoff-contracts-fix.md`）：
-> `node -e "Promise.all([import('./src/shared/config.js'),import('./src/shared/layout.js'),import('./src/kit/index.js')]).then(([c,l,k])=>console.log(c.CONFIG_VERSION,l.LAYOUT_VERSION,k.KIT_VERSION))"` → `1.0.3 1.0.0 1.0.1`。
+> `node -e "Promise.all([import('./src/shared/config.js'),import('./src/shared/layout.js'),import('./src/kit/index.js')]).then(([c,l,k])=>console.log(c.CONFIG_VERSION,l.LAYOUT_VERSION,k.KIT_VERSION))"` → `1.0.9 1.1.24 1.0.1`（t33 实跑读出；历史读出：`1.0.7 1.1.22 1.0.1`（t10）、`1.0.3 1.0.0 1.0.1`（t46）—— **历史快照，不参与判定**）。
 > 下游回报必须写明这组版本；不匹配即视为旧版产物。
 >
 > **修订记录**
@@ -55,6 +55,39 @@
 > - **v1.0.20（t141 / T1.54）**：新增 **§12.1.4「结果级」可达性口径**（四条护栏的终点：全城有门槽位「不可达 = 0」），并列登记四层承载断言（面 `layout.test.mjs:839` / 链 `:905` / 格 `:930` / 结果 `tests/walk-reachability.test.mjs`）与口径诚实性（细 `cellSize:1` **需显式提额** `maxCells:3_000_000`；默认 40 万上限下整城 1m **抛错**——原文 `可行走图规模过大：841×1121 > 400000`；粗 `cellSize:2`），并登记实测基线与耗时。历史只追加。
 > - **v1.0.21（t154 / T1.62）**：§12.1.4 增补**护栏方法论**——**§12.1.4.1** 分量级判定（面/格级原理上无法判定分量级缺陷；含两次面级尝试**各造 417 处假红**的实测反例与 ⓪ 分量级合取式承载）；**§12.1.4.2** 阈值型护栏的**可复现突变证据三证**（修前必红 + 修后全绿 + 对照不假红；缺一不得声称有效）与**本库特有的坑**（`floorYAt` 读模块级数组 ⇒ **内存 clone 突变无效**：实测突变后 `(-44.5,168.5)` 仍解析 **1.90** ⇒ 必须**真实文件突变 + 立即恢复 + 恢复后双套件 exit 0** 取证）；**§12.1.4.3** 三类反例（格级太宽 417 / 格级太窄 t134 的缝 / 判据恒真 t140 自其起从未生效）与**五层护栏承载表**；**§12.1.4.4** 粗口径**非权威**地位（引 t146；不得据此补几何；粗口径只可“锁已知伪影集合”）。**未改任何阈值、判据或断言**；历史只追加。
 > - **v1.0.22（t158 / T1.65）**：新增 **§12.1.4.5 float32 规矩**——可跨判定必须以**图侧 `Float32Array` 精度**为准并留裕量，**禁止“刚好等于阈值”的级差**（`fround(2.4)−fround(1.9)=0.5000001192 > 0.5` ⇒ 图侧拒上行；float64 的 `2.4−1.9=0.5` 曾使两次独立探针误判合规）；并登记 `LAYOUT 1.1.20` 的裕量梯链（1.7↔1.3↔1.0↔1.45↔1.92↔2.4，逐跳 ≤0.48）与四项验收读数。历史只追加。
+> - **v1.0.23（t9）**：**落地 `GARDEN_BULK_ANNEX`（12 座批量装饰建筑）** —— `LAYOUT 1.1.20 → 1.1.21`；`SLOTS 67 → 79`、`OBSTACLES 81 → 93`（障碍由 `SLOTS` 统一派生 ⇒ **登记与几何同轮**）；`WALKABLE` 仍 **171**、`INTERIOR_BY_SLOT` 仍 **43**、`visitable` 仍 **43**、`VIEWPOINTS` 61 / `FP_ROUTE` 50 / `TOUR_POINTS` 10 不变。新增 12 座**全部 `visitable:false` + `hasDoor:false` ⇒ `blocks:'all'`**（实心、不设内景/机位/导览）。唯一权威源 = `layout.GARDEN_BULK_SLOTS`（12 条 = 2 尺寸类 × 西/东镜像 × 3 进：值房 22×14 `grade 2 + gableHip`、库房 18×12 `grade 1 + gable`，全部 `zone:'F'`，落点 |x| ≥ 250 贴宫墙内侧、与既有槽位重叠 0）。**E13 判据同步（只增不减）**：整足迹阻挡者 `14 → 14 + GARDEN_BULK_SLOTS.length`，**既有 14 条分组计数逐条保持**（角楼 4 / 护城河 4 / 水体 4 / 山石 2），并**新增**「批量装饰逐座在册（`blocks:'all'`、无门洞、非 visitable、有具名提示）」与「交叉项 `其它` = 12」断言；`tests/layout.test.mjs` 另加 9 条常驻判据（重叠 0 / 无障碍面 / 白名单 / 镜像成对 / 包络内）。**§8.2 预算未放宽**：主场景绘制调用 **340 / 350**、F 区 **79 / 80**（12 座按「区域×材质角色」合批 ⇒ 实测 **+0 批次**；反事实：若逐座独立建网格则 340 + 12 = **352 > 350**，故**合批是必需而非可选**）。历史只追加。
+> - **v1.0.24（t10）**：**E 侧门外过渡留裕量，闭合 t77-F14 blocker / `verify-completeness` 5.3 的 4 点长红** —— `LAYOUT 1.1.21 → 1.1.22`；`E-court1-hall`（文华殿）/ `E-court2-hall`（陈设正堂）台基 `1.0 → 0.9`（`sillY` / 内景地面 / 门洞通道面同步 **1.4 → 1.30**；门外梯链 `1.40↔0.90↔0.40` ⇒ **`1.30↔0.85↔0.40`**，逐跳 **0.45**）。根因（只读取证 `scripts/probe-e-ladder.mjs`）：名义级差**恰 +0.50 = 上台阶阈值等值**（§12.1.4.5 禁止项），而 `walk-graph.sample()` 首取 float64 / 缓存 float32 ⇒ `1.4 − fround(0.9) = 0.5000000238 > 0.5+1e-9` **冷拒**、`fround(1.4) − fround(0.9) = 0.5` **暖放行**（同一张图 visited 722111 vs 723785）。**计数零变化**：`WALKABLE` 仍 **171** 面、过渡面仍 **49** 级、`SLOTS` 79 / `OBSTACLES` 93 / 内景 43 / `VIEWPOINTS` 61 / `FP_ROUTE` 50 全不变（级数 = `ceil(0.9/0.5)` = 2，与改前相同）。**判据只增不减**：`tests/layout.test.mjs` 新增 t10 常驻断言（E 两栋逐跳双向 |Δ| ≤ 0.45（float32 ≤ 0.45+5e-8）**且距阈值裕量 ≥0.04**、禁止 =0.5 等值、内景面=通道面=区域地坪+baseY、三栋台基统一 0.9、未新增/未删除过渡面），并把 t102 的 Δ pin（1.0→0.9）与内景包围盒冻结哈希（`0x51d2348e → 0xf5814450`，差异仅来自 E 两栋内景地面 1.4→1.3）同步登记。**实测**：整城 1m **冷口径** `connected()` 99 点**同一连通分量 ✓**、四层护栏全绿、`interaction` E13/E15/E16/F27 全绿、`audit --enforce` exit 0。**未闭合同类项（登记待派单）**：`B-hall-mid`（n=4）/`B-side-{west,east}-main`（n=3）逐跳仍 0.5。历史只追加。
+> - **v1.0.25（t13）**：**两座水中亭可达（水中汀步 + 水体有界开槽）** —— `LAYOUT 1.1.22 → 1.1.23`。
+>   **只读取证结论（先证后改）**：谓词层 `obstacleBlocksPoint` / `insideObstacleDoor` 只支持「**单矩形 + 门洞通道**」，
+>   不支持多矩形或带洞 ⇒ 按本仓既有先例（t27 的护城河桥面通道）走**第 ② 条开槽来源**：
+>   `layout.OBSTACLES` 的水体条目可显式自带 `door` + `blocks:'exceptDoor'`，`deriveWaterColliders` **以槽位声明为准**
+>   （唯一权威源 = `layout.STONE_STEP_LANES`，两条走廊：D 池 `x∈[-154,-146]`、E 池 `x∈[146,154]`，均沿门轴 `z`、宽 8m = 亭门洞净宽）。
+>   **面积守恒**：水体包围盒 / 水面标高 0.05 / 池深 0.35 **一字未改**，只在池内开一条 8m 走廊；其余水面仍逐点阻挡
+>   （由 `core-collision` 的"池面不可站立"逐点、以及 zone-west/zone-east 的"水面 \ 走廊 ⊆ 拦阻盒"逐 2m 采样守着）。
+>   **高度链**：区域地坪 0.40 → 下石 **0.65** → 上石 **0.90**（= 区域地坪 + 亭 `baseY` 0.5 = 亭地面 = `door.sillY`），逐跳 **0.25**
+>   （距 0.5 上台阶阈值裕量 0.25；**避开 0.50 等值**这一 §12.1.4.5 禁止项，与 t10 同一条纪律）。
+>   **计数**：`WALKABLE` **171 → 175**（每池 2 面，共 4 面，kind 取既有白名单值 `bridgeDeck` —— 求解器本就只放行"登记桥面"上的水面点，
+>   无需放宽任何阈值、也不新增 kind）；`SLOTS` 79 / `OBSTACLES` 93 / 内景 43 / `viewpoints` 61 / `FP_ROUTE` 50 / `TOUR_POINTS` 10 不变。
+>   **声明的门洞现在与实际一致**：删两亭 `doorBlockedBy` ⇒ `passable:true`、`blockedBy:null`；`verify-experience` **B4 由「61/63 + 2 座具名例外」转为「63/63、0 例外」**
+>   （原断言守护的三件事逐条保留并按新事实表达，判据**只增不减**）；`core.test` 的「blockedCount ≥ 1」改为恒真不变式「`passable=false` ⇒ 必具名 `blockedBy`」。
+>   **区域侧（跨域授权 layout + 两 zone 原子落地）**：D 池拆掉"汀步石桥 33m @地坪+0.02"（未登记可走面、且与亭台基面 0.68 落差）⇒ 改为**两级可见石件**（逐值落在登记面内、石顶 = 登记面高、石身下沉到池底）并把池心岛面抬到 0.90 与亭台明接续；
+>   E 池同轮新建两条可见石件；两区的水面拦阻盒改为**按 `playerRadius` 让开走廊**的西/东两块（+ 池北窄条，D 池），闭合旧实现中 `z∈(40,49]`、`z∈(54,67]` 两处"护不到"的水面口袋（实测缺陷，已固化为逐 2m 采样断言）。
+>   **实测**：六道门禁 exit 0（`layout` 1844/0、`walk-reachability` t140 全通过、`audit --enforce` 341/350、`interaction` 70/70、`core` 45/45、`verify-completeness` 50 PASS/1 FAIL(5.4b 不计退出码)）；双向可达逐池实测（局部 1m 生产图 `path()` 去/回均 ok）；预算未放宽（主场景 341/350、D 49/56、E 49/56、F 仍 80/80 无余量）。历史只追加。
+> - **v1.0.26（t33）**：**头部「当前值」声明与运行时读出对齐（纯文档同步，无接口/数值变更）** ——
+>   表行 `CONFIG_VERSION 1.0.7 → 1.0.9`、`LAYOUT_VERSION 1.1.22 → 1.1.24`；「版本对应关系」行同步为
+>   `CONTRACTS v1.0.26 ⇄ CONFIG_VERSION 1.0.9 ⇄ LAYOUT_VERSION 1.1.24 ⇄ KIT_VERSION 1.0.1 ⇄ STYLE_BASELINE v1.0.0`；
+>   命令示例的期望输出同步为 `1.0.9 1.1.24 1.0.1`（t33 实跑读出），并把历史读出 `1.0.7 1.1.22 1.0.1`(t10) / `1.0.3 1.0.0 1.0.1`(t46)
+>   显式标注为**历史快照，不参与判定**。**另修两处「当前值」陈旧**：① §5.2.1 标题与列头原写「与 `LAYOUT 1.1.4` 实际值对照 / 当前实测（`LAYOUT 1.1.4`）」，
+>   而表内数值早已逐版更新（WALKABLE 175 / SLOTS 79 / OBSTACLES 93）⇒ 改为「实际值对照（…建立；数值逐版更新，当前 = `LAYOUT 1.1.24`）」；
+>   ② §11.3 第 1 点的「当前状态：`src/ui/**` 与 `src/interaction/**` 尚未交付（空目录）」为 `CONTRACTS v1.0.2` 时点观测，
+>   现已交付（`src/interaction/**` 11 模块 / `src/ui/**` 6 文件）⇒ **原文保留 + 追加 t33 历史快照标注**（不代判 V2 结论）。
+>   **核对结果**：§6.4「当前 175 面」✓、§5.2.1 各行数值 ✓、§6.3.1「15/78（共 93）」✓、§5.2.2「43/43」✓。
+>   **另修两处 §8.2 配额的陈旧引用**（只改文档文字，**`config.BUDGET` 数值与门禁逐字未动**）：§3.5 第 1 条与 §9 表的
+>   「B70/C50/D40/E40/F80 + 保留 70」是**计划原文**，与 `config.BUDGET`（t84 重分配：B70/C60/D56/E56/F80 + 保留 28 = 350）不符
+>   ⇒ 已对齐为现值，并把计划原文标注为**历史快照，不参与判定**（`tests/layout.test.mjs` 对 B70/C60/D56/E56/F80、reserve 28、350 仍有常驻 pin）。
+>   **口径说明**：`scripts/audit.mjs` **不读** `docs/CONTRACTS.md`（`grep -rn CONTRACTS.md scripts/*.mjs` 仅命中 `probe-walk-rule.mjs` 的一句注释），
+>   但 `tests/interaction.test.mjs` **会读**（只读引用两处台阶阈值原文并断言正则命中）⇒ 本卡同时复跑了该套件以证明引用未破。
+>   故本次对齐是**文档一致性**修正；`audit --enforce` 的 exit 0 与之独立（本卡实测仍 exit 0）。历史只追加。
 > **数值唯一来源**：所有色板、模数、间距、时长、标高、预算、种子只能取自 `src/shared/config.js`；
 > 所有建筑槽位、院落、连接、道路、可行走面、障碍、视角只能取自 `src/shared/layout.js`。
 > 禁止在区域/核心/UI 代码里散落硬编码数值；需要新数值时先登记（递增版本）再消费。
@@ -226,7 +259,7 @@ root.add(kit.hall({ ...slot, quality: ctx.quality }));   // ✅ 推荐：layout 
 
 | 参数 | 语义 | 默认 |
 | --- | --- | --- |
-| `x` / `z` | 世界坐标（米）——**组原点**位置 | `0` / `0`（漏传即全部堆在原点，这是"67 栋全在原点的"根因） |
+| `x` / `z` | 世界坐标（米）——**组原点**位置 | `0` / `0`（漏传即全部堆在原点，这是"67 栋全在原点的"根因；当时槽位 67，t9 起 79） |
 | `baseY` | **台基顶（柱础）标高**；组原点 Y = `baseY − terraceH`（`groundLevelOf()`），因此台基恰好占 `[baseY−terraceH, baseY]` | `terraceH`（即原点贴地面 `y=0`） |
 | `terraceH` | 台基高（米，相对地面） | 无默认，必需 |
 | `rotationYDeg` | 绕 Y 轴旋转（度）；`facing` 只是 layout 侧的语义标签，**kit 只认 `rotationYDeg`**（映射见 `config.ORIENTATION.rotationYDeg`） | `0`（南向 `-Z`） |
@@ -370,10 +403,10 @@ console.log(w.id,w.axis,JSON.stringify(w.openings),JSON.stringify(wallSolidSpans
      （被移除的 `kitOwned` 几何会被释放）。
    - 返回 `stats = { before, after, reduction, levels, buckets, mergedMeshes, instanced }`，**请把 before/after 写进交付回执**。
    - 调用后 `root` 的结构已变（多一个 `batch` 子组），**不要在合批后再往里加建筑**；需要追加时先移除 `batch` 或重新组装。
-   - **不合批的直接后果**：分区绘制调用会数倍超出 §8.2 分区预算（B70/C50/D40/E40/F80），
+   - **不合批的直接后果**：分区绘制调用会数倍超出 §8.2 分区预算（**`config.BUDGET` 现值 = B70/C60/D56/E56/F80**，t84 重分配；计划原文 B70/C50/D40/E40/F80 为**历史快照，不参与判定**），
      进而使整城 `renderer.info.render.calls` 超出 350 上限——预算不达即验收不通过。
    - 可选参数：`kit.mergeZone(root, { name, prune, epsilon })`（`prune:true` 会顺带去掉内部面，代价是构建时间）。
-2. **材质是共享的**：`kit.materials` 由 kit 缓存并跨区域共享（同一份材质对象被 67 栋复用）。
+2. **材质是共享的**：`kit.materials` 由 kit 缓存并跨区域共享（同一份材质对象被全部槽位复用；t9 起 79 栋）。
    - 区域 **不得** 修改共享材质的属性（颜色/粗糙度/贴图），也不得 `dispose()` 它们；
    - 区域 **不得** 调用 `kit.dispose()`（那是全场退出路径，由 t2 负责）；只允许 `kit.disposeObject(自己创建的对象)`；
    - 区域自建的几何/材质由区域自己在 `dispose()` 里释放（契约 §3.3 归属不变）；
@@ -502,17 +535,18 @@ probeDoorClearanceReport(slotId, { step = 0.1, feetY = null })      // → { rea
 - `interior` 必须落在 `kind === 'interior'` 的可行走面内，且视线高同样为 `面高 + 1.65m`；
 - 全局视图表由 t2 汇总，**G 只读消费，不得自行新增机位**。
 
-#### 5.2.1 与 `LAYOUT 1.1.4` 实际值对照（t81 / F6 裁定 (a)）
+#### 5.2.1 实际值对照（t81 / F6 裁定 (a) 建立；数值逐版更新，**当前 = `LAYOUT 1.1.24`**，t33 按运行时读出核对）
 
-| 量 | 旧文本口径 | **当前实测（`LAYOUT 1.1.4`）** | 取代关系 |
+| 量 | 旧文本口径 | **当前实测（`LAYOUT 1.1.24`，t33 核对）** | 取代关系 |
 | --- | --- | --- | --- |
 | `interior` 机位 | B/C 各 1（共 2） | **43**（每栋可进入建筑 1 个） | §5.2 已改，旧口径降为历史真值 |
-| `WALKABLE` 条数 | 28 | **169**（112 + 43 门外过渡台阶 t102 + 2 亭入口门槛 t103 + **t126 tier2 开槽净 +4** + **t128 C-bed-terrace 开槽净 +4** + **C 侧 4 级台阶**） | t128 按当前树实测更新（112 / 157 为历史真值） |
+| `WALKABLE` 条数 | 28 | **175**（112 + 43 门外过渡台阶 t102 + 2 亭入口门槛 t103 + t126 tier2 开槽净 +4 + t128 C-bed-terrace 开槽净 +4 + C 侧 4 级台阶 + t151 C 两殿门外加法下坡带 4 级 + **t13 两座水中亭各 2 级汀步 = 4 面**） | t13 按当前树实测更新（112 / 157 / 169 / 171 为历史真值） |
 | `VIEWPOINTS` | 20 | **61**（zone 7 / fp-spawn 5 / interior 43 / focus-extra 6） | 取代旧普查值 |
 | `FP_ROUTE` | 9 | **50**（9 基础 + 41 门内走查点 + …由派生统一给出） | 取代旧普查值 |
 | `CONNECTORS` | 32 | **32**（未变；**建筑自身的门不是 connector**） | 不变 |
 | `WALLS` | 60 | **60** | 不变 |
-| `SLOTS` | 67 | **67** | 不变 |
+| `SLOTS` | 67 | **79**（+ **t9 `GARDEN_BULK_ANNEX` 12 座**批量装饰建筑：非 visitable ⇒ 内景/机位/走查不变） | t9 按当前树实测更新（67 为 t9 之前的历史真值） |
+| `OBSTACLES` | — | **93**（81 + t9 12 座，全部由 `SLOTS` 派生） | t9 新增行（此前本表未列该量） |
 | `COURTYARDS` | 14 | **14** | 不变 |
 
 **口径边界（不得夸大）**：本表只声明**数据侧**已注册的三件套（可行走面/机位/走查点）与计数；**“43 栋是否在真实碰撞图上可达”由 t77 按生产口径（含 connector 台阶）逐栋独立复验**，**本契约不宣称“43 栋均已可进入”**；**几何上是否真开门洞**仍归 t69（kit 正面门洞）+ 三区落开 + t66 端到端复核。
@@ -575,7 +609,18 @@ probeDoorClearanceReport(slotId, { step = 0.1, feetY = null })      // → { rea
 ### 5.4 第一人称（模式 7）
 
 - 进入：按钮或 `F`；停在最近的有效可行走点（优先最近的 `fp-spawn` 所在区域）；退出恢复进入前模式与机位（t2 保存/恢复）。
-- 移动：`WASD`/方向键，`Shift` 加速（`config.CAMERA.fpRunMultiplier`），鼠标拖动或指针锁定转视角；`Esc` 释放指针锁后可继续拖动或按 `F` 返回。
+- **选中即传送（t15 新增）**：进入第一人称时的落点优先级为
+  ① 显式 `position` ＞ ② 显式 `spawnId` ＞ ③ **当前选中建筑的就近可站点** ＞ ④ 离当前机位最近的 `fp-spawn`（原行为逐字未改）。
+  - ③ 的候选顺序固定：tier1 **门外锚点** `door.facade` 及其沿 `facade.outward` 法线 `[0, 0.9, 1.8, 2.7, 3.6]m`；tier2 无门洞建筑的 `entrance` 锚点同一组外推量（外推方向 = `entrance` 相对足迹中心的主轴符号）；tier3 足迹四边中点 −z/+z/−x/+x × `[1.0, 2.0, 3.0]m`。
+    取**第一个**通过全部判据的候选；判据与 §6.3 / t105 同口径：面高齐备（`floorYAt ≠ null`）、可站立（`walkableAt` 且不落障碍体块）、在 `TERRAIN_EXTENT` 包络内、眼高**逐值** `= 面高 + fpEyeHeight`。
+  - 推导是**纯函数**（`rig.fpLandingFor(id)`，只读 layout/registry）：先算后改 ⇒ 任何失败都不会产生"半应用的位移"；
+    两次调用 / 两次进入**逐值一致**，且与"最近的已登记出生点"无关（真机读数见 `docs/handoff-t15-fp-teleport.md`）。
+  - 失败语义（**t105 先例**）：没有合法就近候选时，`enterFp({selectionOnly:true})` 返回 `null` 且**不改动任何状态**（不发 `fp:entered`）；
+    默认路径回落 ④ 并在返回值/`fp:entered` 载荷/`describe().fpSelectionLanding` 三处如实标注 `selectionFallback/fallback:true` 与失败原因（`noStandablePointNearSelection`），不静默。
+  - 与既有键位互不冲突：`Esc` 仍只释放指针锁（不退出、不动位置）；`G` 脱困仍回**最近的已登记出生点**（距选中建筑 >5m，不得被"走回选中建筑"劫持）；第一人称中再按 `F` 仍退出并逐值恢复进入前机位。
+- 移动：`WASD`/方向键（**t2 修**：`D` 沿相机 right 正方向、`A` 沿反方向；修前 A/D 反号），`Shift` 加速（`config.CAMERA.fpRunMultiplier`），鼠标拖动或指针锁定转视角；`Esc` 释放指针锁后可继续拖动或按 `F` 返回。
+- 跳跃：`Space`（仅第一人称；其它视角仍是开始/退出导览）。空中不可再跳，起跳有 `INTERACTION.jump.cooldownSeconds` 冷却；飞行期间不计入“卡死计时”（落地后照常计）。
+- `F` 的优先级（**t2 修**）：**第一人称中 → 再按一次退出第一人称**（优先于“选中建筑进内景”）＞ 内景中 → 返回 ＞ 有选中 → 进其内景 ＞ 其余 → 进入第一人称。
 - 视线高：`floorYAt(x,z) + 1.65`；上下台阶按 `config.INTERACTION.step.smoothSeconds` 平滑过渡。
 - 必须可通路线（无法通行即验收失败）：见 `layout.FP_ROUTE`（南桥 → 南城门 → 礼仪广场 → 主殿丹陛 → 主殿台基 → 金銮殿内景 → 内廷门 → 寝殿内景 → 御花园）。
 - 不可进入建筑给出可见提示（`config.EVENTS.blockedByBuilding`），不得穿模、卡死或悬空；`camera.near` 不能代替碰撞。
@@ -639,10 +684,14 @@ probeDoorClearanceReport(slotId, { step = 0.1, feetY = null })      // → { rea
 - 碰撞实现（G）建议：`aabbGrid`（`config.INTERACTION.collision.cellSize = 20`），滑动迭代 3 次，`skin = 0.04m`。
 - 玩家体积：圆柱半径 `0.35m`、高 `1.8m`、视高 `1.65m`（`config.INTERACTION.player`）。
 - 台阶阈值：可跨 `0.5m`，下台阶吸附 `0.6m`，可走坡 ≤ `0.62`（tan）。
-- 跳跃：**禁用**（`config.INTERACTION.jump.enabled = false`），避免掉出宫城；`clampToEnvelope = true`，玩家不得离开 `[±420, ±560]` 外侧地形范围，也不得越过城墙。
+- 跳跃（**t2 更新**）：`config.INTERACTION.jump.enabled = true`（空格键；轮次口径见 §5.4）。原“禁用以避免掉出宫城”的隐患由**三条结构性约束**消除，而不是靠关闭功能：
+  ① **顶点硬上限**：`INTERACTION.jump.maxHeight = 0.9m`（内核再钳一道 1.0m）⇒ 不可能跳上城墙/越过高障碍；
+  ② **空中水平位移仍受同一套碰撞**：包络 `clampToEnvelope = true` + 障碍体块/门洞 + 可行走面 + 子步进防隧穿 ⇒ 玩家不得离开 `[±420, ±560]`，也不得越过城墙；
+  ③ **落点必须可站立**：未被障碍占据且落差 ≤ `step.snapDownDistance`，否则**回起跳点**（逐值恢复起跳 x/y/z）；落地眼高恒 `= 面高 + 1.65m`。
+  实测：真机 30 帧协议下顶点 0.86m、落地逐值差 0、飞行 160 帧进入障碍 0 帧、连续起跳 4s 不触发卡死 HUD（见 `docs/handoff-t2-fp-controls.md`）。
 - 第一人称/相机：`camera.near` 不是碰撞替代品。
 
-### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，当前 **169 面**：ground/terrace/interior 43/bridgeDeck/gardenGround/outerTerrain/**passage 43**/**过渡台阶 47（t102 43 + t128 4）**/**亭门槛 2（t103）**；t126/t128 两次**有界开槽**使 tier 类由 1→5 段 ×2（净 +8））
+### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，当前 **175 面**：ground/terrace/interior 43/bridgeDeck（4 入城桥面 + **t13 汀步 4 面**）/gardenGround/outerTerrain/**passage 43**/**过渡台阶 47（t102 43 + t128 4）**/**亭门槛 2（t103）**/**t151 C 两殿门外下坡带 4 级**；t126/t128 两次**有界开槽**使 tier 类由 1→5 段 ×2（净 +8）。t9 新增 12 座批量装饰建筑**不新增任何可行走面**；t13 新增 4 面汀步，故本计数 +4。**t13 汀步面为何用 kind `bridgeDeck`**：求解器对 `sourceType=='water'` 的障碍只放行“登记桥面”之上的点（`walk-solver.js::blocks`），汀步正是“跨水面的有界石桥面”，与四座入城桥同一机制 ⇒ 无需放宽阈值、也不新增 kind）
 
 外侧地形 4 段 + 墙外岸台 4 段 + 四桥桥面 + 南/北门内侧带 + 御花园地坪 + B 广场/主殿侧地面/三层台基顶/金銮殿内景地面/主殿北地面 + C 后宫地面/寝殿台基顶/寝殿内景地面 + D/E 侧院地坪。
 
@@ -656,8 +705,8 @@ probeDoorClearanceReport(slotId, { step = 0.1, feetY = null })      // → { rea
 > - **足迹地坪 `footprintFloor(bounds)` = 该足迹内最高可行走面**（含台基顶、`kind:'interior'` 内景面、
 >   `kind:'passage'` 门洞通道面）。因此"记录值 ≤ 足迹地坪"时 `min()` 为**恒等**（`y0Source='layout'`），
 >   不表示"没有下钳规则"，只表示该条目的记录值本来就不高于地坪。
-> - **下钳条数是数据相关量，不是常量**：t75 之后多数建筑足迹地坪抬高，实测下钳 **15 条 / 保持 66 条**
->   （共 81 条；`scripts/audit.mjs` 每次运行都会打印该自检行）。历史文档里"73 条下钳"是旧数据快照，已作废。
+> - **下钳条数是数据相关量，不是常量**：t75 之后多数建筑足迹地坪抬高，实测下钳 **15 条 / 保持 78 条**
+>   （共 **93** 条；`scripts/audit.mjs` 每次运行都会打印该自检行）。历史文档里"73 条下钳"与"15/66（共 81）"都是旧数据快照，已作废（t9 新增 12 座批量装饰建筑后占位更新为 15/78/93）。
 > - **消费方纪律**：碰撞/求解器/审计一律使用 `y0`；**不得**用记录值判断"底部"。
 > - **常驻守卫**：`layout-slice.y0CanonicalProblems()` 逐条复算并要求 `y0` 与 `y0Source` 同时自洽；
 >   `scripts/audit.mjs` 已把它作为一条**违规类**检查项（非空 ⇒ `--enforce` 失败）。
@@ -757,7 +806,7 @@ probeDoorClearanceReport(slotId, { step = 0.1, feetY = null })      // → { rea
 | --- | --- |
 | 参考视口 | `1440×900`、DPR `1`（记录 GPU/浏览器/质量档） |
 | 帧率 | 目标 60 FPS；低档争取 30 FPS；采样 ≥30s |
-| 主场景绘制调用 | ≤ 350；分区 B70 / C50 / D40 / E40 / F80，保留 70 给集成 |
+| 主场景绘制调用 | ≤ 350；分区 **B70 / C60 / D56 / E56 / F80**，**保留 28** 给集成（t84 §8.2 重分配，t33 按 `config.BUDGET` 核对；计划原文 B70/C50/D40/E40/F80 + 保留 70 为**历史快照，不参与判定**；`Σ perZone 322 + 28 = 350` 由 `tests/layout.test.mjs` 常驻 pin） |
 | 可见几何 | ≤ 150 万三角面；单建筑 ≤ 2.4 万 |
 | 纹理 | 1K–2K（4K 仅重点近景确有收益） |
 | 首屏资源 | ≤ 25MB 传输 |
@@ -822,6 +871,27 @@ index.html?view=interior&zone=C&ui=0&shot=1
 index.html?view=oblique&preset=golden
 ```
 
+### 11.3.1 HUD 面板默认折叠契约（**t7 新增**，与 §11.3 的隐藏义务并列）
+
+**面板清单（13 个 `[data-ui-panel]`，DOM 实测为准）**：
+可折叠 9 = `hud` / `views` / `zones` / `env` / `tour` / `minimap` / `help` / `loading` / `info`；
+不折叠 4 = `brand`（标题牌，无标题/内容二分）/ `labels`（3D 标签覆盖层，按缩放层级显隐）/ `stuck` / `toast`（告警条，出现即完整可见）。
+
+1. **默认全折叠**：9 个可折叠面板初始 `data-collapsed="1"` + `aria-expanded="false"` + 内容体 `hidden`（`display:none`）；
+   `info` 例外说明：未选中建筑时整块不出现（`hidden`），一旦出现其默认态同样是**折叠**（折叠头显示建筑名）。
+2. **折叠头语义**：必须是**原生 `<button type="button">`**（Tab 可达 / Enter·Space 激活），`aria-expanded` 如实同步、
+   `aria-controls` 指向内容体 `id`；箭头为文本字形 ▸/▾ 且 `aria-hidden="true"`。
+   keydown(Enter/Space) 必须 `preventDefault()`（避免与原生 click 叠加成双切换）。
+3. **内容不减少**：折叠只改可见性，**不得删 DOM**；展开后内容与折叠前逐项一致（回归断言见 `tests/interaction.test.mjs` G4）。
+4. **折叠不遮挡**：折叠态内容体不参与布局、不截获指针；默认全折叠下视口中心 `elementFromPoint` 必须命中 `canvas`。
+5. **失败提示不被折叠吃掉**：`assetsFailed` / `zoneFailed` ⇒ `loading` 面板**自动展开**（"加载与失败提示"是既定要求）。
+6. **键盘归一**：`H`（操作提示）与 `M`（小地图）与箭头**共用同一折叠状态机**，不得另立"整块 hidden"的平行语义。
+7. **隐藏义务不变**：`?ui=0` 或 `?shot=1` ⇒ 根层 `hidden` 且**逐面板**（含折叠头）不可见（`scripts/ui-check.mjs` 逐面板扫查）。
+8. **验收命令（判据只增不减）**：`node scripts/ui-check.mjs` 的 12 项面板验收为**两相**——
+   相①默认态逐面板断言"折叠"；相②对每个折叠头**真实 CDP 点击**后，12 项逐项要求**可见命中 ≥1**（不再接受"存在即可见"）。
+
+---
+
 ### 11.3 shot 模式义务（**G 必须遵守**；V2 逐项验收）
 
 1. **UI 隐藏义务**：当 `ui=0` **或** `shot=1` 时，HUD、建筑标签、小地图、信息面板、导览控件、视角切换器**必须全部隐藏**——
@@ -830,6 +900,10 @@ index.html?view=oblique&preset=golden
    **当前状态（诚实标注）**：`src/ui/**` 与 `src/interaction/**` 尚未交付（空目录），此刻页面里唯一的 UI 是 `index.html`
    的加载层 `#loading-layer`，`ui=0` 已实现"立即隐藏且不再显示"（实测 `#loading-layer` 带 `hidden=""`）。
    本条第 1 点其余部分是对 G 的**必做要求**，在其交付前属于**未实现/未验证**。
+   > **t33 标注（历史快照，不参与判定）**：以上「尚未交付（空目录）」是 `CONTRACTS v1.0.2`（t17）时点的观测；
+   > 此后两处**均已交付** —— `src/interaction/**` 11 个模块（`index/keymap/fp/pick/highlight/requests/tour/traversal/walk-graph/walk-solver/catalog`）、
+   > `src/ui/**` 6 个文件（`index/dom/labels/minimap/tokens/styles.css`）⇒ 本条第 1 点其余部分**已进入可验证状态**；
+   > 其**是否通过**由 V2（t18）按 `ui=0` 走查判定，**本契约不代判**。上段文字按"历史只追加"保留原样。
 2. **就绪信号义务（可外部轮询，不得靠固定延时）**：`shot` 模式必须提供下列**任一即可**的信号，且**四者同时成立**
    （t2 已全部实现，实测见 §11.6）：
    - `window.__PALACE_READY__ === true`；`window.__PALACE_READY_REASON__` ∈ `'sync-frames'｜'frame'｜'grace-timer'`；
@@ -1126,6 +1200,77 @@ node scripts/probe-walk-rule.mjs          # 只读探针（不改任何文件）
 `通道面 1.7 ↔ transition-1 **1.3** ↔ transition-2 **1.0** ↔ descent-2 **1.45** ↔ descent-1 **1.92** ↔ 台基 **2.4**`；
 同时把 `C_SIDE_MAIN_STEPS` 的**隐式算术**改为**显式规范矩形**（原算术在第二级产生 `minX > maxX` 的畸形值 ⇒ 对 `floorYAt` 隐形、但其“中心”落在带内 ⇒ 触发 §12.1.3 格级护栏）。
 **验收（t158 实测四项同时绿）**：图搜索 **单向 0**（F12 55 处过渡带读数）· ⓠ 分量护栏全绿 · `layout.test` 全绿 · `interaction.test` 的 **E13/E15/E16/F27 转绿**。
+
+**第二次应用（t10，`LAYOUT 1.1.22`；修 t77-F14 blocker）**：E 侧两栋（`E-court1-hall` 文华殿 / `E-court2-hall` 陈设正堂）门外梯链
+**名义恰 +0.50 = 阈值等值**（`通道面 1.4 ↔ transition-1 0.9 ↔ 门外地面 0.4`）。t10 只读取证（`scripts/probe-e-ladder.mjs`）
+定位到**真正的翻面机制**：`walk-graph.sample()` 首次取样返回 `solver.probe` 的 **float64**、缓存后为 **float32**，
+故同一格对在不同调用历史下读数精度不同 ⇒ `1.4 − fround(0.9) = **0.5000000238418579** > 0.5 + 1e-9` ⇒ **冷 flood 拒**，
+而缓存后的 `fround(1.4) − fround(0.9) = 0.5` 恰好含界 ⇒ **暖 flood 放行**（同一张图、同一锚点，`visited` 722111 vs 723785）。
+后果：整城 1m 图上 E 侧两栋内景与两个走查点**不可达**（`verify-completeness` 5.3 的 4 点，长红）。
+**修法（只动几何、不动阈值）**：台基 1.0 → **0.9** ⇒ `sillY = 内景地面 = 通道面 = 1.30`、梯链 `1.30 ↔ 0.85 ↔ 0.40`
+（逐跳 **0.45**，距阈值 0.05；`fround` 侧 0.449999928 / 0.450000018 均在裕量内），与同区 `E-court4-hall`（0.9）统一；
+**级数仍 = ceil(0.9/0.5) = 2 ⇒ `WALKABLE` 仍 171 面、过渡面仍 49 级（无新增/无删除）**。
+**验收（t10 实测）**：整城 1m **冷口径** `connected()` **99 点同一连通分量 ✓**（原 4 点不可达已闭合）·
+四层护栏全绿 · `interaction` E13/E15/E16/F27 全绿 · `audit --enforce` exit 0。
+**仍未闭合的同类项（如实登记，不在 t10 授权内）**：`B-hall-mid`（Δ=2.0，n=4 ⇒ 逐跳 0.5）、
+`B-side-{west,east}-main`（Δ=±1.5，n=3 ⇒ 逐跳 0.5）—— 同一 §12.1.4.5 禁止项，当前冷口径可达但同样对调用历史敏感；
+正解见本节规矩本身（几何留裕量）或 t77-F16（图侧高度统一精度）。
+
+### 12.1.5 **判据数值缺失 = 显式 FAIL**（`CONTRACTS v1.0.26`，t36）
+
+**规矩**：§12 的每条主判据在取用数值前**必须先做有限性校验**（`Number.isFinite`）。
+**`undefined` / `null` / `NaN` 一律判 FAIL 并给出「缺失/非有限值」理由**，**禁止**让比较式悄悄短路为 false。
+
+**为何必须**（t18 取证 + t36 修复）：旧实现写作 `if (content.meanLuma < meanFloor)` ——
+三态下该比较**全为 false**：`undefined < 0.1`、`null < 0.1`、`NaN < 0.1` 都为 `false`
+⇒ **判据被静默跳过**，而 `tests/verify-experience.test.mjs` F1 只读 `ok` ⇒ **假绿**。
+该缝在 t18 被真实触发 1 次：`docs/shots/manifest.json` 的 `t2-interior-night` 判据条目
+`contentDark:null`（`reasons:['无图可统计']`）⇒ F1 由 `exit 0` 转 `exit 1`；重跑同一条命令才自愈。
+
+| 取值 | 旧行为 | **现行行为（t36 起）** |
+| --- | --- | --- |
+| `meanLuma = 0.2`（正常） | 按阈值比较 | 按阈值比较（不变） |
+| `meanLuma = 0.05`（低于下限） | FAIL | FAIL（不变） |
+| `meanLuma = undefined` / `null` / `NaN` | **静默 PASS** | **FAIL** + 理由「缺失/非有限值」 |
+| `darkRatio`、`brightRatio` 同三态 | 同上（静默 PASS） | 同上（显式 FAIL） |
+
+**承载断言**：`tests/verify-experience.test.mjs` **F5**（合成用例：3 指标 × 3 三态 = 9 组合全部显式 FAIL；
+并回归验证基线 PASS 与两条超限 FAIL 行为不变）。判据函数本体：`scripts/shot.mjs::judgeShot()`。
+
+### 12.1.6 **语料族口径：规范族 + 被排除族显式登记**（`CONTRACTS v1.0.26`，t36）
+
+**规矩**：§12 矩阵判定只认**规范族** `t2-*`（`docs/shots/manifest.json` 的 `judge`/`imageStats` 条目名）。
+**任何**其它现存族（如历史快照 `t1.3-*`）**必须被逐条登记**（族名 / 两侧条目数 / 超限清单），
+**禁止**用隐式过滤把它们变成"不存在的条目"。**不得**为了通过而放宽阈值或删除语料。
+
+**背景（t18 取证）**：旧实现 `name.startsWith('t2-')` 属**隐式过滤** ⇒ `t1.3-interior-{B,C}-*`
+（2026-09-26 / `CONFIG 1.0.5` 时代）**5 条超限读数对 F1 完全不可见**：
+`B-golden 66.03%` · `B-dusk 48.96%` · `C-golden 56.05%` · `C-dusk 53.52%` · `C-night 40.77%`（上限 30%）。
+这些条目**不在** §12 矩阵（矩阵 = 24 格 `t2-*`）且**已被当前构建取代**（`t2-interior-*` 全 PASS）。
+
+| 族 | 状态 | 处理 |
+| --- | --- | --- |
+| `t2-*`（24 格 = 8 视角 × 3 时辰） | **规范族** | 参与 F1/F2 判定 |
+| `t1.3-*`（历史快照，2026-09-26 / CONFIG 1.0.5） | **不参与矩阵判定** | **超限读数逐条登记并断言**（F3/F4）；**不删图** |
+
+**承载断言**：`tests/verify-experience.test.mjs` **F3**（被排除族显式登记：族名/条目数/超限清单）
+与 **F4**（`t1.3-*` 旧族超限 ≥4 条且格式为 `name=NN.NN%>NN%`）。
+判据侧另有 t36 的**读取加固**：取"最新**完整**条目"（`contentDark/contentMean/contentClip` 三者有限），
+**缺失统计的条目不得顶替完整条目**。
+
+### 12.1.7 **清单写入幂等**（`CONTRACTS v1.0.26`，t36）
+
+**规矩**：`scripts/shot.mjs` 写 `docs/shots/manifest.json` 时——
+① **同键条目先失效**（本轮将写入的同键旧条目先剔除，再合并）；
+② **同键 `judge` 与 `imageStats` 必须同源**（数值不一致或一侧缺失 ⇒ 落盘前**报错退出**，退出码 4）；
+③ **合并时完整条目优先**：缺失统计的条目**不得**顶替完整条目（两者同等或旧者不全时以新条目为准）。
+
+**为何必须（t18 事故）**：子集重生成时"写图 / 统计 / 落 manifest"曾不同步 ——
+`t2-interior-night` 的 `judge` 条目为 `ok:false / contentDark:null`（`reasons:['无图可统计']`）
+而 `imageStats` 侧为空/有值不一致 ⇒ 该空条目顶替了上一轮的完整条目 ⇒ F1 转红（**非幂等**）。
+
+**验收**：**连续两次** `node scripts/shot.mjs --view=interior --preset=all --judge --keep-invalid`
+的 `t2-interior-*` 条目在 `judge`/`imageStats` 上**逐值一致**（忽略 `generatedAt`/`history`）。
 
 ### 12.2 判据阈值（按视角类别分档）
 

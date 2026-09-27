@@ -22,6 +22,8 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadModule, loadThree, makeSilentEvents, ROOT } from './harness.mjs';
 import { runWalkAudit } from '../scripts/verify-walk.mjs';
+/* t36：F5 用**同一个**判据函数做合成三态用例（不得另写一套替身判据；shot.mjs 已由 t41 保证 import 无副作用） */
+import { judgeShot } from '../scripts/shot.mjs';
 
 const RESULTS = [];
 let FAILS = 0;
@@ -235,32 +237,36 @@ await test('B3 台阶高差不超过登记阈值（0.5m），丹陛/台基按坡
   return `路径最大上台阶 ${walk.summary.pathMaxUp}m（阈值 ${CONFIG.INTERACTION.step.maxStepHeight}m）`;
 });
 
-await test('B4 门洞净宽：61/63 ≥ max(1.1m, 登记宽×0.5) + 2 座具名例外（水中亭，门外被 WB-*-pond 占据）', async () => {
-  // 产品决定（主理人在 t138 背书）：`D-court3-pavilion` / `E-court3-pavilion` **位于水池中**，其门洞不可通行是
-  // **产品事实**（水中亭作对景，用户侧接受、不加汀步）：t117 具名登记 `door.passable=false` + `door.blockedBy=WB-{D,E}-pond`，
-  // t127 提供实测出口 `probeDoorClearance`，t128 已把“声明必须被实测守住”落成断言。
-  // 口径说明：卡内写的 “18/16” 是 t103/t117 之前的门洞普查口径；本树 `walk.doors` 已扩到 63（含亭/配殿门），
-  // 故本断言按**当前全集**表达（非例外 61 条必须达标），并且 `clear===0` 的必须**恰为**这 2 座具名例外。
-  const EX = [
-    { id: 'D-court3-pavilion', blockedBy: 'WB-D-pond' },
-    { id: 'E-court3-pavilion', blockedBy: 'WB-E-pond' },
-  ];
-  const exIds = new Set(EX.map((e) => e.id));
-  const ex = EX.map((e) => {
-    const d = walk.doors.find((x) => x.id === e.id) ?? null;
-    const door = LAYOUT.SLOT_BY_ID[e.id]?.door ?? null;
-    return { id: e.id, blockedBy: e.blockedBy, clear: d?.clear ?? null, declared: d?.declared ?? null, passable: door?.passable ?? null, registered: door?.blockedBy ?? null };
+await test('B4 门洞净宽：全部 63 条 ≥ max(1.1m, 登记宽×0.5)，0 座具名例外（t13：两座水中亭经汀步可达）', async () => {
+  /* t117/t138 时代：`D-court3-pavilion` / `E-court3-pavilion` 位于水池中、门外被 `WB-{D,E}-pond` 占据
+     ⇒ 门洞实测净宽 = 0，登记为**具名例外**（2 座）。
+     t13 把两座水中亭做成**可达**（每池 2 级汀步 + 水体有界开槽，`LAYOUT.STONE_STEP_LANES`），
+     实测净宽 0 → 7.3m：两座具名例外**闭合**。
+     判据强度**只增不减**（原断言的三件事逐条保留并按新事实表达）：
+       ① "非例外全部达标" → 现在**全集**（63 条）都必须达标（原例外也被纳入硬判据）；
+       ② "净宽为 0 的必须恰为具名例外" → 现在 `clear === 0` 的必须**恰为 0 条**（更强的否命题）；
+       ③ "例外必须具名登记 passable=false" → 现在**任何** passable=false 的门都必须具名 blockedBy
+          （恒真不变式，保留"不得无原因宣称不可通行"的原意）。 */
+  const zeros = walk.doors.filter((d) => d.clear === 0).map((d) => d.id).sort();
+  assert(zeros.length === 0, `t13 后不得有实测净宽 = 0 的门洞（实测：${zeros.join(',')}）`);
+  const bad = walk.doors.filter((d) => d.clear < Math.max(1.1, (d.declared ?? 0) * 0.5));
+  assert(bad.length === 0, `门洞偏窄：${bad.map((d) => `${d.id} ${d.clear}/${d.declared}`).join(',')}`);
+  assert(walk.doors.length === 63, `门洞全集应为 63（实测 ${walk.doors.length}）`);
+  const pavilions = ['D-court3-pavilion', 'E-court3-pavilion'];
+  const pavRows = pavilions.map((id) => {
+    const d = walk.doors.find((x) => x.id === id) ?? null;
+    const door = LAYOUT.SLOT_BY_ID[id]?.door ?? null;
+    return { id, clear: d?.clear ?? null, declared: d?.declared ?? null, passable: door?.passable ?? null, registered: door?.blockedBy ?? null };
   });
-  assert(ex.length === 2 && ex.every((d) => d.clear === 0), `具名例外必须恰为 2 座且实测净宽 = 0：${JSON.stringify(ex)}`);
-  assert(ex.every((d) => d.passable === false && d.registered === d.blockedBy),
-    `例外必须具名登记 passable=false 且 blockedBy 指向对应水池：${JSON.stringify(ex)}`);
-  const zeros = walk.doors.filter((d) => d.clear === 0).map((d) => d.id).sort().join(',');
-  assert(zeros === EX.map((e) => e.id).sort().join(','), `净宽为 0 的必须恰为这 2 座具名例外（实测：${zeros}）`);
-  const nonEx = walk.doors.filter((d) => !exIds.has(d.id));
-  const bad = nonEx.filter((d) => d.clear < Math.max(1.1, (d.declared ?? 0) * 0.5));
-  assert(bad.length === 0, `非例外门洞偏窄：${bad.map((d) => `${d.id} ${d.clear}/${d.declared}`).join(',')}`);
-  assert(nonEx.length === 61, `非例外门洞数应为 61（实测 ${walk.doors.length} − ${EX.length} = ${nonEx.length}）`);
-  return `${walk.doors.length} 门洞：非例外 ${nonEx.length} 条全部 ≥ max(1.1m, 登记宽×0.5)（最小 ${Math.min(...nonEx.map((d) => d.clear))}m）；恰好 2 座具名例外 clear=0：${ex.map((d) => `${d.id}→${d.blockedBy}(passable=false)`).join('、')}`;
+  assert(pavRows.every((r) => r.clear >= Math.max(1.1, (r.declared ?? 0) * 0.5)), `两座水中亭门洞必须达标：${JSON.stringify(pavRows)}`);
+  assert(pavRows.every((r) => r.passable === true && r.registered === null), `两座水中亭必须 passable=true 且无 blockedBy：${JSON.stringify(pavRows)}`);
+  const unruly = walk.doors.filter((d) => {
+    const door = LAYOUT.SLOT_BY_ID[d.id]?.door ?? null;
+    if (!door) return false;
+    return door.passable === false ? !door.blockedBy : door.blockedBy != null;
+  });
+  assert(unruly.length === 0, `passable=false ⇒ 必具名 blockedBy；有 blockedBy ⇒ 必 passable=true（违规：${unruly.map((d) => d.id).join(',')}）`);
+  return `${walk.doors.length} 门洞全部 ≥ max(1.1m, 登记宽×0.5)（最小 ${Math.min(...walk.doors.map((d) => d.clear))}m）；0 座具名例外；两座水中亭 ${pavRows.map((r) => `${r.id} clear=${r.clear}`).join('、')}（passable=true）`;
 });
 
 await test('B5 60 段墙（宫墙+院墙）在实体段均阻挡通行', async () => {
@@ -527,8 +533,45 @@ if (existsSync(manifestPath)) {
   const presets = ['golden', 'dusk', 'night'];
   const judged = manifest.judge ?? [];
   const stats = manifest.imageStats ?? [];
-  const latestJudge = (view, preset) => [...judged].reverse().find((j) => j.view === view && j.preset === preset && j.name?.startsWith('t2-'));
-  const latestStat = (view, preset) => [...stats].reverse().find((x) => x.view === view && x.preset === preset && x.name?.startsWith('t2-'));
+
+  /* t36 护栏缝①：旧写法 `name.startsWith('t2-')` 是**隐式过滤**——凡不叫 `t2-*` 的族一律不进判据，
+     于是 `docs/shots/` 里 `t1.3-interior-{B,C}-*`（2026-09-26 / CONFIG 1.0.5 时代）6 条**超限**读数
+     （B-golden 66.03% / C-golden 56.05% / C-dusk 53.52% / C-night 40.77%，上限 30%）**完全不可见**。
+     现改为**显式族口径**：仅 `CANONICAL_FAMILY` 参与 24 格矩阵判定，但**任何被排除的族必须逐条列出**
+     （族名 / 条目数 / 超限清单），且"存在被排除族却未被登记"本身也做成断言 ⇒ 不再有盲区。
+     **不放宽阈值、不删图**：被排除者只是"不参与矩阵判定"，其超限事实照样被断言钉住并打印。 */
+  const CANONICAL_FAMILY = 't2-';
+  const familyOf = (name) => (typeof name === 'string' && name.includes('-') ? `${name.split('-')[0]}-` : '(无名)');
+  const allFamilies = new Map();
+  for (const row of stats) {
+    const fam = familyOf(row.name);
+    if (!allFamilies.has(fam)) allFamilies.set(fam, { family: fam, judge: 0, stat: 0, overDark: [] });
+    allFamilies.get(fam).stat += 1;
+  }
+  for (const row of judged) {
+    const fam = familyOf(row.name);
+    if (!allFamilies.has(fam)) allFamilies.set(fam, { family: fam, judge: 0, stat: 0, overDark: [] });
+    const rec = allFamilies.get(fam);
+    rec.judge += 1;
+    const dark = row.contentDark, cap = row.maxDark;
+    if (Number.isFinite(dark) && Number.isFinite(cap) && dark > cap) {
+      rec.overDark.push(`${row.name}=${(dark * 100).toFixed(2)}%>${(cap * 100).toFixed(0)}%`);
+    }
+  }
+  const excludedFamilies = [...allFamilies.values()]
+    .filter((f) => f.family !== CANONICAL_FAMILY)
+    .sort((a, b) => a.family.localeCompare(b.family));
+  /* 取"最新**完整**条目"：缺失统计的条目（contentDark 为空）不得顶替完整条目
+     —— t36 护栏缝③（子集重生成非幂等）的读取侧加固：judge 与 imageStats 必须成对可用。 */
+  const isComplete = (row) => Number.isFinite(row?.contentDark) && Number.isFinite(row?.contentMean) && Number.isFinite(row?.contentClip);
+  const latestJudge = (view, preset) => {
+    const pool = judged.filter((j) => j.view === view && j.preset === preset && j.name?.startsWith(CANONICAL_FAMILY));
+    return [...pool].reverse().find(isComplete) ?? [...pool].reverse()[0];
+  };
+  const latestStat = (view, preset) => {
+    const pool = stats.filter((x) => x.view === view && x.preset === preset && x.name?.startsWith(CANONICAL_FAMILY));
+    return [...pool].reverse().find((x) => Number.isFinite(x?.content?.meanLuma)) ?? [...pool].reverse()[0];
+  };
   const missing = [];
   for (const view of views) {
     for (const preset of presets) {
@@ -564,6 +607,56 @@ if (existsSync(manifestPath)) {
     const thin = rows.filter((r) => r.thin);
     const detail = rows.map((r) => `${r.view}/${r.preset} 余量${r.marginPp}pp${r.thin ? '(擦线≤1pp)' : ''}`).join(' · ');
     return thin.length === 0 ? `无擦线：${detail}` : `擦线（不构成通过）：${thin.map((r) => `${r.view}/${r.preset} 余量${r.marginPp}pp`).join(', ')}；全部余量：${detail}`;
+  });
+
+  /* ===== t36 护栏缝①：被排除族的**显式登记**（不得有隐式盲区）=====
+     判据：① 规范族必须是 `t2-`；② 每个被排除族都必须在清单里（族名 + 两侧条目数 + 超限清单）；
+     ③ 被排除族若含超限读数，其**超限清单非空**（即"排除"不等于"当它不存在"）；
+     ④ 本仓现存旧族 `t1.3-*` 的超限读数必须**逐条可见**（数值写进断言消息，便于复核）。
+     **不删除任何图、不放宽任何阈值**：这条只保证"排除是被记录的、可复核的"。 */
+  const excludedSummary = excludedFamilies.map((f) => `${f.family}[judge ${f.judge}/stat ${f.stat}${f.overDark.length ? `；超限 ${f.overDark.length}：${f.overDark.join('、')}` : '；无超限'}]`).join(' ');
+  await test('F3 被排除族显式登记（族名/条目数/超限清单；禁隐式盲区）', async () => {
+    assert(CANONICAL_FAMILY === 't2-', `规范族应为 t2-（实际 ${CANONICAL_FAMILY}）`);
+    assert(rows.length === 24, `规范族应覆盖 8 视角 × 3 时辰 = 24 格（实际 ${rows.length}）`);
+    const undocumented = excludedFamilies.filter((f) => !f.family || f.judge < 0 || f.stat < 0);
+    assert(undocumented.length === 0, `被排除族缺少可读登记：${JSON.stringify(undocumented)}`);
+    // 每个含超限读数的被排除族，必须真的列出超限（否则就是"把超限读丢了"）
+    const missingOverDark = excludedFamilies.filter((f) => f.judge > 0 && f.overDark.length === 0 && f.stat === 0);
+    assert(missingOverDark.length === 0, `被排除族 ${missingOverDark.map((f) => f.family).join(',')} 无统计却未标超限`);
+    return `规范族 ${CANONICAL_FAMILY}（24/24 格）· 被排除族 ${excludedFamilies.length} 个：${excludedSummary || '（无）'}`;
+  });
+  /* 历史快照判定：`t1.3-*` 旧族**在矩阵之外但超限事实被钉住** */
+  await test('F4 历史快照族 `t1.3-*` 的超限读数必须被逐条记录（不参与矩阵判定，但不得消失）', async () => {
+    const legacy = excludedFamilies.find((f) => f.family === 't1.3-');
+    if (!legacy) return '（本仓当前无 t1.3- 旧族条目）';
+    const over = legacy.overDark;
+    /* 已知 4 条超限（t18 取证）：内部未出图（t1.3-interior-B-dusk/-night）与 C 两条 invalid 不计入 overDark
+       —— 此处只断言"记录到的超限条数 ≥4 且每条含 name+数值+上限"，不作具体数值 pin（避免与语料快照耦合）。 */
+    assert(over.length >= 4, `t1.3- 旧族应至少记录 4 条超限读数（实际 ${over.length}：${over.join('、') || '无'}）`);
+    assert(over.every((s) => /%>\d+%$/.test(s)), `超限条目格式应为 name=NN.NN%>NN%：${over.join('、')}`);
+    return `t1.3- 旧族 judge ${legacy.judge}/stat ${legacy.stat} · 超限 ${over.length} 条：${over.join('、')}`;
+  });
+  /* ===== t36 护栏缝②：judgeShot 缺失值**必须显式 FAIL**（合成三态用例）===== */
+  await test('F5 合成用例：均值/暗区/截断 的 null·undefined·NaN 一律显式 FAIL（不再静默通过）', async () => {
+    const goodContent = { meanLuma: 0.2, darkRatio: 0.01, brightRatio: 0.01 };
+    const statsWith = (content) => ({ content, mask: { guard: { tripped: false, reasons: [] } }, darkRatio: 0, meanLuma: 0.5 });
+    const pass = judgeShot({ view: 'oblique', stats: statsWith({ ...goodContent }) });
+    assert(pass.ok === true, `基线应 PASS（实际 ${JSON.stringify(pass)}）`);
+    const holes = [];
+    for (const key of ['meanLuma', 'darkRatio', 'brightRatio']) {
+      for (const [label, value] of [['undefined', undefined], ['null', null], ['NaN', NaN]]) {
+        const v = judgeShot({ view: 'oblique', stats: statsWith({ ...goodContent, [key]: value }) });
+        if (v.ok !== false) holes.push(`${key}=${label} 仍判 ok=${v.ok}`);
+        else if (!(v.reasons ?? []).some((r) => r.includes('缺失/非有限值'))) holes.push(`${key}=${label} 判 FAIL 但未给出"缺失/非有限值"理由`);
+      }
+    }
+    /* 阈值行为不得回归：超限仍 FAIL、达标仍 PASS */
+    const over = judgeShot({ view: 'oblique', stats: statsWith({ ...goodContent, darkRatio: 0.31 }) });
+    assert(over.ok === false && over.reasons.some((r) => r.includes('内容暗区')), '暗区超限必须 FAIL（阈值行为不变）');
+    const lowMean = judgeShot({ view: 'oblique', stats: statsWith({ ...goodContent, meanLuma: 0.05 }) });
+    assert(lowMean.ok === false && lowMean.reasons.some((r) => r.includes('内容均值')), '均值低于下限必须 FAIL（阈值行为不变）');
+    assert(holes.length === 0, `仍有静默通过/理由不明：${holes.join('；')}`);
+    return `3 指标 × 3 三态 = 9 组合全部显式 FAIL；基线 PASS 与两条超限 FAIL 行为不变`;
   });
 } else {
   await test('F1 浏览器矩阵 manifest 存在', async () => {

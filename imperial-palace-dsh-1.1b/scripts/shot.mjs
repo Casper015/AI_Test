@@ -1026,6 +1026,37 @@ export const VIEW_CLASS_TABLE = Object.freeze(
   })),
 );
 
+/**
+ * t36：清单条目**完整度**（0–3）——三条 §12 内容统计是否皆为有限值。
+ * 用于 `mergeManifestRows` 的"完整优先"规则：**缺失统计的条目不得顶替完整条目**。
+ */
+export function rowCompleteness(row) {
+  if (!row) return -1;
+  const a = Number.isFinite(row.contentDark);
+  const b = Number.isFinite(row.contentMean);
+  const c = Number.isFinite(row.contentClip);
+  return (a ? 1 : 0) + (b ? 1 : 0) + (c ? 1 : 0);
+}
+
+/**
+ * t36：清单同键合并（纯函数，可单测）。
+ * `preferComplete=true`（`judge` / `imageStats` 用）：新条目完整度 **<** 旧条目 ⇒ **保留旧完整条目**，
+ * 否则新条目胜出（"重跑覆盖同键"语义保持）。
+ * `preferComplete=false`（`results` / `browserReports` 用）：新条目无条件胜出（既有语义）。
+ * 场景：子集重生成时渲染失败 ⇒ 同键产出 `ok:false / contentDark:null` 的空条目，
+ * 旧实现在 merge 后让它顶掉了上一轮的完整条目 ⇒ `verify-experience` F1 由 PASS 转红（t18 实测）。
+ */
+export function mergeManifestRows(oldList = [], newList = [], { preferComplete = false } = {}) {
+  const map = new Map();
+  for (const row of oldList) map.set(row.name, row);
+  for (const row of newList) {
+    const prev = map.get(row.name);
+    if (preferComplete && prev && rowCompleteness(row) < rowCompleteness(prev)) continue;
+    map.set(row.name, row);
+  }
+  return [...map.values()];
+}
+
 export function judgeShot({ view, stats }) {
   if (!stats) return { ok: false, reasons: ['无亮度统计'] };
   const reasons = [];
@@ -1034,28 +1065,41 @@ export function judgeShot({ view, stats }) {
   if (!content) return { ok: false, reasons: ['无内容掩码统计'] };
   const meanFloor = view === 'interior' ? INTERIOR_MIN_MEAN : CITY_MIN_MEAN;
   const maxDark = cls === 'near' ? NEAR_MAX_DARK : CITY_MAX_DARK;
+  const nearLabel = cls === 'near' ? '近景/内景' : '全城';
 
-  // 主判据 1：内容掩码亮度（分母 = 内容像素）
-  if (content.meanLuma < meanFloor) {
-    reasons.push(`${cls === 'near' ? '近景/内景' : '全城'}内容均值 ${content.meanLuma} < ${meanFloor}`);
-  }
-  // 主判据 2：内容掩码暗区（按类别分档）
-  if (content.darkRatio > maxDark) {
-    reasons.push(`${cls === 'near' ? '近景/内景' : '全城'}内容暗区 ${(content.darkRatio * 100).toFixed(2)}% > ${(maxDark * 100).toFixed(0)}%`);
-  }
-  // 主判据 3：过曝 = 高光截断（clip）；整帧均值只作诊断
-  if (content.brightRatio > CLIP_MAX) {
-    reasons.push(`内容高光截断 ${(content.brightRatio * 100).toFixed(2)}% > ${(CLIP_MAX * 100).toFixed(0)}%`);
+  /* t36 护栏缝②：**缺失值必须显式 FAIL，禁止静默通过**。
+     旧写法 `if (content.meanLuma < meanFloor)` 在三态下比较结果均为 false ⇒ 判据被**静默跳过**
+     （`undefined < 0.1` = false、`null < 0.1` = false、`NaN < 0.1` = false）⇒ 该图带着 `ok:true`
+     落进 manifest，而 `verify-experience` F1 只读 `ok` ⇒ **真正失效的是这几条主判据本身**。
+     现改为先做**有限性校验**（`Number.isFinite`）：三态（undefined / null / NaN）一律进 reasons 判 FAIL。
+     该缝在 t18 被真实触发过 1 次：`t2-interior-night` 判据条目 `contentDark:null` ⇒ F1 由 0 转红。 */
+  const metricDefs = [
+    { key: 'meanLuma', label: '内容均值', limit: meanFloor, mode: 'floor' },
+    { key: 'darkRatio', label: '内容暗区', limit: maxDark, mode: 'cap' },
+    { key: 'brightRatio', label: '内容高光截断', limit: CLIP_MAX, mode: 'cap' },
+  ];
+  for (const def of metricDefs) {
+    const value = content[def.key];
+    if (!Number.isFinite(value)) {
+      const shown = value === undefined ? 'undefined' : (value === null ? 'null' : String(value));
+      reasons.push(`${nearLabel}${def.label} **缺失/非有限值**（${shown}）⇒ 判据不可判定，按 FAIL 处理（t36 护栏缝②）`);
+      continue;
+    }
+    if (def.mode === 'floor') {
+      if (value < def.limit) reasons.push(`${nearLabel}${def.label} ${value} < ${def.limit}`);
+    } else if (value > def.limit) {
+      reasons.push(`${nearLabel}${def.label} ${(value * 100).toFixed(2)}% > ${(def.limit * 100).toFixed(0)}%`);
+    }
   }
   // 主判据 4（t41）：**背景掩码可靠**——掩码静默失效时，暗区/均值都不可信，必须判 FAIL 而不是照常 PASS
   if (stats.mask?.guard?.tripped) {
     for (const r of stats.mask.guard.reasons) reasons.push(`背景掩码防护：${r}`);
   }
   const diagnostics = [];
-  if (content.darkRatio <= maxDark && stats.darkRatio > maxDark) {
+  if (Number.isFinite(content.darkRatio) && content.darkRatio <= maxDark && stats.darkRatio > maxDark) {
     diagnostics.push(`整帧暗区 ${(stats.darkRatio * 100).toFixed(2)}% > ${(maxDark * 100).toFixed(0)}%（整帧被背景/天空稀释，仅诊断）`);
   }
-  if (stats.meanLuma > DIAG_MAX_MEAN && content.brightRatio <= CLIP_MAX) {
+  if (Number.isFinite(content.brightRatio) && stats.meanLuma > DIAG_MAX_MEAN && content.brightRatio <= CLIP_MAX) {
     diagnostics.push(`整帧均值 ${stats.meanLuma} > ${DIAG_MAX_MEAN} 但高光截断 ${(content.brightRatio * 100).toFixed(2)}% ≤ ${(CLIP_MAX * 100).toFixed(0)}% → 不构成过曝（天空主导，仅诊断）`);
   }
   return { ok: reasons.length === 0, reasons, diagnostics, cls, maxDark };
@@ -1613,12 +1657,52 @@ async function main() {
       previousManifest = null;
     }
   }
-  const mergeByName = (oldList = [], newList = [], renamed = false) => {
-    const map = new Map();
-    for (const row of oldList) map.set(row.name, row);
-    for (const row of newList) map.set(row.name, row);
-    return [...map.values()];
-  };
+  /* t36 护栏缝③：**同键新旧条目合并时，缺失统计的旧/新条目不得顶替完整条目**。
+     旧写法 `map.set(row.name, row)` 会让"后写者"无条件胜出；而子集重生成时同键可能出现
+     **不完整条目**（`contentDark/contentMean/contentClip` 为空，即 `reasons:['无图可统计']`），
+     merge 之后它就顶掉了上一轮的完整条目 ⇒ `verify-experience` F1 的 `latestJudge` 会取到
+     这条空条目并报 `暗区null%>null%`（t18 实测：t2-interior-night 由 PASS 转红，重跑才自愈）。
+     现改为**完整优先**：完整条目覆盖不完整条目，不完整条目**不得**覆盖完整条目；
+     两者都完整或都不完整时，仍以**新条目**为准（保持"重跑覆盖同键"的既有语义）。 */
+  const mergeByName = (oldList, newList, opts) => mergeManifestRows(oldList, newList, opts);
+  /* t36 护栏缝③（其二）：**子集重生成先失效同键旧条目 —— 但只对"本轮拿到完整统计"的同键条目**。
+     注意与 ①②的区别：若本轮某键**没拿到有效统计**（渲染失败 ⇒ `contentDark/contentMean/contentClip` 皆空），
+     则该键的旧**完整**条目必须**原样保留**（否则一次渲染抖动就会把上一轮的好数据删掉 ⇒ F1 立刻报"缺图"，
+     这正是本卡第一版实现的自身缺陷，已由本轮实测抓到）。
+     ⇒ 因此"失效"只对本轮**完整**产出的同键条目生效；不完整产出交给 mergeByName 的"完整优先"规则挡下。 */
+  const isCompleteStat = (row) => Number.isFinite(row?.contentDark) && Number.isFinite(row?.contentMean) && Number.isFinite(row?.contentClip);
+  const sameKeyNames = new Set([
+    ...imageStats.filter((s) => Number.isFinite(s?.content?.meanLuma)).map((s) => String(s.name).replace(/\(invalid\)$/, '')),
+    ...judgeResults.filter(isCompleteStat).map((j) => String(j.name)),
+    ...results.filter((r) => r.verdict === 'ok' || r.verdict === 'passed').map((r) => String(r.name)),
+  ]);
+  const dropSameKey = (oldList = []) => oldList.filter((row) => !sameKeyNames.has(String(row.name).replace(/\(invalid\)$/, '')));
+  const previousResults = dropSameKey(previousManifest?.results ?? []);
+  const previousStats = dropSameKey(previousManifest?.imageStats ?? []);
+  const previousJudge = dropSameKey(previousManifest?.judge ?? []);
+
+  /* t36 护栏缝③（其三）：**judge 与 imageStats 必须同源** —— 同一次统计同时喂给两侧，
+     任一侧为空而另一侧有值即为"写图/统计/落盘不同步"，必须在落盘前显式报错（而不是留下不一致清单）。 */
+  const statByName = new Map(imageStats.map((s) => [String(s.name).replace(/\(invalid\)$/, ''), s]));
+  const judgeByName = new Map(judgeResults.map((j) => [String(j.name), j]));
+  const sourcePairs = [...new Set([...judgeByName.keys(), ...statByName.keys()])];
+  const mismatched = sourcePairs.filter((name) => {
+    const judged = judgeByName.get(name);
+    const stat = statByName.get(name);
+    if (!judged || !stat) return false; // 仅一侧有：属"失败/未统计"分支，交由下方完整性检查处理
+    const jd = judged.contentDark;
+    const sd = stat.content?.darkRatio;
+    if (!Number.isFinite(jd) || !Number.isFinite(sd)) return true; // 一侧缺失 = 不同步
+    return Math.abs(jd - sd) > 1e-9;
+  });
+  if (mismatched.length > 0) {
+    console.error(`shot: ✗ manifest 同键 judge 与 imageStats 不同源（t36 缝③）：${mismatched.map((n) => {
+      const j = judgeByName.get(n), s = statByName.get(n);
+      return `${n} judge.contentDark=${j?.contentDark} stat.content.darkRatio=${s?.content?.darkRatio}`;
+    }).join('；')}`);
+    process.exit(4);
+  }
+
   writeFileSync(
     manifestPath,
     `${JSON.stringify(
@@ -1636,10 +1720,10 @@ async function main() {
           interiorMinMeanLuma: INTERIOR_MIN_MEAN,
           note: '统计基于最终帧缓冲（含阴影与后处理）；暗区 = luma < darkLumaThreshold；高光截断 = luma > highlightClipLumaThreshold',
         },
-        results: mergeByName(previousManifest?.results, results),
-        imageStats: mergeByName(previousManifest?.imageStats, imageStats),
-        judge: mergeByName(previousManifest?.judge, judgeResults),
-        browserReports: mergeByName(previousManifest?.browserReports, browserReports),
+        results: mergeByName(previousResults, results, { preferComplete: false }),
+        imageStats: mergeByName(previousStats, imageStats, { preferComplete: true }),
+        judge: mergeByName(previousJudge, judgeResults, { preferComplete: true }),
+        browserReports: mergeByName(previousManifest?.browserReports, browserReports, { preferComplete: false }),
         history: [...(previousManifest?.history ?? []), { at: new Date().toISOString(), shots: results.map((r) => `${r.name}:${r.verdict}`) }].slice(-30),
       },
       null,

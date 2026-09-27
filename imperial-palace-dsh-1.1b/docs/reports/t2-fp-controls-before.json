@@ -1,0 +1,244 @@
+{
+ "url": "http://127.0.0.1:59441/index.html?view=fp&quality=medium",
+ "frames": 60,
+ "phases": [
+  {
+   "id": "read",
+   "viewMode": "fp",
+   "fpActive": true,
+   "mode": "fp",
+   "position": {
+    "x": -30,
+    "y": 1.65,
+    "z": -360
+   },
+   "yawDeg": 26.565,
+   "axes": {
+    "right": {
+     "x": -0.8944271909999155,
+     "y": 0,
+     "z": 0.44721359549995854
+    },
+    "up": {
+     "x": 0,
+     "y": 1,
+     "z": 0
+    },
+    "forward": {
+     "x": 0.44721359549995804,
+     "y": 0,
+     "z": 0.8944271909999161
+    }
+   },
+   "tourActive": false,
+   "selectedBuildingId": null,
+   "stuck": null,
+   "stuckHudVisible": false,
+   "fpStats": {
+    "transitions": 0,
+    "settled": 1,
+    "fpEntries": 1,
+    "fpExits": 0,
+    "blockedMoves": 0,
+    "inputEvents": 0
+   },
+   "entry": {
+    "already": true
+   },
+   "surfaceY": 0,
+   "fpEyeHeight": 1.65,
+   "expectedY": 1.65
+  },
+  {
+   "id": "ad",
+   "D": {
+    "code": "KeyD",
+    "frames": 60,
+    "from": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "to": {
+     "x": -25.3489786068004,
+     "y": 1.65,
+     "z": -362.32551069660076
+    },
+    "delta": {
+     "x": 4.651021393199599,
+     "y": 0,
+     "z": -2.325510696600759
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": 0.8944,
+     "z": -0.4472
+    },
+    "dotRight": -5.2,
+    "dotForward": 0,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   },
+   "A": {
+    "code": "KeyA",
+    "frames": 60,
+    "from": {
+     "x": -25.3489786068004,
+     "y": 1.65,
+     "z": -362.32551069660076
+    },
+    "to": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "delta": {
+     "x": -4.651021393199599,
+     "y": 0,
+     "z": 2.325510696600759
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": -0.8944,
+     "z": 0.4472
+    },
+    "dotRight": 5.2,
+    "dotForward": 0,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   },
+   "W": {
+    "code": "KeyW",
+    "frames": 60,
+    "from": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "to": {
+     "x": -27.674489303400307,
+     "y": 1.65,
+     "z": -355.3489786068019
+    },
+    "delta": {
+     "x": 2.325510696599693,
+     "y": 0,
+     "z": 4.651021393198107
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": 0.4472,
+     "z": 0.8944
+    },
+    "dotRight": 0,
+    "dotForward": 5.2,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   },
+   "S": {
+    "code": "KeyS",
+    "frames": 60,
+    "from": {
+     "x": -27.674489303400307,
+     "y": 1.65,
+     "z": -355.3489786068019
+    },
+    "to": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "delta": {
+     "x": -2.325510696599693,
+     "y": 0,
+     "z": -4.651021393198107
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": -0.4472,
+     "z": -0.8944
+    },
+    "dotRight": 0,
+    "dotForward": -5.2,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   }
+  },
+  {
+   "id": "space",
+   "tourBefore": false,
+   "tourAfter": true,
+   "viewModeAfterSpace": "axis",
+   "y0": 1.65,
+   "yMax": 520,
+   "yMin": 1.65,
+   "apex": 518.35,
+   "dive": 0,
+   "surfaceY": null,
+   "fpEyeHeight": 1.65,
+   "jumpVia": {
+    "via": "key:Space"
+   }
+  },
+  {
+   "id": "f",
+   "withSelection": false,
+   "before": {
+    "viewMode": "fp",
+    "fpActive": true,
+    "selected": null
+   },
+   "after": {
+    "viewMode": "axis",
+    "fpActive": false
+   },
+   "restoredMode": "axis"
+  },
+  {
+   "id": "fsel",
+   "withSelection": true,
+   "before": {
+    "viewMode": "fp",
+    "fpActive": true,
+    "selected": "B-hall-main"
+   },
+   "after": {
+    "viewMode": "interior",
+    "fpActive": false
+   },
+   "restoredMode": "interior"
+  }
+ ],
+ "selectInfo": {
+  "pick": "B-hall-main"
+ },
+ "metrics": {
+  "entryYawDeg": 26.565,
+  "rightX": -0.8944,
+  "rightZ": 0.4472,
+  "adD": -5.2,
+  "adA": 5.2,
+  "adW": 5.2,
+  "adS": -5.2,
+  "adDdist": 5.2,
+  "adAdist": 5.2,
+  "adDdistinctY": 1,
+  "adDinside": 0,
+  "adAinside": 0,
+  "spaceTourAfter": 1,
+  "spaceApex": 518.35,
+  "spaceDive": 0,
+  "fExit": 1,
+  "fModeAfter": "axis",
+  "fSelExit": 1,
+  "fSelModeAfter": "interior"
+ }
+}

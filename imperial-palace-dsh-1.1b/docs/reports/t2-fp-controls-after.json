@@ -1,0 +1,402 @@
+{
+ "url": "http://127.0.0.1:54539/index.html?view=fp&quality=medium",
+ "frames": 60,
+ "phases": [
+  {
+   "id": "read",
+   "viewMode": "fp",
+   "fpActive": true,
+   "mode": "fp",
+   "position": {
+    "x": -30,
+    "y": 1.65,
+    "z": -360
+   },
+   "yawDeg": 26.565,
+   "axes": {
+    "right": {
+     "x": -0.8944271909999155,
+     "y": 0,
+     "z": 0.44721359549995854
+    },
+    "up": {
+     "x": 0,
+     "y": 1,
+     "z": 0
+    },
+    "forward": {
+     "x": 0.44721359549995804,
+     "y": 0,
+     "z": 0.8944271909999161
+    }
+   },
+   "tourActive": false,
+   "selectedBuildingId": null,
+   "stuck": {
+    "seconds": 0,
+    "stuck": false,
+    "intent": false,
+    "movedValue": 0,
+    "intentSource": "explicit"
+   },
+   "stuckHudVisible": false,
+   "fpStats": {
+    "transitions": 0,
+    "settled": 1,
+    "fpEntries": 1,
+    "fpExits": 0,
+    "blockedMoves": 0,
+    "inputEvents": 0,
+    "fpJumps": 0
+   },
+   "fpJump": {
+    "enabled": true,
+    "maxHeight": 0.9,
+    "active": false,
+    "vy": 0,
+    "peak": 0,
+    "starts": 0,
+    "landings": 0,
+    "reverts": 0,
+    "refused": 0,
+    "lastReason": null,
+    "lastLanding": null,
+    "cooldown": 0
+   },
+   "airborne": false,
+   "entry": {
+    "already": true
+   },
+   "surfaceY": 0,
+   "fpEyeHeight": 1.65,
+   "expectedY": 1.65
+  },
+  {
+   "id": "ad",
+   "D": {
+    "code": "KeyD",
+    "frames": 60,
+    "from": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "to": {
+     "x": -34.65102139319948,
+     "y": 1.65,
+     "z": -357.67448930339924
+    },
+    "delta": {
+     "x": -4.651021393199478,
+     "y": 0,
+     "z": 2.325510696600759
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": -0.8944,
+     "z": 0.4472
+    },
+    "dotRight": 5.2,
+    "dotForward": 0,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   },
+   "A": {
+    "code": "KeyA",
+    "frames": 60,
+    "from": {
+     "x": -34.65102139319948,
+     "y": 1.65,
+     "z": -357.67448930339924
+    },
+    "to": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "delta": {
+     "x": 4.651021393199478,
+     "y": 0,
+     "z": -2.325510696600759
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": 0.8944,
+     "z": -0.4472
+    },
+    "dotRight": -5.2,
+    "dotForward": 0,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   },
+   "W": {
+    "code": "KeyW",
+    "frames": 60,
+    "from": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "to": {
+     "x": -27.674489303400307,
+     "y": 1.65,
+     "z": -355.3489786068019
+    },
+    "delta": {
+     "x": 2.325510696599693,
+     "y": 0,
+     "z": 4.651021393198107
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": 0.4472,
+     "z": 0.8944
+    },
+    "dotRight": 0,
+    "dotForward": 5.2,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   },
+   "S": {
+    "code": "KeyS",
+    "frames": 60,
+    "from": {
+     "x": -27.674489303400307,
+     "y": 1.65,
+     "z": -355.3489786068019
+    },
+    "to": {
+     "x": -30,
+     "y": 1.65,
+     "z": -360
+    },
+    "delta": {
+     "x": -2.325510696599693,
+     "y": 0,
+     "z": -4.651021393198107
+    },
+    "horizontal": 5.2,
+    "dir": {
+     "x": -0.4472,
+     "z": -0.8944
+    },
+    "dotRight": 0,
+    "dotForward": -5.2,
+    "distinctY": 1,
+    "yMin": 1.65,
+    "yMax": 1.65,
+    "insideObstacleFrames": 0
+   }
+  },
+  {
+   "id": "space",
+   "tourBefore": false,
+   "tourAfter": false,
+   "viewModeAfterSpace": "fp",
+   "y0": 1.65,
+   "yMax": 2.5026299364909255,
+   "yMin": 1.65,
+   "apex": 0.8526,
+   "dive": 0,
+   "surfaceY": 0,
+   "fpEyeHeight": 1.65,
+   "jumpEnabled": true,
+   "jumpMaxHeight": 0.9,
+   "jumpVia": {
+    "via": "rig.jump"
+   }
+  },
+  {
+   "id": "jump",
+   "jumpVia": {
+    "via": "rig.jump"
+   },
+   "jumpStarts": 1,
+   "jumpLandings": 1,
+   "jumpReverts": 0,
+   "jumpStartsTotal": 2,
+   "jumpLandingsTotal": 2,
+   "landingKind": "ground",
+   "landingReason": null,
+   "takeoff": {
+    "x": -30,
+    "y": 1.65,
+    "z": -360
+   },
+   "y0": 1.65,
+   "yMax": 2.5026299364909255,
+   "apex": 0.8526,
+   "landingY": 1.65,
+   "landingSurfaceY": 0,
+   "landingExpectedY": 1.65,
+   "landingDelta": 0,
+   "returnToTakeoff": 0,
+   "airborneFrames": 36,
+   "withinLimit": true,
+   "insideObstacleFrames": 0,
+   "jumpState": null
+  },
+  {
+   "id": "jumpwall",
+   "rounds": 6,
+   "framesPerRound": 40,
+   "insideObstacleFrames": 0,
+   "jumpStarts": 3,
+   "jumpLandings": 3,
+   "jumpReverts": 0,
+   "end": {
+    "viewMode": "fp",
+    "fpActive": true,
+    "mode": "fp",
+    "position": {
+     "x": -23.02346791020092,
+     "y": 1.65,
+     "z": -346.0469358204057
+    },
+    "yawDeg": 26.565,
+    "axes": {
+     "right": {
+      "x": -0.8944271909999155,
+      "y": 0,
+      "z": 0.44721359549995854
+     },
+     "up": {
+      "x": 0,
+      "y": 1,
+      "z": 0
+     },
+     "forward": {
+      "x": 0.44721359549995804,
+      "y": 0,
+      "z": 0.8944271909999161
+     }
+    },
+    "tourActive": false,
+    "selectedBuildingId": null,
+    "stuck": {
+     "seconds": 0,
+     "stuck": false,
+     "intent": true,
+     "movedValue": 0.0867,
+     "intentSource": "explicit"
+    },
+    "stuckHudVisible": false,
+    "fpStats": {
+     "transitions": 0,
+     "settled": 1,
+     "fpEntries": 1,
+     "fpExits": 0,
+     "blockedMoves": 60,
+     "inputEvents": 0,
+     "fpJumps": 5
+    },
+    "fpJump": {
+     "enabled": true,
+     "maxHeight": 0.9,
+     "active": false,
+     "vy": 0,
+     "peak": 0.85263,
+     "starts": 5,
+     "landings": 5,
+     "reverts": 0,
+     "refused": 3,
+     "lastReason": "cooldown",
+     "lastLanding": {
+      "kind": "ground",
+      "x": -24.6900839094307,
+      "z": -349.3801678188643,
+      "surfaceY": 0,
+      "y": 1.65,
+      "drop": 0,
+      "peak": 0.85263
+     },
+     "cooldown": 0
+    },
+    "airborne": false
+   }
+  },
+  {
+   "id": "jumpstuck",
+   "rounds": 8,
+   "frames": 240,
+   "seconds": 4,
+   "hudVisibleFrames": 0,
+   "stuckSecondsMax": 0,
+   "stuckFlag": false,
+   "stuckHudVisible": false,
+   "jumpStarts": 8
+  },
+  {
+   "id": "f",
+   "withSelection": false,
+   "before": {
+    "viewMode": "fp",
+    "fpActive": true,
+    "selected": null
+   },
+   "after": {
+    "viewMode": "oblique",
+    "fpActive": false
+   },
+   "restoredMode": "oblique"
+  },
+  {
+   "id": "fsel",
+   "withSelection": true,
+   "before": {
+    "viewMode": "fp",
+    "fpActive": true,
+    "selected": "B-hall-main"
+   },
+   "after": {
+    "viewMode": "oblique",
+    "fpActive": false
+   },
+   "restoredMode": "oblique"
+  }
+ ],
+ "selectInfo": {
+  "pick": "B-hall-main"
+ },
+ "metrics": {
+  "entryYawDeg": 26.565,
+  "rightX": -0.8944,
+  "rightZ": 0.4472,
+  "adD": 5.2,
+  "adA": -5.2,
+  "adW": 5.2,
+  "adS": -5.2,
+  "adDdist": 5.2,
+  "adAdist": 5.2,
+  "adDdistinctY": 1,
+  "adDinside": 0,
+  "adAinside": 0,
+  "spaceTourAfter": 0,
+  "spaceApex": 0.8526,
+  "spaceDive": 0,
+  "apex": 0.8526,
+  "landingDelta": 0,
+  "jumpInside": 0,
+  "jumpStarts": 1,
+  "jumpLandings": 1,
+  "jumpReverts": 0,
+  "landingIsGround": 1,
+  "jumpWallInside": 0,
+  "jumpWallStarts": 3,
+  "jumpWallLandings": 3,
+  "jumpWallReverts": 0,
+  "stuckHudFrames": 0,
+  "fExit": 1,
+  "fNotInterior": 1,
+  "fModeAfter": "oblique",
+  "fSelExit": 1,
+  "fSelNotInterior": 1,
+  "fSelModeAfter": "oblique"
+ }
+}

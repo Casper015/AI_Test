@@ -10,7 +10,7 @@
  *   4. 对象全部深冻结：下游只能读，不能就地改写。
  */
 
-export const CONFIG_VERSION = '1.0.7'; // t84：§8.2 分区配额重分配（43 栋内景需求变更）
+export const CONFIG_VERSION = '1.0.9'; // t25：新增 LIGHTING.atmosphere.smokeMinPointPx = 1.0（烟柱 LOD 门限，落地 t1 交回的最小修复：亚像素点精灵整柱不绘制，修"红色边缘持续闪烁"；粒子数/预算/材质规格逐值未动）；上一版 1.0.8 = t2：INTERACTION.jump 启用（enabled true + maxHeight/cooldownSeconds）；再上版 1.0.7 = t84 §8.2 分区配额重分配
 export const STYLE_BASELINE = 'v1.0.0';
 
 /** 统一场景种子：每个区域用 deriveSeed(zone) 派生固定随机序列，保证复现与截图可比对（§3.1 随机性）。 */
@@ -473,6 +473,21 @@ export const LIGHTING = Object.freeze({
   atmosphere: Object.freeze({
     smokeEnabled: true, // 香炉轻烟
     smokeParticleBudget: 48,
+    /**
+     * t25（落地 t1 交回的最小修复）：**烟柱 LOD 门限**（单位 = 屏幕像素）。
+     *
+     * 机制（t1 实测，见 `docs/handoff-t1-flicker.md` §0/§6）：`?view=oblique` 下中轴 4 座香炉
+     * 距相机 935–1424 m，`size=1.1` + `sizeAttenuation` ⇒ `gl_PointSize ≈ 0.35–0.53 px`（**亚像素**）；
+     * 同一屏幕像素叠 3–5 颗 ⇒ 等效不透明 0.41–0.58，压在宫红墙 `#962822` 边缘上；48 颗粒子按
+     * `phase=(elapsed·0.22+seed)%1` 上升、每 4.5 s **硬回绕**（无淡入淡出）⇒ 9–14 次/秒的亚像素覆盖翻转
+     * = 肉眼所见的"红色边缘持续闪烁"（静止场景 30 帧 79 个不稳定像素、29/29 对相邻帧都变）。
+     *
+     * 修法：`pointPx = size × (drawingBufferHeight/2) / dist` **小于本门限时整柱不绘制**（只改可见性）。
+     * 门限 = 1.0 px ⇒ 等效距离门限 = `1.1 × 450 / 1.0` ≈ **495 m**：只裁远景亚像素段；
+     * **近景保留性**：20 m 处点径 = 1.1×450/20 = **24.75 px** ≫ 1.0 ⇒ 第一人称/内景/门前景的烟柱形态**完全保留**。
+     * **粒子数/预算/材质规格（size 1.1 / opacity 0.16 / span 6 / 48 颗）逐值未动**（§8.2 与守卫②均断言）。
+     */
+    smokeMinPointPx: 1.0,
     dustEnabled: true,
     dustParticleBudget: 220,
     bloomEnabled: true,
@@ -594,9 +609,18 @@ export const INTERACTION = Object.freeze({
     smoothSeconds: 0.18, // 上下台阶平滑过渡
   }),
   jump: Object.freeze({
-    enabled: false, // §6.4 未要求跳跃；禁用以避免掉出宫城
-    velocity: 0,
-    gravity: -18,
+    /**
+     * t2：**启用空格跳跃**（卡面要求）。安全不靠"禁用"而靠三条结构性约束（见 docs/CONTRACTS.md §6.3）：
+     *   ① 顶点硬上限 `maxHeight`（≤1.0m，内核再钳一道 1.0）；
+     *   ② 空中水平位移仍走同一求解器（包络 `clampToEnvelope` + 障碍体块/门洞 + 可行走面 + 子步进防隧穿）
+     *      ⇒ 越不过城墙、出不了宫城；
+     *   ③ 落点必须可站立（未被障碍占据、落差 ≤ `step.snapDownDistance`），否则**回起跳点**。
+     */
+    enabled: true,
+    velocity: 0, // 历史字段（保留，不参与判定；起跳速度由 maxHeight+gravity 推得）
+    gravity: -18, // 取绝对值使用
+    maxHeight: 0.9, // 顶点（米）；内核另有 1.0m 硬上限
+    cooldownSeconds: 0.12, // 起跳冷却（连按不叠加）
   }),
   collision: Object.freeze({
     broadphase: 'aabbGrid',
@@ -813,6 +837,8 @@ export const EVENTS = Object.freeze({
   cameraSettled: 'camera:settled', // { mode, position }
   fpEntered: 'fp:entered', // { position }
   fpExited: 'fp:exited', // { restoredMode }
+  fpJumped: 'fp:jumped', // t2 { source, takeoff:{x,y,z,surfaceY}, height }
+  fpLanded: 'fp:landed', // t2 { kind:'ground'|'reverted', x,z,surfaceY,drop,peak,reason? }
   blockedByBuilding: 'interaction:blocked-building', // { buildingId, reason }
 });
 

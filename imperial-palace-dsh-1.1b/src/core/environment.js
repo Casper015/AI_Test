@@ -397,6 +397,22 @@ export function createEnvironment({
     flickerPhase: 0,
     /** t95：最近一次入选池（top-`realtimeLights.length`）——直接读数，供 describe()/验收消费 */
     pool: [],
+    /**
+     * t5：最近一次入选滞回读数（`selectLampPool` 的直接结果；只读诊断，不参与判断）。
+     * `admitted`/`evicted` = 本次真的换进来的新面孔/被让位的在位者；
+     * `keptByHysteresis` = 本可被挤掉、因滞回被保留的在位者（>0 即证明滞回**在生产路径上生效**）。
+     */
+    hysteresis: { incumbents: 0, admitted: 0, evicted: 0, keptByHysteresis: 0, forced: 0 },
+    /** t5：滞回累计计数（跨帧；供常驻守卫与验收直接读数，不参与判断） */
+    hysteresisTotals: { admitted: 0, evicted: 0, kept: 0 },
+    /**
+     * t5：`snapFade` = "下一次重选直接把斜坡落到目标值"（不淡入淡出）。
+     * 由**重配置类**变更置位（时辰/质量/锚点集变化，以及 `dt ≤ 0` 的 settle 路径）——
+     * 这些不是"镜头移动造成的换灯"，必须立刻呈现稳态亮度，否则截图/§12 读数会读到半亮画面。
+     */
+    snapFade: true,
+    /** t5：本帧处于斜坡中（0 < fade < 1）的槽位数（只读诊断） */
+    fading: 0,
   };
 
   function buildLampInstances(anchors) {
@@ -432,6 +448,7 @@ export function createEnvironment({
     buildLampInstances(lampState.anchors);
     if (lampInstances) lampInstances.visible = presetOf(currentPreset).lampIntensityScale > 0.02;
     lampState.lastReselect = -Infinity;
+    lampState.snapFade = true; // t5：重配置后首次重选直接落稳态（不淡入）
     events.emit(EVENTS.assetsProgress, {
       loaded: lampState.anchors.length,
       total: lampState.anchors.length,
@@ -741,6 +758,7 @@ export function createEnvironment({
     for (const light of realtimeLights) light.visible = false;
     lampState.active = 0;
     lampState.lastReselect = -Infinity;
+    lampState.snapFade = true; // t5：重配置后首次重选直接落稳态（不淡入）
 
     // 注意：时辰切换属于 state 变更（state:change 已由 store 广播），这里**不再**发 assets:progress，
     // 避免污染加载进度语义（assets:progress 只用于资源加载）。
@@ -765,6 +783,7 @@ export function createEnvironment({
     if (want !== realtimeLights.length) {
       buildRealtimeLights(want);
       lampState.lastReselect = -Infinity;
+    lampState.snapFade = true; // t5：重配置后首次重选直接落稳态（不淡入）
     }
     return { tier, shadowMapSize: q.shadowMapSize, realtimeLights: realtimeLights.length, bloom: q.bloom };
   }
@@ -791,11 +810,15 @@ export function createEnvironment({
     return importance / (1 + (d / base) ** LAMP_SCORE_POWER);
   }
 
-  /** 灯位池排名（纯函数；`updateLampSelection` 与测试共用同一实现，避免"代理断言"）。 */
-  function rankLampPool(lamps = [], focus = null, { budget = null, scoreOf = lampScore, maxDistance = null } = {}) {
+  /**
+   * 灯位候选**全量排名**（纯函数）：按分数降序，并列时依次比距离、id（**确定性**，不依赖注册顺序）。
+   * t5：从 `rankLampPool` 抽出（原来只有"排名 + 截断"一步），使 `selectLampPool` 能在**同一条排名**上
+   * 看到截断线**两侧**的候选（滞回判定需要知道"谁想进来、谁要被挤出去"）。
+   * `rankLampPool` 的返回语义逐位不变（同一排序 + 同一 slice）。
+   */
+  function rankLampCandidates(lamps = [], focus = null, { scoreOf = lampScore, maxDistance = null } = {}) {
     const center = focus ?? { x: CENTER.x, y: CENTER.y, z: CENTER.z };
     const cap = maxDistance ?? Math.min(LIGHTING.lamps.distance * 6, LIGHTING.lamps.emissiveFallbackBeyond);
-    const size = budget ?? (realtimeLights.length || LIGHTING.lamps.maxRealtimePointLights);
     return lamps
       .map((anchor) => ({
         anchor,
@@ -803,8 +826,67 @@ export function createEnvironment({
       }))
       .filter((r) => r.distance <= cap)
       .map((r) => ({ ...r, score: scoreOf(r.anchor.role, r.distance) }))
-      .sort((a, b) => (b.score - a.score) || (a.distance - b.distance) || String(a.anchor.id).localeCompare(String(b.anchor.id)))
-      .slice(0, size);
+      .sort((a, b) => (b.score - a.score) || (a.distance - b.distance) || String(a.anchor.id).localeCompare(String(b.anchor.id)));
+  }
+
+  /** 灯位池排名（纯函数；`updateLampSelection` 与测试共用同一实现，避免"代理断言"）。 */
+  function rankLampPool(lamps = [], focus = null, { budget = null, scoreOf = lampScore, maxDistance = null } = {}) {
+    const size = budget ?? (realtimeLights.length || LIGHTING.lamps.maxRealtimePointLights);
+    return rankLampCandidates(lamps, focus, { scoreOf, maxDistance }).slice(0, size);
+  }
+
+  /**
+   * t5：**池入选滞回**（`updateLampSelection` 的生产选择器；纯函数、与渲染解耦，便于守卫直测）。
+   *
+   * 缺陷（t5 实测，见 `docs/reports/report-t5-lamp-flicker.md`）：镜头每帧转 0.5° 时，机位到各灯位的距离
+   * 连续变化，而 `rankLampPool` 的 `slice(0, size)` 是**无滞回的硬截断** ⇒ 只要 rank-size 与 rank-size+1
+   * 的相对分数裕量 `(s_N − s_{N+1}) / s_N` 落到 1e-3 量级（实测 VP-C-zone 有 3/150 帧 <1e-3），
+   * 截断线就在两盏灯之间来回跳（实测基线 14 机位 × 150 帧共 307 次槽位换灯位）。
+   *
+   * 修法（**只加滞回，不动任何预算**）：把"挑战者 top-size"与"在位者"做配对，
+   * 新面孔只有**显著优于**它要挤掉的在位者（`score > incumbent.score × (1 + margin)`）才准进池；
+   * 否则保留在位者。配对规则：新面孔按分数降序、在位者按分数升序（最强的挑战者挤最弱的在位者）；
+   * 在位者已**离开距离上限**时不参与配对（必须让位），空出的名额由排名最靠后的新面孔无条件补上。
+   * 返回池长度恒等于 `size`（除非候选不足）⇒ 池容量与距离上限**逐值不变**。
+   */
+  const LAMP_HYSTERESIS_MARGIN = 0.12;
+  function selectLampPool(lamps = [], focus = null, {
+    budget = null,
+    incumbents = [],
+    margin = LAMP_HYSTERESIS_MARGIN,
+    scoreOf = lampScore,
+    maxDistance = null,
+  } = {}) {
+    const size = budget ?? (realtimeLights.length || LIGHTING.lamps.maxRealtimePointLights);
+    const ranked = rankLampCandidates(lamps, focus, { scoreOf, maxDistance });
+    if (size <= 0) return { pool: [], ranked, admitted: [], evicted: [], keptByHysteresis: [], forced: [] };
+    const challengers = ranked.slice(0, size);
+    const incumbentSet = new Set(incumbents);
+    const challengerIds = new Set(challengers.map((r) => r.anchor.id));
+    const stayers = challengers.filter((r) => incumbentSet.has(r.anchor.id));
+    const newcomers = challengers.filter((r) => !incumbentSet.has(r.anchor.id));
+    // 在位但掉出挑战者名单者：只有"仍在距离上限内"的才有资格靠滞回留下
+    const outsiders = ranked.filter((r) => incumbentSet.has(r.anchor.id) && !challengerIds.has(r.anchor.id));
+    const outsidersWeakestFirst = [...outsiders].reverse();
+    const contested = Math.min(newcomers.length, outsiders.length);
+    // 无需竞争的名额（在位者已出界）⇒ 由排名最靠后的新面孔无条件补位
+    const forced = newcomers.slice(contested);
+    const admitted = [...forced];
+    const keptByHysteresis = [];
+    const evicted = [];
+    for (let k = 0; k < contested; k += 1) {
+      const newcomer = newcomers[k];
+      const incumbent = outsidersWeakestFirst[k];
+      if (newcomer.score > incumbent.score * (1 + margin)) {
+        admitted.push(newcomer);
+        evicted.push(incumbent);
+      } else {
+        keptByHysteresis.push(incumbent);
+      }
+    }
+    const pool = [...stayers, ...admitted, ...keptByHysteresis]
+      .sort((a, b) => (b.score - a.score) || (a.distance - b.distance) || String(a.anchor.id).localeCompare(String(b.anchor.id)));
+    return { pool, ranked, admitted, evicted, keptByHysteresis, forced };
   }
 
   /** t90 前口径（仅用于对照/突变证明；**不再参与生产选择**）。 */
@@ -814,18 +896,44 @@ export function createEnvironment({
     return importance * (1 - Math.min(1, (Number.isFinite(distance) ? distance : 0) / span));
   }
 
-  function updateLampSelection(elapsed, cameraPosition) {
+  /**
+   * t5：`snapFade` 的**第二个**触发条件——"从非运行状态恢复"。
+   * 相邻两次重选的间隔在连续旋转下恒为节流值 0.35s；一旦间隔 ≥ 1s，说明循环刚启动 / 标签页刚从后台恢复
+   * / 走了确定性截图路径 ⇒ 直接落稳态，不淡入（否则首屏与截图会读到半亮画面）。
+   */
+  const LAMP_FADE_RESUME_SECONDS = 1;
+
+  function updateLampSelection(elapsed, cameraPosition, dt = 0) {
     const lamps = lampState.anchors;
     if (lamps.length === 0 || realtimeLights.length === 0) {
       // t95：没有可选灯位/没有实时名额时，池必须清空（否则 describe() 会读到上一帧的陈旧清单）
       lampState.pool = [];
+      lampState.snapFade = true; // t5：名额恢复后首次重选直接落稳态
       return;
     }
-    if (elapsed - lampState.lastReselect < 0.35) return;
+    const gap = elapsed - lampState.lastReselect;
+    if (gap < 0.35) return;
     lampState.lastReselect = elapsed;
+    const resume = !Number.isFinite(gap) || gap >= LAMP_FADE_RESUME_SECONDS;
     const focus = cameraPosition ?? { x: CENTER.x, y: CENTER.y, z: CENTER.z };
-    // t90：统一走纯函数 rankLampPool（距离感知评分；预算与距离上限不变）
-    const pool = rankLampPool(lamps, focus, { budget: realtimeLights.length });
+    /**
+     * t5：走**带滞回**的生产选择器 `selectLampPool`（评分口径、池容量、距离上限、节流全部不变）：
+     *   · 在位者（上一帧池内的灯位）只有被"显著更优"的挑战者挤出时才让位 ⇒ 截断线不再逐帧抖动；
+     *   · 入选池仍按分数降序暴露（`describe().lamps.pool` 语义不变）。
+     */
+    const incumbents = lampState.pool.map((r) => r.id);
+    const selection = selectLampPool(lamps, focus, { budget: realtimeLights.length, incumbents });
+    const pool = selection.pool;
+    lampState.hysteresis = {
+      incumbents: incumbents.length,
+      admitted: selection.admitted.length,
+      evicted: selection.evicted.length,
+      keptByHysteresis: selection.keptByHysteresis.length,
+      forced: selection.forced.length,
+    };
+    lampState.hysteresisTotals.admitted += selection.admitted.length;
+    lampState.hysteresisTotals.evicted += selection.evicted.length;
+    lampState.hysteresisTotals.kept += selection.keptByHysteresis.length;
     /**
      * t95：**保留入选池并暴露为可直接读取的清单**（`describe().lamps.pool`）。
      * 动机：t94 只能做"真实计数 + 真实输入复算"的交叉校验；下游（t66/验收）需要**直接读数**：
@@ -840,17 +948,82 @@ export function createEnvironment({
       score: r.score, // 保留全精度（消费者可直接与 lampScore() 逐值比对）
     }));
 
-    lampState.active = 0;
+    /**
+     * t5：**槽位绑定按身份保留**（不是按排名位次）。8 盏 PointLight 同色同参，
+     * 池内次序变化在画面上是零效应；只有"进出池"才产生可见硬切。
+     * 若按 `pool[i]` 直接写槽位，则一次进出会连带让多盏灯**换位置**（槽位 i 换到别的灯位），
+     * 白白放大突变面。这里先把"仍在池内"的原绑定原槽位保留，再用空槽位接纳新面孔。
+     */
+    const byId = new Map(pool.map((r) => [r.anchor.id, r]));
+    const slotBinding = new Array(realtimeLights.length).fill(null);
+    const bound = new Set();
     realtimeLights.forEach((light, i) => {
-      const hit = pool[i];
+      const id = light.userData?.lampAnchorId ?? null;
+      if (id && byId.has(id) && !bound.has(id)) {
+        slotBinding[i] = id;
+        bound.add(id);
+      }
+    });
+    const free = pool.filter((r) => !bound.has(r.anchor.id));
+    let freeIndex = 0;
+    for (let i = 0; i < slotBinding.length && freeIndex < free.length; i += 1) {
+      if (slotBinding[i]) continue;
+      slotBinding[i] = free[freeIndex].anchor.id;
+      bound.add(free[freeIndex].anchor.id);
+      freeIndex += 1;
+    }
+
+    lampState.active = 0;
+    /**
+     * t5：**进出池与距离变化都不硬切**——重选只写"目标绑定 + 目标满强度 + 目标开合位"，
+     * 真实强度由每帧 `updateLampOutput()` 限速逼近。三条口径：
+     *   ① `snap`（时辰/质量/锚点重配置后的首次重选、`dt ≤ 0` 的 `settle()`、从非运行状态恢复）
+     *      ⇒ 直接落稳态，稳态亮度与修复前**逐值相同**（§12 可读性 / 截图确定性不受影响）；
+     *   ② **换绑时强度连续**：新灯位从"上一帧该槽位的实际强度"起步（`lampBase = 上一帧强度`，`fade = 1`），
+     *      而不是从满强度硬跳 ⇒ 单帧增量仍被限速；
+     *   ③ 掉出池的槽位只把**目标**置 0，`lampBase` 保留到斜坡真正走完才释放（否则会瞬间归零 = 硬切）。
+     * 距离变化（同一灯位、falloff 变化）同样走 `lampBaseTarget` 限速 ⇒ 节流窗口内的基准台阶也被抹平。
+     */
+    const snap = lampState.snapFade || dt <= 0 || resume;
+    lampState.snapFade = false;
+    realtimeLights.forEach((light, i) => {
+      const hit = slotBinding[i] ? byId.get(slotBinding[i]) : null;
+      const prevId = light.userData.lampAnchorId ?? null;
       if (!hit) {
-        light.visible = false;
+        light.userData.lampTarget = 0; // 斜坡熄灭；lampBase 在 fade 归零后才释放
+        if (snap) {
+          light.userData.lampAnchorId = null;
+          light.userData.lampBase = 0;
+          light.userData.lampBaseTarget = 0;
+          light.userData.fade = 0;
+        }
         return;
       }
-      light.visible = true;
-      light.position.set(hit.anchor.position.x, lampY(hit.anchor, 0.6), hit.anchor.position.z);
       const falloff = 1 - Math.min(0.85, hit.distance / LIGHTING.lamps.distance);
-      light.intensity = (overrides[currentPreset]?.lampIntensity ?? LIGHTING.lamps.intensity) * Math.max(0.15, falloff) * presetOf(currentPreset).lampIntensityScale;
+      const base = (overrides[currentPreset]?.lampIntensity ?? LIGHTING.lamps.intensity) * Math.max(0.15, falloff) * presetOf(currentPreset).lampIntensityScale;
+      const prevIntensity = light.intensity; // 上一帧该槽位的**最终**强度（含 flicker）——换绑连续性锚点
+      const rebound = prevId !== hit.anchor.id;
+      // t5：槽位 ↔ 灯位绑定登记（只读登记，不参与选择/预算判断）——供 lampSlots() 与守卫取证
+      light.userData.lampAnchorId = hit.anchor.id;
+      light.position.set(hit.anchor.position.x, lampY(hit.anchor, 0.6), hit.anchor.position.z);
+      light.userData.lampBaseTarget = base;
+      light.userData.lampTarget = 1;
+      if (snap || light.userData.lampBase === undefined) {
+        light.userData.lampBase = base;
+        light.userData.fade = 1;
+        light.userData.lampContinuity = null;
+      } else if (rebound) {
+        /**
+         * 强度连续：登记"上一帧实际强度"为连续性锚点，由每帧输出层反解当前满强度
+         * （`base = 上一帧强度 / (fade × k)`）。这样**连 flicker 相位突变也被吸收**——
+         * flicker 相位是 `light.position.x` 的函数，换绑就换相位，硬写 base 会留下
+         * 最大 `2 × flickerAmplitude × base`（夜间 ≈1.8，≈108/s）的残余跳变。
+         */
+        light.userData.lampContinuity = Math.max(0, prevIntensity);
+        light.userData.fade = 1;
+      } else if (light.userData.fade === undefined) {
+        light.userData.fade = 1;
+      }
       light.distance = overrides[currentPreset]?.lampDistance ?? LIGHTING.lamps.distance;
       light.decay = LIGHTING.lamps.decay;
       lampState.active += 1;
@@ -858,10 +1031,123 @@ export function createEnvironment({
     lampState.emissiveOnly = Math.max(0, lamps.length - lampState.active);
   }
 
+  /**
+   * t5：**每帧**限速推进"满强度"与"开合位"并写最终强度（flicker 之前）。
+   *
+   * 机制（t5 实测，见 `docs/reports/report-t5-lamp-flicker.md`）：旋转镜头时 `updateLampSelection`
+   * 每 0.35s（`lastReselect` 节流）重选一次，池集合变化 ⇒ 某盏 PointLight **在单帧内从 0 跳到满强度
+   * 或反之**（实测每次重选平均 0.58 盏进出，2.5s 内约 5 次）——这就是肉眼看到的"灯闪烁"。
+   * 实测（14 机位 × 150 帧 × 0.5°/帧，夜/中档）：
+   *   · 滞回（`selectLampPool`）单独只能把槽位换灯位从 307 次降到 ~290 次（≈6%）——大部分进出是"镜头确实移动了"；
+   *   · **槽位按身份绑定**把同一条轨迹降到 93 次（≈70%）——消除了"池内次序变化引起的多盏灯同时瞬移"；
+   *   · 剩下的 93 次是真实的进出池，只有**限速斜坡**能消掉它们的"单帧硬切"：
+   *     单帧强度变化率峰值 90.4/s → 69.2/s（斜坡上界 = 满量程 18 / 0.3s = 60/s）。
+   * 三者各治一段，故本次落地三者齐上（预算一律未动）。
+   * 单帧强度增量从"满量程"降到 `满量程 × dt / LAMP_FADE_SECONDS`（夜间 60fps ⇒ ≤1.0，原为 15.3）。
+   *
+   * 口径不变项：稳态（`fade = 1` 且 `lampBase = lampBaseTarget`）强度与修复前**逐值相同**；
+   * 池容量、距离上限、节流、评分全部未改。
+   */
+  const LAMP_FADE_SECONDS = 0.3;
+
+  /**
+   * t5：**唯一的每帧灯光输出层**（合并原 `updateLampFade` + `updateLampFlicker`，消除两遍写 intensity 的顺序歧义）。
+   * 每盏灯的最终强度恒为 `lampBase × fade × flickerK`：
+   *   · `lampBase` 限速逼近 `lampBaseTarget`（斜坡，速率 = `满量程 / LAMP_FADE_SECONDS`）；
+   *   · `fade` 限速逼近 `lampTarget`（进出池的开合）；
+   *   · `flickerK` = `1 + sin(elapsed × flickerSpeed × 2π + x × 0.13) × flickerAmplitude`（口径未改）；
+   *   · 换绑帧用 `lampContinuity` 反解 `lampBase` ⇒ 强度**精确连续**（含 flicker 相位突变）。
+   * `dt ≤ 0`（`settle()` / 确定性截图）⇒ 全部直接落位（`settle` = Infinity）。
+   */
+  function updateLampOutput(dt, elapsed) {
+    const scale = presetOf(currentPreset).lampIntensityScale;
+    const full = (overrides[currentPreset]?.lampIntensity ?? LIGHTING.lamps.intensity) * Math.max(0, scale);
+    const settle = dt > 0 ? null : Infinity; // dt ≤ 0（settle/截图）⇒ 直接落位
+    const baseStep = settle ?? (full * dt) / LAMP_FADE_SECONDS;
+    const fadeStep = settle ?? dt / LAMP_FADE_SECONDS;
+    const speed = LIGHTING.lamps.flickerSpeed;
+    const amp = LIGHTING.lamps.flickerAmplitude;
+    lampState.fading = 0;
+    for (const light of realtimeLights) {
+      const target = light.userData.lampTarget ?? 0;
+      let fade = light.userData.fade ?? target;
+      if (target > fade) fade = Math.min(target, fade + fadeStep);
+      else if (target < fade) fade = Math.max(target, fade - fadeStep);
+      const k = scale > 0.02 ? 1 + Math.sin(elapsed * speed * 6.28 + light.position.x * 0.13) * amp : 1;
+      const continuity = light.userData.lampContinuity;
+      if (typeof continuity === 'number') {
+        light.userData.lampContinuity = null;
+        const denom = fade * k;
+        light.userData.lampBase = denom > 1e-6 ? continuity / denom : 0;
+      }
+      let base = light.userData.lampBase ?? 0;
+      const baseTarget = light.userData.lampBaseTarget ?? base;
+      if (baseTarget > base) base = Math.min(baseTarget, base + baseStep);
+      else if (baseTarget < base) base = Math.max(baseTarget, base - baseStep);
+      if (target === 0 && fade <= 0) {
+        base = 0; // 完全熄灭后才释放基准与绑定
+        light.userData.lampAnchorId = null;
+      }
+      light.userData.lampBase = base;
+      light.userData.fade = fade;
+      light.intensity = base * fade * k;
+      light.visible = fade > 0.002 && base > 0 && scale > 0.02;
+      if (fade > 0 && fade < 1) lampState.fading += 1;
+      else if (base !== baseTarget) lampState.fading += 1; // 基准仍在限速逼近
+    }
+  }
+
+
+  /**
+   * t25：**绘制缓冲高度**（three 的 `points` 着色器里 `gl_PointSize = size × (drawingBufferHeight/2) / -mvPosition.z`
+   * 的分子即此值；烟柱 LOD 的 `pointPx` 与它同式）。
+   *
+   * 取值优先级（**不新增 renderer/main 依赖**，全部走可选读取，接不上就回落配置）：
+   *   ① `rendererAdapter.drawingBufferHeight()`（若上游接上即拿到实时值，含 DPR 与运行时 resize）；
+   *   ② `rendererAdapter.size.height`；③ `rendererAdapter.getStats().viewport.height`（**仅在档位变化时读一次**，避免每帧建对象）；
+   *   ④ 回落 = `BUDGET.viewport.height × 当前档位 dpr`（本仓 900×1 = 900，与 t1 探针口径 **逐值一致**）。
+   */
+  let drawBufMemo = { tier: null, height: 0 };
+  function drawingBufferHeight() {
+    const cheap = rendererAdapter?.drawingBufferHeight?.() ?? rendererAdapter?.size?.height;
+    if (Number.isFinite(cheap) && cheap > 0) return cheap;
+    if (drawBufMemo.tier === applied.quality && drawBufMemo.height > 0) return drawBufMemo.height;
+    const live = rendererAdapter?.getStats?.()?.viewport?.height;
+    const dpr = config.QUALITY?.tiers?.[applied.quality]?.dpr ?? 1;
+    const fromConfig = (config.BUDGET?.viewport?.height ?? 900) * dpr;
+    const height = Number.isFinite(live) && live > 0 ? live : fromConfig;
+    drawBufMemo = { tier: applied.quality, height };
+    return height;
+  }
+
   function updateParticles(dt, elapsed, cameraPosition) {
     if (config.LIGHTING.atmosphere.smokeEnabled) {
+      /**
+       * t25（落地 t1 交回的最小修复 `docs/handoff-t1-flicker.md` §6.2）：**烟柱 LOD**。
+       *
+       * 症状：`?view=oblique` 下中轴 4 座香炉距相机 935–1424 m，`size=1.1` + `sizeAttenuation`
+       * ⇒ `gl_PointSize ≈ 0.35–0.53 px`（**亚像素**）；同像素叠 3–5 颗、48 颗按 4.5 s 硬回绕
+       * ⇒ 9–14 次/秒的亚像素覆盖翻转，压在宫红墙边缘 = 肉眼所见的"红色边缘持续闪烁"。
+       *
+       * 修法（**只改可见性**，与 three 的 `points` 着色器同式）：`pointPx = size × (H/2) / dist`，
+       * 小于 `LIGHTING.atmosphere.smokeMinPointPx`（默认 1.0 px）⇒ **整柱 `points.visible = false`**。
+       * 粒子数/预算/材质规格/相位公式**逐值未动**（§8.2 与 `tests/flicker-guard.test.mjs` ② 均断言）。
+       * 等效距离门限 = `1.1 × 450 / 1.0 ≈ 495 m`；近景 20 m 处点径 24.75 px ≫ 1.0 ⇒ 近景烟柱形态完全保留。
+       */
+      const smokeMinPx = config.LIGHTING.atmosphere.smokeMinPointPx ?? 0;
+      const drawH = smokeMinPx > 0 && cameraPosition ? drawingBufferHeight() : 0;
       for (const system of smokeSystems) {
         const { positions, seeds, budget, anchor } = system;
+        if (smokeMinPx > 0) {
+          if (!cameraPosition) {
+            system.points.visible = true; // 无相机读数 ⇒ 不敢裁（宁可保留旧行为，不制造新的缺失）
+          } else {
+            const dist = Math.hypot(anchor.x - cameraPosition.x, anchor.y - cameraPosition.y, anchor.z - cameraPosition.z);
+            const pointPx = (system.points.material.size * (drawH / 2)) / Math.max(1e-6, dist);
+            system.points.visible = pointPx >= smokeMinPx;
+          }
+          if (!system.points.visible) continue; // 整柱不绘制（连位置更新也省掉：不可见即无需重建缓冲）
+        }
         for (let i = 0; i < budget; i += 1) {
           const phase = (elapsed * 0.22 + seeds[i * 3]) % 1;
           const rise = phase * system.span;
@@ -893,18 +1179,6 @@ export function createEnvironment({
     }
   }
 
-  function updateLampFlicker(elapsed) {
-    if (presetOf(currentPreset).lampIntensityScale <= 0.02) return;
-    const speed = LIGHTING.lamps.flickerSpeed;
-    const amp = LIGHTING.lamps.flickerAmplitude;
-    for (const light of realtimeLights) {
-      if (!light.visible) continue;
-      const k = 1 + Math.sin(elapsed * speed * 6.28 + light.position.x * 0.13) * amp;
-      light.userData.baseIntensity ??= light.intensity;
-      light.intensity = light.userData.baseIntensity * k;
-    }
-  }
-
   let elapsedTotal = 0;
   function update(dt = 0, elapsed = null, state = null) {
     const t = elapsed ?? (elapsedTotal += dt);
@@ -912,8 +1186,9 @@ export function createEnvironment({
     syncAnchors();
     updateInteriorFill(dt, cameraPosition);
     bindInteriorEnvMaps();
-    updateLampSelection(t, cameraPosition);
-    updateLampFlicker(t);
+    updateLampSelection(t, cameraPosition, dt);
+    // t5：唯一的每帧灯光输出（限速斜坡 + 进出池开合 + flicker）；dt ≤ 0（settle/截图）直接落稳态
+    updateLampOutput(dt, t);
     updateParticles(dt, t, cameraPosition);
     updateWater(t);
     if (state?.quality && state.quality !== applied.quality) setQuality(state.quality);
@@ -956,6 +1231,17 @@ export function createEnvironment({
         preset: currentPreset,
         /** t95：**逐灯清单（直接读数）** top-`capacity`，每项 `{rank,id,role,distance,score}` */
         pool: lampState.pool.map((r) => ({ ...r })),
+        /**
+         * t5：入选滞回读数 —— ① `margin` 生效值；② 本次 `{incumbents,admitted,evicted,keptByHysteresis,forced}`；
+         * ③ 跨帧累计 `{admitted,evicted,kept}`。`kept > 0` 证明滞回在生产路径上真的拦下过抖动换灯。
+         */
+        hysteresis: {
+          margin: LAMP_HYSTERESIS_MARGIN,
+          last: { ...lampState.hysteresis },
+          totals: { ...lampState.hysteresisTotals },
+        },
+        /** t5：进出池斜坡（`fadeSeconds` 生效值；`fading` = 本帧处于 0<fade<1 的槽位数，只读诊断） */
+        fade: { seconds: LAMP_FADE_SECONDS, fading: lampState.fading, snapPending: lampState.snapFade },
       },
       /** 权威背景口径（t45）：供 ?stats=1 / __PALACE__.stats() / 截图工具消费 */
       background: describeSceneBackground(),
@@ -1068,6 +1354,12 @@ export function createEnvironment({
     lampScore,
     legacyLampScore,
     rankLampPool,
+    rankLampCandidates,
+    /** t5：带滞回的入选选择器 + 生效裕量（与 `updateLampSelection` 共用同一实现，避免"代理断言"） */
+    selectLampPool,
+    LAMP_HYSTERESIS_MARGIN,
+    LAMP_FADE_SECONDS,
+    LAMP_FADE_RESUME_SECONDS,
     LAMP_SCORE_POWER,
     registerWater,
     adoptWaterSurfaces,
@@ -1086,6 +1378,29 @@ export function createEnvironment({
     }),
     /** 供 audit/测试：统一灯的 draw call 归属 */
     lightObjects: () => ({ sun, ambient, hemi, realtimeLights: [...realtimeLights], lampInstances }),
+    /**
+     * t5：**逐灯位直接读数**（只读诊断；不改变选择、预算与渲染）。
+     * 每项 `{ index, anchorId, visible, intensity, baseIntensity, fade, target, position }`：
+     *   · `index` = 真机 PointLight 槽位序号；`anchorId` = 该槽位当前绑定的灯位 id（完全熄灭后为 null）；
+     *   · `intensity = baseIntensity × fade × flicker`；`baseIntensity` = 本帧真实目标基准强度；
+     *   · `fade` = 进/出池斜坡位置（1 = 稳态），`target` = 1 表示该灯位在池内。
+     * 动机：镜头旋转引发的灯位重选只能通过"槽位绑定 + 逐帧强度序列"取证（`describe().lamps.pool` 只有排名，没有槽位与强度）。
+     */
+    lampSlots: () =>
+      realtimeLights.map((light, index) => ({
+        index,
+        anchorId: light.userData?.lampAnchorId ?? null,
+        visible: light.visible,
+        intensity: light.intensity,
+        /** t5：本帧限速后的**当前**满强度；`intensity = baseIntensity × fade × flicker` */
+        baseIntensity: light.userData?.lampBase ?? null,
+        /** t5：目标满强度（限速逼近它） */
+        baseTarget: light.userData?.lampBaseTarget ?? null,
+        /** t5：进/出池斜坡位置（1 = 稳态；0 = 已熄灭）；`target` = 池内为 1 */
+        fade: light.userData?.fade ?? null,
+        target: light.userData?.lampTarget ?? null,
+        position: { x: light.position.x, y: light.position.y, z: light.position.z },
+      })),
   };
 }
 

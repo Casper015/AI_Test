@@ -440,3 +440,358 @@ exit 0 · 结论：预算与契约检查全部通过（信息性提示 0 项，�
 ### 12.8 冻结计数与跨 owner pin
 `WALKABLE 157 → 161（t126）→ **169**（t128）`；`LAYOUT 1.1.13 → 1.1.14 → **1.1.15**`；`CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` **未变**、**未新增 connector**。
 **跨 owner 待派单**：`tests/core.test.mjs`（t127 已同步到 161 ⇒ 现需 **169**）；`docs/CONTRACTS.md` 由本卡同步（✓）。
+
+---
+
+## 13. t13 闭合（追加；只增不改 §10）
+
+§10 的处置 **(a)「保留几何门洞 + 显式具名登记阻挡来源」在 t13 被产品侧取代**：主理人派单 t13
+「让水中亭可上去：落 2 块汀步（0.4→0.65→0.90，逐跳 0.25）+ 同轮建可见石件；**实测双向可走后，才删 `doorBlockedBy`**」。
+
+- **只读取证先行**：`work/probe-t13-pavilion.mjs`（本次新建，只读）实测 —— 两亭门洞 `passable=false`、`blockedBy=WB-{D,E}-pond`；
+  池面在**脚高**上其实由 `OB-WB-{D,E}-pond`（`blocks:'all'`，生产派生盒 `y1=1.0`）拦住，`probe()` 在亭中心/门内/门外全 `ok=false`；
+  `deriveWaterColliders` 对水池**不产生 door**（无桥面横跨）⇒ 谓词层只有"单矩形 + 门洞通道"。
+- **落地**：`LAYOUT 1.1.22 → 1.1.23`（`STONE_STEP_LANES` 两条走廊 + `WALKABLE` 171→175 + 水体 `blocks:'exceptDoor'` 有界开槽），
+  D/E 两区**同轮建可见石件**（石顶 = 登记面高、石身落池底），两亭 `doorBlockedBy` 删除 ⇒ `passable:true` / `blockedBy:null`。
+- **§10.3 的 6 条 t117 判据处置**（只增不减）：`恰 2 座声明不可通行`/`具名例外 id`/`其余 8 座` 三条随状态消失，
+  由 **t13 的 4 条新判据**（走廊 id 恰为两亭 / 每池 2 面共 4 面 / 逐跳 ∈[0.20,0.25] 且 float32 双向可跨并禁 0.5 等值 / 走廊几何与水体开槽逐值一致 + 格心可见 + 面积守恒）
+  与 **2 条接管断言**（两亭仍 `hasDoor` + `exceptDoor` ⇒ 非空气墙；10 座亭 `door.width>0` ⇒ 几何门洞未删）共同承载。
+- **§10.4 的 B4 精确改法**（原建议 `18/18 → 16/18 + 2 座具名例外`）**未采用**：t13 后实测净宽 `0 → 7.3m`，
+  故 B4 取**更强**形式 —— `63/63 全部达标 + 0 座具名例外 + 任何 passable=false 必具名 blockedBy`（`tests/verify-experience.test.mjs`）。
+- **实测**：整城 1m 冷口径图（`walk-reachability`）`不可达 = 0`；两池各自局部 1m 生产图 `path()` **去/回均 ok**；
+  水面 \ 走廊逐 2m 采样 0 漏护；`audit --enforce` 341/350、F 仍 80/80（无余量）。
+
+---
+
+## 12. t28（测试侧）：`jump.enabled` **状态 pin → 性质 pin** 重锚（`tests/layout.test.mjs`）
+
+> 卡面来源：t27 实测「`layout.test.mjs` 现唯一失败项是『碰撞/台阶/跳跃规则齐全』，它断言 `jump.enabled === false`」。
+> **本轮实测更正（先证后改，如实报告）**：**该前提在 14:5x 之后已不成立** —— 工作树里那条断言早已被 t2 同轮改写成
+> `enabled === true`（`git diff` 可见：`- … && INTERACTION.jump.enabled === false` → `+ … && INTERACTION.jump.enabled === true && maxHeight>0 && ≤1.0 && |gravity|>0 && cooldown>0`），
+> 故 `node tests/layout.test.mjs` **在改动前即 exit 0（1844 项 / 失败 0）**。⇒ 本卡**不是**「修一条红」，
+> 而是把 t2 落下的**状态 pin**（`enabled === true`：产品一旦关闭跳跃或改由运行时开关控制即**假红**，且它并不检验「跳跃是否安全」）
+> 重锚为**性质 pin**。**不得靠把 `config` 改回 `false` 来躲** —— 现树保持 `enabled: true`。
+
+### 12.1 改前 / 改后断言原文
+
+**改前（t2 落下的状态 pin，1 条 `check`）**：
+
+```js
+check('碰撞/台阶/跳跃规则齐全', INTERACTION.player.radius > 0 && INTERACTION.step.maxStepHeight > 0
+  && INTERACTION.jump.enabled === true                                    // ← 状态 pin
+  && INTERACTION.jump.maxHeight > 0 && INTERACTION.jump.maxHeight <= 1.0
+  && Math.abs(INTERACTION.jump.gravity) > 0 && INTERACTION.jump.cooldownSeconds > 0);
+```
+
+**改后（t28 性质 pin，5 条 `check`；原有性质一条未删）**：
+
+```js
+check('碰撞/台阶/跳跃参数自洽（t28：状态 pin → 性质 pin）', … radius>0 && maxStepHeight>0 && snapDown>maxStep
+  && typeof enabled === 'boolean'                                          // ← 只断言**类型**，不断言取值
+  && Number.isFinite(velocity) && Number.isFinite(gravity) && gravity < 0
+  && Number.isFinite(maxHeight) && maxHeight > 0 && maxHeight <= 1.0
+  && Number.isFinite(cooldownSeconds) && cooldownSeconds > 0);
+check('跳跃落地判定所需字段齐备（enabled/velocity/gravity/maxHeight/cooldownSeconds 全在且类型正确）', …);
+check('跳跃运动学自洽：v₀=√(2·|g|·h) 有限且 >0、顶点 = maxHeight（≤1.0m 硬上限）、顶点时间有限且 <1s', …);
+check('地面可站立处起跳后必落回同一可站立面（5 个 fp-spawn 几何闭环：可站立 ∧ 包络内 ∧ (y, y+maxHeight] 内无实体）', …);
+if (JUMP.enabled) check('跳跃已启用 ⇒ 开关与事件登记自洽（fp:jumped / fp:landed 已声明）', …);   // 卡面授权的条件分支
+```
+
+口径三要素：**来源** = `config.INTERACTION.jump` + `layout.VIEWPOINTS(fp-spawn)` + `layout.OBSTACLES`（不另写数值）；
+**判据** = 参数自洽（类型 / 有限 / 上下界 / 运动学）+ 落地字段齐备 + 几何闭环；**反例** = 任一条不成立即红（见 §12.3 突变证据）。
+
+几何闭环为何取 5 个 `fp-spawn`：它们是**唯一登记的第一人称出生点**（权威起跳点）；室内/门内走查点位于建筑障碍足迹内、上有屋面，
+其「起跳净空」由 kit 屋面几何决定，**不属 layout 数据域**（故不在此断言，也不假绿）。
+
+### 12.2 计数（只增不减）
+
+| | 改前 | 改后 |
+| --- | --- | --- |
+| 该处 `check` 条数 | **1** | **5**（4 条无条件 + 1 条 `enabled` 条件分支；现树 `enabled=true` ⇒ 5 条全执行） |
+| `node tests/layout.test.mjs` 通过项数 | **1844** | **1848**（**+4**） |
+| 退出码 | exit 0（0 失败） | **exit 0（0 失败）** |
+
+> 为什么是 +4 而非 +5：本块位于文件**中段**（section A），而 `通过 N 项` 那行在中段打印（早于 section B 的 t9/t10 块），
+> 5 条 − 1 条 = **+4** ✓；`enabled=false` 时条件分支不执行 ⇒ 同一命令为 **1847 项 / 0 失败**（见 §12.3 C2）。
+
+### 12.3 突变证据（在**隔离副本** `/tmp/t28-mut*` 上做真实文件突变，未触碰共享树）
+
+| # | 突变 | 期望 | 实测 |
+| --- | --- | --- | --- |
+| A | `jump.maxHeight 0.9 → 1.5` | 红 | **exit 1 · 失败 2**，含 `✗ 碰撞/台阶/跳跃参数自洽（t28…）` ✓ |
+| B | `jump.gravity -18 → 0` | 红 | **exit 1 · 失败 2**，含同一条 ✓ |
+| C2 | `jump.enabled true → false`（**仅** jump 段） | **不得假红** | **exit 0 · 1847 项 / 0 失败** ⇒ 套件不再依赖该布尔状态 ✓ |
+| D1 | `VP-B-fp-spawn` 挪进西北角楼足迹 `(-304,454)` | 红 | **exit 1 · 失败 3**，含 `✗ 几何闭环 … y=null env=false 脚部阻挡=1 顶点内实体=1` ✓ |
+| D2 | 出生点 `(-30,-360)` 上方加合成实体 `y∈[0.3,1.2]`（脚部自由） | 红 | **exit 1 · 失败 1**（恰为本条）`脚部阻挡=0 顶点内实体=1` ⇒ **顶点分支单独可触发** ✓ |
+
+> C2 的第一次尝试把 `enabled: true` 误替换到了**动态阴影**段（同名键），失败项为 `✗ 动态阴影：优先一盏主方向光` ——
+> **属突变脚本伪影、不是断言性质**；已改为按 `jump: Object.freeze({` 段落精确定位后重跑（= C2 行）。
+
+### 12.4 回归（本卡 verify 命令；最终树 `LAYOUT 1.1.23` / `CONFIG 1.0.8`）
+
+| 命令 | 结果 |
+| --- | --- |
+| `node tests/layout.test.mjs` | **exit 0** —— 通过 **1848** 项 / 失败 **0** |
+| `node scripts/audit.mjs --enforce` | **exit 0** —— 主场景 **342 / 350**、分区 F **80 / 80**、`y0 canonical` 93 条自检 ✓ |
+
+- **未运行（如实登记）**：`tests/run.mjs` 全量（本卡只改断言、未改产品代码；t2 回执已给全量读数）、浏览器侧探针、`verify-*` 套件。
+- **未触碰**：`src/**`（含 `config.js` 的 `jump.*` 数值）、阈值 `maxStepHeight 0.5 / snapDownDistance 0.6`、§8.2 门禁与配额、
+  `docs/CONTRACTS.md`（t2 已同步 §5.4/§6.3；本卡 inScope 只含本文件与 `tests/layout.test.mjs`）。
+
+---
+
+## 13. t32（测试侧）：LAYOUT 版本 pin **数据推导**化 + 升版后陈旧 pin 普查（`tests/layout.test.mjs`）
+
+### 13.1 前提核实（先证后改）
+
+卡面前提**属实**（与 t28 那次不同）：本轮改动前 `node tests/layout.test.mjs` **exit 1 · 通过 1847 / 失败 1**，
+唯一失败项为：
+
+```
+✗ LAYOUT 版本 = 1.1.23（t13：两座水中亭可达 —— 每池 2 级汀步 + 水体有界开槽；WALKABLE 171→175）
+  :: 期望 "1.1.23"，实际 "1.1.24"
+```
+
+即 t22 把 `LAYOUT` 升到 `1.1.24`（新增 `through/door.back` 登记，计数未变）时，本行 pin 未同轮同步（不在 t22 的 inScope）。
+
+### 13.2 改前 / 改后断言原文
+
+**改前（1 条 `eq`，状态/字面量 pin）**：
+
+```js
+eq('LAYOUT 版本 = 1.1.23（t13：…）', L.LAYOUT_VERSION, '1.1.23');
+```
+
+**改后（3 条 `check`，数据推导 + 性质判据；`CONFIG` 侧仍保留有意 pin）**：
+
+```js
+// LAYOUT 版本链（历史快照，仅记录、不参与判定）：… → 1.1.23(t13) → 1.1.24(t22)
+const LAYOUT_VERSION_FLOOR = '1.1.23';            // 已登记的最后快照；只用于“不得回退”，升版无需改
+const cmpVersion = (a, b) => { … };               // 三段数值比较
+check('LAYOUT 版本号格式 vX.Y.Z（t32：数据推导，不再逐版同步字面量）', /^\d+\.\d+\.\d+$/.test(L.LAYOUT_VERSION), …);
+check('LAYOUT_STATS.layoutVersion === LAYOUT_VERSION（注册表摘要与常量不得分叉）', …, …);
+check('LAYOUT 版本不得回退（≥ 已登记快照 1.1.23；升版无需改本断言）', cmpVersion(L.LAYOUT_VERSION, LAYOUT_VERSION_FLOOR) >= 0, …);
+```
+
+**为什么不是 `eq(L.LAYOUT_VERSION, L.LAYOUT_VERSION)`**：那是**恒真判据**（t140 的教训：恒真 = 未生效）。
+故改后取三条**可证伪**性质：① 格式合法；② 与 `LAYOUT_STATS.layoutVersion`（注册表摘要）一致；③ 单调不回退（floor = 最后已登记快照）。
+**代价（如实登记）**：旧 pin 的"任何升版都必须人工同步本行"这一**强制同步**性质被有意放弃（卡面明确要求"避免每次升版都要改"）；
+"冻结值不得被悄悄改"由其余 **~1850 条内容判据**（计数 / 白名单 / 哈希 / 几何关系）继续承载 —— 若主理人更偏好"强制同步"，
+一行即可改回字面量 pin（本回执给出两种形态）。
+
+### 13.3 计数（只增不减）
+
+| | 改前 | 改后 |
+| --- | --- | --- |
+| 该处断言 | 2 `eq`（CONFIG + LAYOUT 版本各 1） | **5 `check`**（CONFIG 格式/回退 + LAYOUT 格式/摘要一致/回退） |
+| 新增（计数类，见 §13.4-B） | — | **+3 `check`**（17 项跨注册表一致性 / 三源一致 / visitableSlots 集合） |
+| `node tests/layout.test.mjs` 通过项数 | **1847**（失败 **1**） | **1854**（失败 **0**） |
+| 退出码 | **exit 1** | **exit 0** |
+
+> 净增 **+7**（−2 `eq` +5 版本 `check` +3 计数 `check` = +6 ⇒ 1853；其后因 **CONFIG 侧第二次同类事故**再 −1 `eq` +2 `check` = +1 ⇒ **1854**）；`失败 1 → 0`。
+
+**⚠️ 执行期间发生第二次同类事故（并发窗口，如实登记）**：本卡进行中，另一成员把 `CONFIG_VERSION` 由 `1.0.8` 升到 **`1.0.9`**
+（t25：`LIGHTING.atmosphere.smokeMinPointPx = 1.0`，落地 t1 的烟柱 LOD 修复；`src/shared/config.js` mtime **10:01:11**）
+⇒ 本文件 CONFIG 字面量 pin 随即陈旧，`layout.test` 由 1853/0 变为 **1852/1**（`✗ CONFIG 版本 = 1.0.8 … 实际 "1.0.9"`）。
+判定：**真缺陷（同一类「升版后 pin 未同步」），不是写入窗口伪影**（config.js 内容完整、`git diff` 为 t25 的完整改动；重复运行稳定复现）。
+处置：按卡面「能数据推导的改推导」**同轮把 CONFIG 侧也数据推导化**（格式 + 不得回退；CONFIG **无第二来源**可做跨源一致，如实登记）⇒ 回到 1854/0；
+**未改任何 `src/**` 数值**（仅测试侧口径）。
+
+### 13.4 升版后陈旧 pin 普查（file:line + 处理方式）
+
+**A. `tests/layout.test.mjs`（本卡 inScope）**
+
+| file:line | 内容 | 类别 | 处理方式 |
+| --- | --- | --- | --- |
+| `tests/layout.test.mjs:76`（改前） | `LAYOUT 版本 = 1.1.23` 字面量 | **陈旧状态 pin（初始红项）** | **改为数据推导 + 性质判据**（§13.2） |
+| `tests/layout.test.mjs:76`（改前） | `CONFIG 版本 = 1.0.8` 字面量 | **执行期间被 t25 升到 1.0.9 ⇒ 陈旧（第二个红项）** | **同轮改为数据推导 + 性质判据**（§13.3 ⚠️） |
+| `:605` | `WALKABLE = 175` | 有意 pin（t13 已同步 ✓） | **保留**，并在上方加"有意 pin 类"表头（升版/加面须人工同步） |
+| `:606/:607/:608/:609` | `VIEWPOINTS 61` / `FP_ROUTE 50` / `visitable 43` / `冻结计数 79/60/32/14/10` | 有意 pin（均在同步状态 ✓） | **保留** + 表头说明；由 §13.4-B 的跨注册表判据兜底"只改一侧" |
+| `:688` | `INTERIOR_BY_SLOT 条数 = 43` | 有意 pin（同步 ✓） | 保留；另加三源一致判据（§13.4-B） |
+| `:787` | 内景包围盒冻结哈希 `0xf5814450`（含旧值 `0x51d2348e` 文字） | 冻结哈希（t10 已同步 ✓） | 保留；旧值已在标题内显式标注为**历史快照** |
+| `:738` | 直方图 `48/81/11/27/22/5（194 对相邻面）` | **诊断读数（非判据）** | **显式标注"历史快照/不参与判定"**（本轮新增标注） |
+| `:651` | t9 断言 `WALKABLE === 171 + STONE_STEP_SURFACE_IDS.length` | **已是数据推导** ✓ | 保留（t13 改法正确，本轮未动） |
+| `:982` | t13 断言 `walkSurfaces.length === 4`（消息含 `171 → 175`） | 判据数据推导 ✓、消息为历史 | 保留 |
+| `:520-522` | `LAYOUT_STATS.slotCount/courtyardCount/slotsByZone` | **已是数据推导** ✓ | 保留，并由 §13.4-B 扩展为 17 项 |
+| `:507-513`（§8.2 预算块） | `B70/C60/D56/E56/F80`、`reserve 28`、`350`、`1500000` | **契约冻结值**（不得动） | **未触碰**（本卡纪律） |
+| 阈值 | `maxStepHeight 0.5` / `snapDownDistance 0.6` | **只读引用** | **未触碰** |
+
+**B. 本轮新增（数据推导，不随升版失效）**：`LAYOUT_STATS` **17 项**逐项 = 实际注册表（`slotCount/visitableCount/courtyardCount/connectorCount/roadCount/wallSegmentCount/cityWallSegmentCount/courtyardWallCount/corridorCount/walkableCount/obstacleCount/waterBodyCount/viewpointCount/tourPointCount/fpRouteCount/lanternCount/bulkAnnexCount`）；
+三源一致（`visitable` 数 = `INTERIOR_BY_SLOT` 条数 = `LAYOUT_STATS.visitableCount`）；`visitableSlots` 集合与 `SLOT_BY_ID` 逐 id 相等。
+
+**C. 越界项（本卡 inScope 外，仅复核与上报，**未改**）**
+
+| file:line | 内容 | 现状（本轮只读复核） |
+| --- | --- | --- |
+| `tests/core.test.mjs:920-923` | 用例标题写死「67 栋 / 81 障碍 / 171 可走面 / LAYOUT 1.1.19」 | **已被 t23 改为运行时推导** ✓（断言体本就数据驱动） |
+| `scripts/verify-completeness.mjs:1324` | 浏览器 11.2 硬 pin `report.buildings === 67` | **已改为 `${expectedBuildings}`（= `layout.SLOTS`）** ✓ |
+| `scripts/verify-g1-baseline.mjs` | 硬 pin `SLOTS.length === 67 && VIEWPOINTS.length === 20` | **已改为 `LAYOUT.SLOTS.length`** ✓（`VIEWPOINTS` 项亦已消解） |
+| `docs/CONTRACTS.md:10` / `:14` | 头部表 `LAYOUT_VERSION 1.1.22`；对应关系行 `1.1.23` + `CONFIG_VERSION 1.0.7` | **与运行时读出（`1.1.24` / `1.0.8`）三处不一致** ⇒ **待派单**（CONTRACTS 本卡 inScope 外） |
+| `docs/CONTRACTS.md:670`（§6.4） | 「当前 **175 面**」 | **已同步** ✓（t13 同轮） |
+| `README.md:281/595` | 变更叙述里的「67 栋」 | **历史叙述**（非"当前值"声明）⇒ 建议 t20 发布收口时按需标注 |
+
+### 13.5 突变三证（隔离副本 `/tmp/t32-mut`，未触碰共享树）
+
+| # | 突变 | 期望 | 实测 |
+| --- | --- | --- | --- |
+| M1 | `LAYOUT_VERSION = '1.1'`（格式非法） | 红 | **exit 1 · 失败 2**，含 `✗ LAYOUT 版本号格式 vX.Y.Z … :: 1.1` ✓ |
+| M2 | `LAYOUT_STATS.walkableCount = WALKABLE.length + 1`（只改摘要一侧） | 红 | **exit 1 · 失败 1**，`✗ LAYOUT_STATS 计数逐项 = 实际注册表 … walkableCount: 摘要 176 ≠ 实际 175` ✓ |
+| M3 | `LAYOUT_VERSION = '1.1.22'`（回退，低于 floor 1.1.23） | 红 | **exit 1 · 失败 1**，`✗ LAYOUT 版本不得回退 … 1.1.22 vs 1.1.23` ✓ |
+| M4 | `CONFIG_VERSION = '1.0'`（格式非法） | 红 | **exit 1 · 失败 2**，含 `✗ CONFIG 版本号格式 vX.Y.Z … :: 1.0` ✓ |
+| M5 | `CONFIG_VERSION = '1.0.7'`（回退，低于 floor 1.0.8） | 红 | **exit 1 · 失败 1**，`✗ CONFIG 版本不得回退（≥ 已登记快照 1.0.8）… 1.0.7 vs 1.0.8` ✓ |
+| M0 | 恢复对照（LAYOUT 侧） | 绿 | **exit 0 · 1853 项 / 0 失败** ✓ |
+| M0b | 恢复对照（CONFIG 侧，第二次事故处置后） | 绿 | **exit 0 · 1854 项 / 0 失败** ✓ |
+
+### 13.6 回归（本卡 verify 命令；最终树 `LAYOUT 1.1.24` / `CONFIG 1.0.9`）
+
+| 命令 | 结果 |
+| --- | --- |
+| `node tests/layout.test.mjs` | **exit 0** —— 通过 **1854** 项 / 失败 **0**（连跑两次一致） |
+| `node scripts/audit.mjs --enforce` | **exit 0** —— 主场景 **342 / 350**、分区 F **80 / 80**、`y0 canonical` 93 条自检 ✓ |
+
+- **稳定性（并发窗口纪律）**：`layout.test` 连跑 2 次均 `exit 0 · 1854/0`；`src/shared/config.js` mtime 10:01:11、
+  `src/shared/layout.js` 09:36:38 之后无新写入 ⇒ 上述读数为**稳定态**，非并发写入窗口伪影。
+
+- **未运行（如实登记）**：`tests/run.mjs` 全量（本卡只改断言，未改产品代码）、浏览器侧探针、`verify-*` 套件。
+- **未触碰**：`src/**`（含 `LAYOUT_VERSION` 与 `config.js`）、阈值 `0.5 / 0.6`、§8.2 配额与门禁、`docs/CONTRACTS.md`、
+  以及 out-of-scope 的 `tests/core.test.mjs` / `interaction` / `walk-reachability` / `zone-garden` / `scripts/**`。
+
+---
+
+## 14. t33（契约文档）：`CONTRACTS.md` 头部「当前值」与运行时读出对齐 + 全量「当前值」普查
+
+### 14.1 先读实测（写前取证）
+
+```
+node -e "Promise.all([import('./src/shared/config.js'),import('./src/shared/layout.js'),import('./src/kit/index.js')]).then(([c,l,k])=>console.log(c.CONFIG_VERSION,l.LAYOUT_VERSION,k.KIT_VERSION,c.STYLE_BASELINE))"
+→ 1.0.9 1.1.24 1.0.1 v1.0.0
+计数：SLOTS 79 · WALKABLE 175 · OBSTACLES 93 · 内景 43 · VP 61 · FP_ROUTE 50 · TOUR 10 · 院落 14 · 墙 60 · 连接 32 · 道路 95 · 灯位 49
+```
+
+### 14.2 逐处改前 / 改后（行号 = 改前文件行号）
+
+| 行 | 改前原文（摘） | 改后 |
+| --- | --- | --- |
+| :7 | `| 契约版本 | \`CONTRACTS v1.0.25\` |` | `CONTRACTS v1.0.26`（本轮追加修订条目，自洽本文件「任何变更由 t1 递增版本」） |
+| :9 | `| \`src/shared/config.js\` | \`CONFIG_VERSION 1.0.7\` |` | `CONFIG_VERSION 1.0.9` |
+| :10 | `| \`src/shared/layout.js\` | \`LAYOUT_VERSION 1.1.22\` |` | `LAYOUT_VERSION 1.1.24` |
+| :14 | `CONTRACTS v1.0.25 ⇄ CONFIG_VERSION 1.0.7 ⇄ LAYOUT_VERSION 1.1.23 ⇄ KIT 1.0.1 ⇄ STYLE v1.0.0` | `CONTRACTS v1.0.26 ⇄ CONFIG_VERSION 1.0.9 ⇄ LAYOUT_VERSION 1.1.24 ⇄ KIT_VERSION 1.0.1 ⇄ STYLE_BASELINE v1.0.0` |
+| :16 | 命令期望输出 `→ 1.0.7 1.1.22 1.0.1（t10 实跑读出）` | `→ 1.0.9 1.1.24 1.0.1（t33 实跑读出；历史读出 1.0.7 1.1.22 1.0.1(t10) / 1.0.3 1.0.0 1.0.1(t46) —— 历史快照，不参与判定）` |
+| :523 | `#### 5.2.1 与 \`LAYOUT 1.1.4\` 实际值对照（t81 / F6 裁定 (a)）` | `#### 5.2.1 实际值对照（t81 / F6 裁定 (a) 建立；数值逐版更新，当前 = \`LAYOUT 1.1.24\`，t33 按运行时读出核对）` |
+| :525 | `| 量 | 旧文本口径 | **当前实测（\`LAYOUT 1.1.4\`）** | 取代关系 |` | 列头改为 **`当前实测（\`LAYOUT 1.1.24\`，t33 核对）`**（表内数值本就是 1.1.24 的：175 / 79 / 93） |
+| :855-857 | §11.3 第 1 点「**当前状态（诚实标注）**：`src/ui/**` 与 `src/interaction/**` 尚未交付（空目录）…」 | **原文保留**（历史只追加）+ 追加 t33 标注：该观测属 `CONTRACTS v1.0.2`(t17) 时点，现两处**均已交付**（`src/interaction/**` 11 模块 / `src/ui/**` 6 文件）⇒ 该义务**已进入可验证状态**，是否通过由 V2 判定，**本契约不代判** |
+| :402 | §3.5「不合批的直接后果：…（B70/C50/D40/E40/F80）」 | 对齐为 `config.BUDGET` 现值 **B70/C60/D56/E56/F80**（t84 重分配），计划原文标注**历史快照，不参与判定** |
+| :796 | §9 表「主场景绘制调用 ≤ 350；分区 B70 / C50 / D40 / E40 / F80，保留 70 给集成」 | **B70 / C60 / D56 / E56 / F80，保留 28**（`Σ perZone 322 + 28 = 350`；计划原文 B70/C50/D40/E40/F80 + 70 标注为历史快照） |
+| :76-86 | — | 追加 **v1.0.26（t33）** 修订条目（逐条登记上述改动 + 核对结果 + 口径说明） |
+
+### 14.3 全量「当前值」普查（`grep -n 当前 docs/CONTRACTS.md` 逐条判定）
+
+| 类别 | 处置 |
+| --- | --- |
+| **陈旧「当前值」**（本轮修） | 头部 :9/:10/:14/:16（版本）· §5.2.1 :523/:525（版本标签）· §11.3 :855（早期状态）· §3.5 :402 与 §9 :796（**§8.2 旧配额引用**） |
+| **已在同步状态**（保留） | §6.4 :681「当前 175 面」✓ · §5.2.1 各行数值 43/175/61/50/32/60/79/93/14 ✓ · §6.3.1 :695「下钳 15 / 保持 78（共 93）」✓ · §5.2.2 :556「43/43」✓ · §3.4.x `kit.version`（当前 1.0.1）✓ · :527「当前集合 = 43 栋」✓ · :637「内景 43 条」✓ · :776「无必需网络资源」✓ |
+| **运行时语义**（非「当前值」声明） | :162「当前质量档」· :915/:925/:926「当前模式/当前激活数/当前预设生效值」（描述字段语义） |
+| **历史快照**（显式标注，不参与判定） | :16 历史读出 · :80/:83（本轮标注）· :869（本轮标注）· 版本链 :77-79 · 各 `v1.0.x（tNN）` 修订条目 · :258「当时槽位 67，t9 起 79」· :539/:544「历史真值」· :696「旧数据快照，已作废」· :1178（t10 条目内的 171 面，属该版历史） |
+
+grep 证据（历史快照标注）：`grep -c 历史快照 docs/CONTRACTS.md` → **4**；`grep -n "历史快照" …` → :16 / :80 / :83 / :869（另 :539/:544/:696/:1178 用「历史真值 / 旧数据快照 / 属该版历史」表述）。
+
+### 14.4 契约消费方复核（**CONTRACTS 被谁读**）
+
+- `scripts/audit.mjs` **不读** `docs/CONTRACTS.md`（`grep -rn "CONTRACTS.md" scripts/*.mjs` 仅命中 `probe-walk-rule.mjs:315` 的一句"只读"注释）⇒ 本次对齐是**文档一致性**修正，与 `audit --enforce` 的退出码独立。
+- `tests/interaction.test.mjs:3220-3223` **会读**（只读引用两处台阶阈值原文并做正则断言）⇒ 本卡复跑该套件以证明引用未破：
+  - 正则① `/下\s*≤\s*`snapDownDistance 0\.6`/` → **true**；正则② `/台阶阈值：可跨 `0\.5m`，下台阶吸附 `0\.6m`/` → **true**。
+  - ⚠️ 该套件当前 **exit 1**，唯一失败为 **E13 计数**（`整足迹阻挡者应为 24 条…实际 22`）——**与本卡无关**：
+    A/B 取证 = 把 `docs/CONTRACTS.md` 换回 **HEAD 版（`CONTRACTS v1.0.22`）** 后单独跑 `interaction.test`，失败集**逐项相同**（同一 E13、同一「期望 24，实际 22」）。
+    ⇒ 属 **`tests/interaction.test.mjs` 的期望值陈旧**（t13 把 4 条水体障碍都改成 `exceptDoor`，而该期望只减了 2），**out-of-scope（本卡 inScope 不含 tests/）**，已交回派单。
+
+### 14.5 回归
+
+| 命令 | 结果 |
+| --- | --- |
+| `node scripts/audit.mjs --enforce`（本卡 verify） | **exit 0** —— 主场景 **342 / 350**、分区 F **80 / 80**、`y0 canonical` 93 条自检 ✓、结论「预算与契约检查全部通过」 |
+
+- **未运行（如实登记）**：`tests/run.mjs` 全量、`tests/layout.test.mjs`（t32 刚交付 1854/0；本卡未改 tests/**）、浏览器侧探针、`verify-*` 套件。
+- **未触碰**：`src/**`（含 `config.BUDGET` 数值与阈值）、`tests/**`、`scripts/**`、`README.md`、§8.2 门禁（350 / 1500000 / 25MB 与分区配额数值）。
+
+---
+
+## 15. t37（可登塔楼接线）：两个 P0 已解 + **第三个生产级缺陷**发现并修复；城市级接线**因 inScope 限制未落地**（交回）
+
+> **结论（先说）**：本卡 inScope（`src/shared/layout.js`、`src/kit/towers.js`、`tests/layout.test.mjs`、本文件）内的部分**全部完成并验证**；
+> 但验收要求的**城市级接线（可见几何 + 生产装配实测）需要 `src/kit/index.js` 与 `src/zones/**`** —— 两者都在本卡 **Out of scope**，
+> 且**只登记不建几何**会造出验收明文禁止的"**空气楼梯**" ⇒ 本卡**未接线**，按纪律交回（详见 §15.6 的精确补丁清单）。
+
+### 15.1 P0 ①：`kind:'towerStep'` → **`'terrace'`**（`src/kit/towers.js:335`，改后行号见 §15.5）
+
+- **改前**：`kind: 'towerStep'`；`WALKABLE_KINDS`（`src/core/context.js:80`）= `ground/terrace/interior/bridgeDeck/gardenGround/outerTerrain/passage`
+  **不含它** ⇒ `validateZoneResult` 抛 `ZoneContractError`（`.kind 非法`）⇒ **全树 0 区装载**。
+- **二选一**：把 `towerStep` 纳入白名单需改 `src/core/context.js`（**不在 inScope**）且会牵动全部消费方 ⇒ 取**改用既有白名单 kind**。
+- **改后**：`'terrace'`（台面/平台级可行走面，与本塔的环带/踏面/入口/观景台语义一致；且在 F 区花园填充的 `FILL_KEEP_KINDS` 内，不会被填充物压占；
+  同时**不使用** `-transition-N` id 后缀 —— t102 的"过渡面只属 18 栋"守卫按 id 后缀判定）。
+- **验证**：契约校验镜像（逐条复算 core 规则）`walkable 72 条 · kind=['terrace'] · 校验问题 0` ✓。
+
+### 15.2 P0 ②：塔顶机位 `mode:'interior'` → **`'focus-extra'`**
+
+- **改前**：`mode: 'interior'` ⇒ ① 破坏**冻结的 43 栋内景集合**（43→44）；② `interior` 机位必须在 `kind==='interior'` 的面上，塔顶是 `terrace` 面 ⇒ 直接判非法。
+- **改后**：`mode: 'focus-extra'`（`VIEWPOINT_MODES` 白名单，`src/core/context.js:71`）—— 塔顶观景台**不是建筑内景**。
+- **对 43 栋计数的影响**：**零**（实测 `interior` 机位 43 / `INTERIOR_BY_SLOT` 43 / `visitable` 43，接线前后一致）；
+  只使 `VIEWPOINTS 61 → 62`、`focus-extra 6 → 7`（接线时须同步 pin，见 §15.6）。
+
+### 15.3 **P0 ③（本卡新发现，原报告未列）：塔身障碍把 72 块面全盖住 ⇒ 生产级不可登**
+
+- **现象**：`towerPlan` 原把塔身障碍取成 `2 × towerHalf(0)`（**首层满宽**）且 `y1 = topY + roofRise`
+  ⇒ 该盒在 xz 上覆盖**全部面**（实测 **70/72** 落在盒内）。
+- **为什么 plan 级看不出来**：`climbSequenceReport.ok` 只查**面序列**（逐跳 Δy / 双向 / 平面叠压），**不查障碍**；
+  而生产判定 `obstacleBlocksPoint`（= `walk-solver.blocks` 的底层谓词）用「玩家体段 `[feetY, feetY+1.6/1.8]` 与障碍 `[y0,y1]` **相交（含界）**」⇒
+  站在盘道/观景台上的玩家**全部被挡** ⇒ **"计划绿、生产红"**。
+- **修法**：障碍改为**中央内芯** —— 半宽 = 最内层 `towerHalf(levels)`（12×12m 盒的中心 6m 芯），
+  `y1 = topY − slab`（**观景台板底**；若取 `y1 = topY` 则含界判定会拦住观景台本身）；
+  `wallBody` 几何与障碍**逐值同源**（原为满宽，会吞掉盘道）。
+- **验证（生产判定口径）**：`obstacleBlocksPoint` 逐面中心复算 ⇒ **72/72 可站、0 被挡**（修前 70/72 被挡）；
+  环带中线距内芯边缘 0.9m ≫ 玩家半径 0.35m；障碍 `y1=9.214 < 顶面 9.34` ✓。
+- **如实登记的残留**：内芯只在 `[0.4, 9.214]`；上层台体（石作）未逐层登记障碍 ⇒ 贴内沿行走时玩家体宽可能视觉蹭进石体（不影响可走性）；
+  跳（t28 顶点 0.9m）与攒尖顶/宝顶未做顶穿检查（塔顶屋面不是障碍）。
+
+### 15.4 选址（只读取证，含冲突检查）
+
+| 候选 | tile | 冲突 | 结论 |
+| --- | --- | --- | --- |
+| **(226, 262.4)**（t14 暂定） | **E** | 仅 `WK-E-ground`（= 地面面，**所有建筑都如此**） | ✅ **推荐**（无槽位/墙/路/连接/障碍/景物冲突；E 区预算 49/56 尚有 7 次余量） |
+| (262, 262)（t14 首选） | E | `F-bulk-e-270-264`、`F-bulk-e-250-264` + 两条 `OB-F-bulk-*` | ❌ 已被 t9 批量装饰占用（与卡面一致） |
+| (268, 332) | F | `OB-SC-F-rockery-east` + 景物 | ❌ 压假山 |
+| (240, 344) / (200, 352) | F | 东池水面障碍 + 环池步道 | ❌ 压水面/步道 |
+| — | — | F 区预算 **80/80（零余量）** | ⚠️ 塔楼**不要放 F 区**（放 E 区，E 49/56） |
+
+### 15.5 盘道读数（口径三要素 + 逐跳）
+
+- **来源/口径**：`kit/towers.js` 的 `towerPlan`（纯数据）+ `climbStepMax`；**cellSize/锚点/格对** = 面序列
+  `entry-1 → entry-2 → L1-ringN → L1-step-01…18 → L2-… → L3-… → deck`（`pathIds`，上行链；反向即下行链）。
+- **读数（SITE = 226,262.4 / baseY 0.4 / `watchtower-3`）**：面 **72** 块 · 跳 **59** · 最大跳 **0.42**（上限 `climbStepMax = 0.5×0.84 = 0.42`，≤0.45 ✓）
+  · 反向 `reverseOk = true` · 平面叠压 **0** · 顶层 = `T37-site-deck` @ **y=9.34** · 三角面 **936** · 合并网格 **6** 个（terraceCap/stairs/terrace/wallBody/roof/finial）
+  · 障碍 1 条（内芯 12×12，`y[0.4, 9.214]`，`blocks:'all'`）。
+- **常驻判据（`tests/layout.test.mjs`，t37 块，+6 条）**：① 单跳上限 = `maxStepHeight × CLIMB_SAFETY` 且 ≤0.45；② 上行链 ≤上限 ∧ 反向 ∧ 零叠压 ∧ 顶层=观景台；
+  ③ P0①（全部面 `kind ∈ WALKABLE_KINDS`）；④ P0②（全部机位 `mode ∈ VIEWPOINT_MODES` 且 ≠ `interior`）；
+  ⑤ 几何↔登记同轮 ∧ **生产判定下 0 块面被挡**；⑥ 43 栋内景集合不被触碰。
+
+### 15.6 交回：城市级接线的精确补丁清单（**均为 Out of scope，本卡未改**）
+
+| # | 文件 | 改动 | 依据 |
+| --- | --- | --- | --- |
+| 1 | `src/kit/index.js` | 导出 `makeTower/towerPlan/disposeTower`（`KIT_VERSION 1.0.1 → 1.0.2`） | 全仓**零调用点**；不导出则 zone 拿不到工厂 |
+| 2 | `src/zones/east-courts.js`（E 区，owner zone-inner） | `const t = kit.makeTower({ id:'T-watchtower-3', x:226, z:262.4, baseY:区域地坪, zone:'E', detail:'mid' }); root.add(t.group);` 并把 `t.walkable/t.obstacles/t.viewpoints` 并入本区 `colliders`/`audit`（**登记与几何同轮**） | E 区预算 49/56 有 7 次余量；塔楼 6 个合并网格会并入既有材质角色桶 ⇒ 预期 **+0…+2** 次调用（**须实测**） |
+| 3 | `src/shared/layout.js` | 登记 72 面（`kind:'terrace'`）+ 1 障碍（`blocks:'all'`）+ 1 机位（`mode:'focus-extra'`），**由紧凑 `CLIMB_TOWERS` 规格 + 生成器派生**（单一来源，勿抄字面量）；`LAYOUT_VERSION` 递增 | 求解器只读 `layout.WALKABLE/OBSTACLES/VIEWPOINTS`；zone 只负责几何 |
+| 4 | pins 同步 | `layout.test`：`WALKABLE 175→247`、`VIEWPOINTS 61→62`、`OBSTACLES 93→94`；`interaction.test`：整足迹阻挡者期望 `24→25`（**out of scope**）；`CONTRACTS §5.2.1/§6.4/§6.3.1`（**out of scope**） | 只增不减 + 数据推导 |
+| 5 | 验收 | 接线后重跑 `layout/walk-reachability/interaction(E13/E15/E16/F27)/audit`，并用**真实文件**口径实测"地面→顶层→地面"（`floorYAt` 读模块级数组 ⇒ 内存 clone 无效，见 CONTRACTS §12.1.4.2） | 卡面验收第 5 条 |
+
+### 15.7 本卡 verify 读数（**未接线**状态；三命令全绿）
+
+| 命令 | 结果 |
+| --- | --- |
+| `node tests/layout.test.mjs` | **exit 0** —— 通过 **1862** 项 / 失败 **0**（t37 新增 6 条常驻判据；其余增量来自并发成员改动，未逐条归属） |
+| `node tests/walk-reachability.test.mjs` | **exit 0** —— `t140 结果：全部通过 ✓`；t153 ⓪ 细口径命中 0 / 粗口径 7（= 已登记伪影集合，未新增） |
+| `node scripts/audit.mjs --enforce` | **exit 0** —— 主场景 **342 / 350**、分区 F **80 / 80**、`y0 canonical` 93 条自检 ✓ |
+
+- **未运行/未落地（如实登记）**：城市级接线与"生产装配 地面→顶层→地面"实测（需 §15.6 的 1–3）；`interaction.test` 的 E13 当前为**既有红**
+  （`整足迹阻挡者应为 24 条…实际 22`，t33 已 A/B 证明与本系列改动无关且 out of scope）；浏览器侧探针、`verify-*` 套件。
+- **未触碰**：`src/core/**`、`src/interaction/**`、`src/ui/**`、`src/zones/**`、`src/kit/geometry.js`、`src/kit/interiors.js`、`src/kit/index.js`、
+  `tests/interaction.test.mjs`、`tests/walk-reachability.test.mjs`、`tests/core.test.mjs`、`scripts/**`、`docs/CONTRACTS.md`、阈值 0.5/0.6、§8.2 门禁。

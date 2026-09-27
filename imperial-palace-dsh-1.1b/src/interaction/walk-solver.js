@@ -541,7 +541,20 @@ export function createWalkSolver({
      * 兼容：`intent/moved` 传 undefined 时退回内部记录（仅供旧测试/离线诊断），并如实标注来源。
      * @returns {{seconds:number, stuck:boolean, intent:boolean, moved:number, source:'explicit'|'internal'}}
      */
-    noteStuckTick(dt, { intent = null, moved = null, threshold = 1.5, minIntent = 1e-4, minMoved = 1e-4, minSpeed = null } = {}) {
+    noteStuckTick(dt, { intent = null, moved = null, threshold = 1.5, minIntent = 1e-4, minMoved = 1e-4, minSpeed = null, airborne = false } = {}) {
+      /**
+       * t2：**空中豁免** —— 第一人称跳跃飞行期间不计"卡死"。
+       * 语义：跳跃是合法的暂态（原地跳、贴墙跳都会让水平位移暂时为 0），不能判成卡住；
+       * 判据不放宽：落地后 airborne=false，"有意图 + 无位移"照常累计。
+       */
+      if (airborne) {
+        stuck.seconds = 0;
+        stuck.lastIntent = intent === true;
+        stuck.lastMovedValue = moved === null ? stuck.lastMoved : moved;
+        stuck.lastSpeed = 0;
+        stuck.intentSource = 'explicit';
+        return { seconds: 0, stuck: false, intent: intent === true, moved: +(stuck.lastMovedValue ?? 0).toFixed(4), speed: 0, source: 'airborne-exempt' };
+      }
       const explicit = intent !== null || moved !== null;
       const hasIntent = intent === null ? stuck.lastDistance > minIntent : intent === true;
       const movedValue = moved === null ? stuck.lastMoved : moved;

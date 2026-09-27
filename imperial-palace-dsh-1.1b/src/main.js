@@ -584,8 +584,25 @@ export async function bootstrap() {
       skyMaskPngNote: maskPngInfo?.note ?? null,
       zones: r.zones,
       buildings: r.buildings,
+      /* t11：装载失败清单进入机器报告 —— 让「5 区是否全部装载」在 `--dump-dom` 单次读取内可自证，
+         不必再从 `区域` 列表反推（旧报告曾把"某区装载失败"与"计数陈旧"混为一谈）。
+         数组为空 ⇒ 无任何区域装载失败。 */
+      zoneErrors: [...zoneErrors.values()].map((info) => ({ zone: info.zone, error: info.error })),
       ready: ready,
       kitSource,
+      /**
+       * t16：`?stats=1` 必须能直接读到**三档实际生效的抗锯齿**（模式 + samples + 依据）。
+       * 旧缺陷：`getStats().quality.antialias` 已有权威读数，但 `compactReport`（= `?stats=1` 的隐藏
+       * `<pre id="palace-stats-json">` 与可见面板的同一份数据源）**没有透传它** ⇒ 复核者只能去调
+       * `renderer.antialiasInfo()`，`?stats=1` 这条公开通道看不到 AA。
+       *
+       * **放在对象末尾是刻意的**：`tests/core-stats.test.mjs` 用
+       * `main.slice(indexOf('function compactReport()'), +4000)` 的**固定 4000 字符窗口**校验
+       * 既有字段仍被接线；把新字段插在中部会把 `backgroundCandidates`（原 offset ≈3950）推出窗口
+       * ⇒ 无谓地弄红别人的护栏。新字段一律**追加在末尾**，既有字段偏移保持不变。
+       */
+      antialias: s.quality.antialias,
+      antialiasPlan: typeof renderSystem.antialiasInfo === 'function' ? renderSystem.antialiasInfo() : null,
     };
   }
 
@@ -616,6 +633,8 @@ export async function bootstrap() {
       `主场景调用(估) ${countRenderables(sceneRoot)} · 整帧调用(含后处理) ${s.fullFrame.drawCalls} · 三角面 ${s.mainScene.visibleTriangles}`,
       `区域 ${r.zones.join(',')} · 建筑 ${r.buildings} · 视角 ${r.viewpoints}`,
       `DPR ${s.quality.dpr} · ${s.viewport.width}×${s.viewport.height} · Bloom ${s.quality.bloom ? 'on' : 'off'}`,
+      // t16：可见面板同步显示**实际生效的 AA**（与 compactReport / antialiasInfo 同一读数源）
+      `抗锯齿 ${s.quality.antialias.mode}${s.quality.antialias.samples > 0 ? ` ×${s.quality.antialias.samples}` : ''}（${s.quality.antialias.reason}）`,
     ].join('\n');
   }
 

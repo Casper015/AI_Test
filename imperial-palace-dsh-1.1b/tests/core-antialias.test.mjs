@@ -29,7 +29,11 @@ await runner.test('① 诊断事实链：`antialias` 是上下文标志、compos
   assert(/antialias:\s*config\.RENDERER\.antialias/.test(SRC), '应保留上下文标志 `antialias: config.RENDERER.antialias`（诊断对象）');
   assert(/contextFlagEffective:\s*false/.test(SRC), '应显式声明“上下文标志对 composer 路径无效”（contextFlagEffective:false）');
   assert(/上下文标志/.test(SRC) && /EffectComposer/.test(SRC), '源码里应写明诊断结论：上下文标志 vs EffectComposer 渲染目标');
-  const composerCount = SRC.split('new EffectComposer(').length - 1;
+  // t168 修缺陷①：计数前先剥注释（若注释里出现该字面量，旧写法会让计数漂移）
+  const SRC_NO_COMMENTS = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const composerCountRaw = SRC.split('new EffectComposer(').length - 1;
+  const composerCount = SRC_NO_COMMENTS.split('new EffectComposer(').length - 1;
+  runner.info(`EffectComposer 计数：含注释 ${composerCountRaw} → 剥注释后 ${composerCount}（断言用后者）`);
   assertEqual(composerCount, 1, '`renderer.js` 必须仍是唯一创建 EffectComposer 的地方（t129 不得引入第二套管线）');
   assert(/renderTarget1\.samples\s*=/.test(SRC) && /renderTarget2\.samples\s*=/.test(SRC), 'AA 必须写到 composer 的两个渲染目标 samples');
   // AA 不得触碰天空掩码用的渲染目标（t50/t53 的 mask RT）
@@ -58,6 +62,9 @@ await runner.test('② `antialiasPlanFor()` 档位计划与 `?aa=` 覆盖语义�
   assertEqual(antialiasPlanFor('medium', { aa: '8' }).samples, 8, '数值覆盖应生效');
   assertEqual(antialiasPlanFor('medium', { aa: '99' }).samples, 8, '数值覆盖应钳到 8');
   assertEqual(antialiasPlanFor('medium', { aa: '-1' }).samples, 0, '负数覆盖应钳到 0（等价 off）');
+  assertEqual(antialiasPlanFor('medium', { aa: '-1' }).mode, 'off', '负数覆盖应等价 off（t168 修缺陷②）');
+  assertEqual(antialiasPlanFor('medium', { aa: '2.6' }).samples, 3, '非整数覆盖应四舍五入');
+  assertEqual(antialiasPlanFor('medium', { samples: -4 }).samples, 0, 'options.samples 为负也应钳到 0');
   const bogus = antialiasPlanFor('medium', { aa: 'fxaa-不存在' });
   assertEqual(bogus.reason, 'override:unknown-value', '未知取值必须显式标记（不静默改变档位）');
   assertEqual(bogus.samples, 2, '未知取值应保持档位计划（medium=2）');

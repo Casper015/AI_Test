@@ -499,6 +499,7 @@ await runner.test('A7 requester 守卫非法输入：编号越界 / 非法模式
   assertThrows(() => requester.quality('ultra'));
   assertThrows(() => requester.zone('X'));
   assertThrows(() => requester.tour('dance'));
+  // 6 = 本用例构造的非法输入条数（非布局/数据快照；改用例时随之变化）
   assertEqual(rejected.length, 6, '被拒输入均被记账');
   assertEqual(events.count(EVENTS.requestViewMode), 0);
   assertEqual(events.count(EVENTS.requestTimePreset), 0);
@@ -602,6 +603,7 @@ await runner.test('B3 校验器与 §5.4 暂停语义一致：进第一人称 �
     ...app.store.state,
     tourState: { ...app.store.state.tourState, active: true, paused: false },
   });
+  // 1 / 2 = 契约校验器的**规则条数**（本用例构造的非法状态触发数，非数据快照）
   assertEqual(runningProblems.length, 1, `导览推进中 + 第一人称必须被判互斥，实际：${runningProblems.join('；')}`);
   assert(runningProblems[0].includes('导览正在推进'), `预期"推进中"互斥提示，实际：${runningProblems[0]}`);
   // 再锁定 mode 一致性：暂停中的导览 + fp 视图但 mode 不是 fp → 两条 canonical 规则同时命中
@@ -733,7 +735,12 @@ runner.section('C. 第一人称（§6.4）');
 
 await runner.test('C1 进入第一人称停在最近的可行走生成点，视线高 = 面高 + 1.65m', async () => {
   const spawns = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'fp-spawn');
-  assertEqual(spawns.length, 5, 'B/C/D/E/F 各一个 fp-spawn');
+  /* t8：计数由数据推导（不再写死 5）——"每个分区恰一个 fp-spawn"是语义，数量随 `ZONES` 走 */
+  const zoneIds = LAYOUT.ZONES.map((z) => z.id);
+  const spawnAreas = spawns.map((v) => v.area);
+  assertEqual(spawns.length, zoneIds.length, `每个分区恰一个 fp-spawn：${zoneIds.length} 个分区 ⇒ ${zoneIds.length} 个出生点（实际 ${spawns.length}）`);
+  assertEqual(new Set(spawnAreas).size, spawns.length, '不得有两个 fp-spawn 落在同一分区');
+  assert(spawnAreas.every((area) => zoneIds.includes(area)), `fp-spawn 的 area 必须是合法分区：${spawnAreas.join(',')}`);
   for (const spawn of spawns) {
     const app = await makeApp();
     placeRig(app.rig, spawn.position.x + 30, 60, spawn.position.z + 30);
@@ -1465,7 +1472,14 @@ await runner.test('F1 面板齐备：八视角、七分区、三时辰、三质�
     assert(stats.panels.includes(panel), `缺少面板 ${panel}（实际 ${stats.panels.join(',')}）`);
   }
   assert(app.ui.refs.labels.size === 0 || true);
-  assertEqual(ZONE_BUTTONS.length, 7);
+  /* t8：分区按钮的两个判据由数据推导（"每个分区都有按钮" + "id 唯一"），
+     旧的写死 7（= 5 分区 + 全城 + 主殿快捷）降级为**历史快照下界**：新增快捷不转红，塌陷转红。 */
+  const zoneButtonIds = ZONE_BUTTONS.map((b) => b.id);
+  assertEqual(new Set(zoneButtonIds).size, zoneButtonIds.length, `分区按钮 id 必须唯一：${zoneButtonIds.join(',')}`);
+  for (const zid of LAYOUT.ZONES.map((z) => z.id)) {
+    assert(ZONE_BUTTONS.some((b) => b.area === zid || b.id === zid), `分区 ${zid} 必须有一个按钮（area 或 id 命中）`);
+  }
+  assert(ZONE_BUTTONS.length >= 7, `分区按钮不得少于历史快照 7（实际 ${ZONE_BUTTONS.length}）`);
   assertEqual(stats.spacingProblems.length, 0, 'UI 间距全部取自 4/8/12/16/24/32');
   app.interaction.dispose();
   app.ui.dispose();
@@ -1475,14 +1489,16 @@ await runner.test('F2 点击视角按钮 / 分区按钮 → 同一请求事件�
   const app = await makeApp();
   const isoButton = [...app.ui.refs.labels.size >= 0 ? [] : []];
   const buttons = app.app.querySelectorAll('[data-view-mode]');
-  assertEqual(buttons.length, 8, '八个视角按钮都有 data-view-mode');
+  // t8：计数由 config 推导（不再写死 8）
+  assertEqual(buttons.length, CONFIG.CAMERA.viewModes.length, `视角按钮数必须等于 config.CAMERA.viewModes（${CONFIG.CAMERA.viewModes.length}；实际 ${buttons.length}）`);
   const iso = buttons.find((b) => b.attrs['data-view-mode'] === 'iso');
   const before = app.events.count(EVENTS.requestViewMode);
   iso.dispatch('click', {});
   assertEqual(app.events.count(EVENTS.requestViewMode) - before, 1, '按钮点击只发一次请求');
   assertEqual(app.store.state.viewMode, 'iso');
   const zoneButtons = app.app.querySelectorAll('[data-zone]');
-  assertEqual(zoneButtons.length, 7);
+  // t8：DOM 按钮数与常量表同源（不写死 7）；分区齐备性由上面的数据推导断言覆盖
+  assertEqual(zoneButtons.length, ZONE_BUTTONS.length, `DOM 分区按钮数应等于 ZONE_BUTTONS（实际 ${zoneButtons.length} / ${ZONE_BUTTONS.length}）`);
   const zoneC = zoneButtons.find((b) => b.attrs['data-zone'] === 'inner');
   zoneC.dispatch('click', {});
   assertEqual(app.store.state.viewMode, 'zone');
@@ -1539,6 +1555,7 @@ await runner.test('F4 建筑选中 → 信息面板显示名称/用途/是否可
   assertEqual(app.interaction.highlighter.describe().selected, 'yes', '三维高亮已显示');
 
   const interior = app.app.querySelectorAll('[data-ui-panel]');
+  // 面板数下界（t7 现为 13 个 data-ui-panel；此处只作"面板齐备"的下界，不写死具体值）
   assert(interior.length >= 10);
   app.interaction.requester.viewMode('interior');
   assertEqual(app.store.state.viewMode, 'interior');
@@ -1610,12 +1627,13 @@ await runner.test('F5 标签按缩放层级显隐并避免重叠', async () => {
 
 await runner.test('F6 小地图：宫墙/区域/水体/院落 + 当前位置标记 + 点按定位', async () => {
   const plan = planMinimap({ cameraPosition: { x: 0, z: -60 }, cameraYawDeg: 0 });
-  assertEqual(plan.walls.length, 4, '四段宫墙');
-  assert(plan.zoneRects.length >= 7, `区域矩形 ${plan.zoneRects.length}`);
-  assertEqual(plan.moats.length, 4, '护城河四段');
-  assertEqual(plan.ponds.length, 4, '四处水池');
-  assertEqual(plan.bridges.length, 4, '四座桥');
-  assertEqual(plan.courtyards.length, 14, '十四处院落');
+  /* t8：小地图四类图元数量**逐项由 layout 推导**（与 `planMinimap` 同源），不再写死 4/4/4/4/14 */
+  assertEqual(plan.walls.length, LAYOUT.WALLS.filter((w) => w.cityWall).length, `宫墙段数应等于 LAYOUT.WALLS 里的 cityWall 段（${LAYOUT.WALLS.filter((w) => w.cityWall).length}）`);
+  assert(plan.zoneRects.length >= LAYOUT.ZONES.length, `区域矩形应 ≥ 分区数（${LAYOUT.ZONES.length}；实际 ${plan.zoneRects.length}）`);
+  assertEqual(plan.moats.length, LAYOUT.MOAT.rects.length, `护城河段数应等于 MOAT.rects（${LAYOUT.MOAT.rects.length}）`);
+  assertEqual(plan.ponds.length, LAYOUT.WATER_BODIES.filter((w) => !/^MOAT/.test(w.id)).length, '水池数应等于 WATER_BODIES 去掉护城河段');
+  assertEqual(plan.bridges.length, LAYOUT.BRIDGES.length, `桥数应等于 LAYOUT.BRIDGES（${LAYOUT.BRIDGES.length}）`);
+  assertEqual(plan.courtyards.length, LAYOUT.COURTYARDS.length, `院落数应等于 LAYOUT.COURTYARDS（${LAYOUT.COURTYARDS.length}）`);
   assertClose(plan.marker.x, plan.projector.toScreen(0, -60).x, 1e-9, '标记跟随相机 x');
   assertClose(plan.marker.y, plan.projector.toScreen(0, -60).y, 1e-9, '标记跟随相机 y');
   assert(plan.marker.inside, '相机在宫城内');
@@ -1695,7 +1713,7 @@ await runner.test('F10 窄屏：结构标记 + 提示折叠 + 触屏支持范围
   const app = await makeApp({ width: 600, height: 900 });
   assertEqual(app.ui.root.dataset.narrow, '1');
   const help = app.app.querySelectorAll('[data-ui-panel]').find((el) => el.attrs['data-ui-panel'] === 'help');
-  const body = help.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === 'help-body');
+  const body = help.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === 'panel-body');
   assertEqual(body.hidden, true, '窄屏默认折叠操作提示');
   const touch = help.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === 'help-touch');
   assertEqual(touch.textContent, TOUCH_SUPPORT_NOTE);
@@ -1712,13 +1730,25 @@ await runner.test('F10 窄屏：结构标记 + 提示折叠 + 触屏支持范围
 await runner.test('F11 H / M 键走 G 的本地命令（提示折叠、小地图开关），不产生状态请求', async () => {
   const app = await makeApp();
   const before = app.events.count(EVENTS.requestViewMode) + app.events.count(EVENTS.requestReset);
-  app.win.key('KeyM');
+  /**
+   * t7 意图更新：M 不再是"整块 hidden"这一套平行语义，而是切换**折叠**（与箭头同一个状态机）。
+   * 判据不降级：仍断言"两次按键后状态回到原位"，并新增 aria-expanded 如实同步与"折叠 ≠ 移除 DOM"。
+   */
   const minimapPanel = app.app.querySelectorAll('[data-ui-panel]').find((el) => el.attrs['data-ui-panel'] === 'minimap');
-  assertEqual(minimapPanel.hidden, true, 'M 收起小地图');
+  const minimapBody = minimapPanel.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === 'panel-body');
+  const minimapToggle = minimapPanel.querySelectorAll('[data-action]').find((el) => el.attrs['data-action'] === 'toggle-panel');
+  assertEqual(minimapPanel.attrs['data-collapsed'], '1', '小地图默认折叠（t7 新意图）');
+  assertEqual(minimapBody.hidden, true, '默认折叠时内容体不参与布局');
   app.win.key('KeyM');
-  assertEqual(minimapPanel.hidden, false, 'M 再按展开');
+  assertEqual(minimapPanel.attrs['data-collapsed'], '0', 'M 展开小地图（同一个折叠状态机）');
+  assertEqual(minimapBody.hidden, false, 'M 展开后内容体可见');
+  assertEqual(minimapToggle.attrs['aria-expanded'], 'true', 'aria-expanded 必须如实同步');
+  assertEqual(minimapPanel.hidden, false, '折叠 ≠ 移除：面板始终留在 DOM 中');
+  app.win.key('KeyM');
+  assertEqual(minimapPanel.attrs['data-collapsed'], '1', 'M 再按折叠');
+  assertEqual(minimapBody.hidden, true, '再次折叠后内容体不可见');
   const help = app.app.querySelectorAll('[data-ui-panel]').find((el) => el.attrs['data-ui-panel'] === 'help');
-  const body = help.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === 'help-body');
+  const body = help.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === 'panel-body');
   assertEqual(body.hidden, true, '操作提示默认折叠（面板高度收敛，不与其它面板抢空间）');
   app.win.key('KeyH');
   assertEqual(body.hidden, false, 'H 展开操作提示');
@@ -1790,6 +1820,7 @@ await runner.test('F14 recordFrame 包装让交互搭上唯一循环，且不重
   });
   renderSystem.recordFrame(16.7);
   renderSystem.recordFrame(16.7);
+  // 2 / 4 = 本用例构造的调用次数（2 帧 → 包装层 + 原实现各一次；4 = 再走 2 帧），非数据快照
   assertEqual(calls.length, 2, '原 recordFrame 仍被调用');
   assert(ticks >= 1, '包装层驱动了 tick');
   const afterFirst = ticks;
@@ -2180,7 +2211,12 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   for (const surface of LAYOUT.WALKABLE) {
     if (surface.kind === 'passage') widths.push(Math.min(surface.bounds.maxX - surface.bounds.minX, surface.bounds.maxZ - surface.bounds.minZ));
   }
-  assert(widths.length >= 43, `门洞/通道样本应覆盖全部通道面，实际 ${widths.length}`);
+  /* t8：样本覆盖判据由数据推导（通道面数 / 带门洞障碍数），旧的 43 降级为历史快照下界 */
+  const passageSurfaces = LAYOUT.WALKABLE.filter((w) => w.kind === 'passage').length;
+  const dooredObstacles = solver.obstacles().filter((o) => Number.isFinite(o.door?.width)).length;
+  assert(widths.length >= passageSurfaces, `样本必须覆盖全部通道面（${passageSurfaces}；实际 ${widths.length}）`);
+  assert(widths.length >= dooredObstacles, `样本必须覆盖全部带门洞障碍（${dooredObstacles}；实际 ${widths.length}）`);
+  assert(widths.length >= 43, `样本数不得少于历史快照 43（实际 ${widths.length}）`);
   const minWidth = Math.min(...widths);
   assert(minWidth >= required, `最小净宽 ${minWidth.toFixed(2)}m 应 ≥ 判据 ${required}m`);
   assertEqual(report.narrowGaps.length, 0, `净宽不足的缝应为 0，实际 ${report.narrowGaps.length}`);
@@ -2229,8 +2265,10 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   // 亭（t103 语义）：10 座亭均已 `hasDoor:true ⇒ exceptDoor` ⇒ **一条都不得被算作空气墙**
   const pavilionSlots = LAYOUT.SLOTS.filter((slot) => slot.kind === 'pavilion');
   const pavilionObstacles = pavilionSlots.map((slot) => obstacleByBuilding.get(slot.id)).filter(Boolean);
-  assertEqual(pavilionSlots.length, 10, `应恰好 10 座亭（实际 ${pavilionSlots.length}）`);
-  assertEqual(pavilionObstacles.length, pavilionSlots.length, '10 座亭都必须有障碍条目');
+  /* t8：亭数量改为**历史快照下界**（t13 时点 = 10）——实质判据在下面逐座不变量（hasDoor + exceptDoor + 提示）。
+     新增亭不应使本断言变红；若亭被删/漏登记则转红。 */
+  assert(pavilionSlots.length >= 10, `亭数量不得少于历史快照 10（实际 ${pavilionSlots.length}）`);
+  assertEqual(pavilionObstacles.length, pavilionSlots.length, '每座亭都必须有障碍条目（数量由槽位集合推导）');
   assert(pavilionObstacles.every((o) => o.blocks === 'exceptDoor'), `亭必须为 exceptDoor（仅门洞带阻挡）：${JSON.stringify([...new Set(pavilionObstacles.map((o) => o.blocks))])}`);
   assert(pavilionSlots.every((s) => s.hasDoor === true), '10 座亭都必须登记 hasDoor（t103 的加法登记）');
   // ★ 正确期望（替换 t87/t88 时代的"亭必须全部在册"）
@@ -2238,18 +2276,119 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   assertEqual(airWalls.length, 0, `t103 之后空气墙必须清零（实际 ${airWalls.length}）`);
   assertEqual(blockedOpen.length, 0, '不得再有整足迹阻挡的开敞构筑物');
 
-  // ★ 反向断言：**每一个** blocks==='all' 的构筑物都必须有可见提示（逐条列出，不只给个数）
+  /* ★ 反向断言（t8：**全部由数据推导**，不再写死 14/24 这类基线）。
+     两侧来源独立 ⇒ 不是恒真：左侧 = 运行时求解器列表（`solver.obstacles()`），右侧 = layout 数据 + `sourceType` 语义。
+     判据（只增不减）：① 每个整足迹阻挡者都必须有**非兜底**具名提示；② 两侧集合**双向相等**（缺失/多余都转红）；
+                      ③ 计数用推导集合本身；④ 历史基线保留为**单调下界**（计数塌陷仍转红）。 */
   const blockedAll = solver.obstacles().filter((o) => o.blocks === 'all');
+  const blockedIds = new Set(blockedAll.map((o) => o.id));
   const hintCatalog = buildCatalog({ layout: LAYOUT, config: CONFIG });
   const groupOf = (id) =>
-    /^OB-F-tower-corner/.test(id) ? '角楼' : /^OB-MOAT/.test(id) ? '护城河' : /^OB-WB/.test(id) ? '水体' : /^OB-SC/.test(id) ? '山石' : '其它';
-  const groups = {};
-  for (const o of blockedAll) groups[groupOf(o.id)] = (groups[groupOf(o.id)] ?? 0) + 1;
-  assertEqual(blockedAll.length, 14, `整足迹阻挡者应为 14 条（实际 ${blockedAll.length}）：${blockedAll.map((o) => o.id).join('、')}`);
-  assertEqual(groups['角楼'] ?? 0, 4, `角楼 4 条（实际 ${groups['角楼'] ?? 0}）`);
-  assertEqual(groups['护城河'] ?? 0, 4, `护城河 4 条（实际 ${groups['护城河'] ?? 0}）`);
-  assertEqual(groups['水体'] ?? 0, 4, `水体 4 条（实际 ${groups['水体'] ?? 0}）`);
-  assertEqual(groups['山石'] ?? 0, 2, `山石 2 条（实际 ${groups['山石'] ?? 0}）`);
+    /^OB-F-tower-corner/.test(id) ? '角楼' : /^OB-MOAT/.test(id) ? '护城河' : /^OB-WB/.test(id) ? '水体' : /^OB-SC/.test(id) ? '山石' : '批量装饰';
+
+  /* 语义推导：
+     ① 实心槽位 = `SLOTS` 里 visitable===false 且 hasDoor!==true（角楼 / 批量装饰 / 其它实心殿座）
+     ② 护城河 = `LAYOUT.MOAT.rects`（唯一权威源）
+     ③ 山石 = 求解器里 `sourceType==='rockery'`
+     ④ 水体 = 只允许两种状态：整足迹阻挡，或**有界开槽**（`exceptDoor` + 登记 `door` 通道）；只有未开槽者进入本清单
+     ⑤ 汀步走廊 = `LAYOUT.STONE_STEP_LANES`（t13 唯一权威源，供下面的逐条几何核对） */
+  const solidSlots = LAYOUT.SLOTS.filter((s) => s.visitable === false && s.hasDoor !== true);
+  const moatRects = LAYOUT.MOAT?.rects ?? [];
+  const stoneLanes = LAYOUT.STONE_STEP_LANES ?? [];
+  const carvedWaterIds = new Set(stoneLanes.map((l) => `OB-${l.pondId}`));
+  const waterObstacles = solver.obstacles().filter((o) => o.sourceType === 'water');
+  for (const w of waterObstacles) {
+    if (w.blocks === 'all') continue;
+    assertEqual(w.blocks, 'exceptDoor', `${w.id} 只允许「整足迹阻挡」或「有界开槽（exceptDoor）」两种状态`);
+    assert(w.door && Number.isFinite(w.door.width), `${w.id} 开槽必须登记 door 通道（否则是"隐形缺口"）`);
+  }
+  const uncarvedWaterIds = waterObstacles.filter((o) => o.blocks === 'all' && !/^OB-MOAT/.test(o.id)).map((o) => o.id);
+  const rockeryIds = solver.obstacles().filter((o) => o.sourceType === 'rockery').map((o) => o.id);
+  /**
+   * 判据本体（**纯函数**，便于做"突变对照"证明它真的会失败、不是恒真）：
+   *   · `missing` = 语义上应实心阻挡却不在运行时清单里的（漏登记 / 被静默改成可通行）
+   *   · `extra`   = 运行时清单里但语义上不该有的（多出成员）
+   *   · `illegalWater` = 水体既不是"整足迹阻挡"、也不是"有界开槽（exceptDoor + door）"
+   */
+  const auditBlockers = (list) => {
+    const runtime = new Set(list.filter((o) => o.blocks === 'all').map((o) => o.id));
+    const water = list.filter((o) => o.sourceType === 'water');
+    const derived = new Set([
+      ...solidSlots.map((s) => `OB-${s.id}`),
+      ...moatRects.map((r) => `OB-${r.id}`),
+      ...list.filter((o) => o.sourceType === 'rockery').map((o) => o.id),
+      ...water.filter((o) => o.blocks === 'all' && !/^OB-MOAT/.test(o.id)).map((o) => o.id),
+    ]);
+    return {
+      runtime,
+      derived,
+      missing: [...derived].filter((id) => !runtime.has(id)),
+      extra: [...runtime].filter((id) => !derived.has(id)),
+      illegalWater: water
+        .filter((o) => o.blocks !== 'all' && (o.blocks !== 'exceptDoor' || !(o.door && Number.isFinite(o.door.width))))
+        .map((o) => o.id),
+    };
+  };
+  const blockerAudit = auditBlockers(solver.obstacles());
+  const derivedBlockedIds = blockerAudit.derived;
+  assertEqual(blockerAudit.missing.length, 0, `语义上"实心阻挡"的对象必须逐条在册；缺失 ${blockerAudit.missing.length}：${blockerAudit.missing.join('、')}`);
+  assertEqual(blockerAudit.extra.length, 0, `整足迹阻挡清单不得出现语义之外的成员；多出 ${blockerAudit.extra.length}：${blockerAudit.extra.join('、')}`);
+  assertEqual(blockerAudit.illegalWater.length, 0, `水体不得处于"既不阻挡也无门洞通道"的第三态：${blockerAudit.illegalWater.join('、')}`);
+  assertEqual(blockedAll.length, derivedBlockedIds.size, `整足迹阻挡者数量必须等于**数据推导集合**（${derivedBlockedIds.size}）：${blockedAll.map((o) => o.id).join('、')}`);
+  /* 历史快照（**不参与判定**，仅供追溯计数来历）：
+     t9 前 14（角楼 4 / 护城河 4 / 水体 4 / 山石 2）；t9 +12 批量装饰；t13 开槽 D/E 两池 ⇒ 当时公式 14+12−2 = 24；
+     此后御花园 F-east / F-west 两池也登记了门洞通道 ⇒ 水体整足迹阻挡归零，现值 22（= 16 实心槽位 + 4 护城河 + 2 山石）。
+     单调下界：漏登记、或把实心体块静默改成可通行（计数塌陷）仍必须转红。 */
+  assert(blockedAll.length >= 14, `整足迹阻挡者不得少于历史基线 14（实际 ${blockedAll.length}）`);
+  assert(moatRects.length > 0 && moatRects.every((r) => blockedIds.has(`OB-${r.id}`)), `护城河 ${moatRects.length} 段必须逐段在册`);
+
+  // 分组：**逐组集合相等**（不再写死 4 / 4 / 2 / 12）
+  const towerSlots = LAYOUT.SLOTS.filter((s) => s.kind === 'cornerTower');
+  const towerGroup = blockedAll.filter((o) => groupOf(o.id) === '角楼');
+  assertEqual(towerGroup.length, towerSlots.length, `角楼组必须等于 layout 的 cornerTower 槽位数（${towerSlots.length}；实际 ${towerGroup.length}）`);
+  assert(towerSlots.every((s) => blockedIds.has(`OB-${s.id}`)), '每座角楼都必须整足迹阻挡');
+  assertEqual(blockedAll.filter((o) => groupOf(o.id) === '护城河').length, moatRects.length, `护城河组必须等于 MOAT.rects 段数（${moatRects.length}）`);
+  assertEqual(blockedAll.filter((o) => groupOf(o.id) === '山石').length, rockeryIds.length, `山石组必须等于 sourceType=rockery 的障碍数（${rockeryIds.length}）`);
+  assertEqual(blockedAll.filter((o) => groupOf(o.id) === '水体').length, uncarvedWaterIds.length, `水体组必须等于"未开槽水体"集合（全开槽 ⇒ 0 条，如实推导；实际 ${uncarvedWaterIds.length}）`);
+  const bulkAnnexIds = (LAYOUT.GARDEN_BULK_SLOTS ?? []).map((s) => `OB-${s.id}`);
+  const residualIds = blockedAll.filter((o) => groupOf(o.id) === '批量装饰').map((o) => o.id);
+  assertEqual([...residualIds].sort().join(','), [...bulkAnnexIds].sort().join(','), `「批量装饰」组必须**集合等于** GARDEN_BULK_SLOTS（${bulkAnnexIds.length} 条）：${residualIds.join('、')}`);
+  // 每个整足迹阻挡者都必须有**非兜底**具名提示（逐条，不只给个数）
+  for (const o of blockedAll) {
+    assert(o.kind !== 'pavilion' && !pavilionSlots.some((s) => `OB-${s.id}` === o.id), `${o.id} 不得是亭（亭已可通行）`);
+    const hint = hintCatalog.hintFor(o.id);
+    assert(hint && typeof hint.title === 'string' && hint.title.length > 0, `${o.id} 必须有可见提示（不得静默）`);
+    assert(hint.title !== '此路不通', `${o.id} 的提示必须点名（不得用兜底文案）：${hint.title}`);
+  }
+  runner.info(
+    `  整足迹阻挡者 ${blockedAll.length} 条（推导集合 ${derivedBlockedIds.size}；分组 ${Object.entries(blockedAll.reduce((acc, o) => { acc[groupOf(o.id)] = (acc[groupOf(o.id)] ?? 0) + 1; return acc; }, {})).map(([k, v]) => `${k} ${v}`).join(' / ')}）逐条提示齐备`,
+  );
+
+  /* t13：被开槽的水体**逐条**核对（不得只靠计数）—— 必须 `exceptDoor` + 通道逐值等于走廊几何，
+     且几何登记（`STONE_STEP_LANES`）与碰撞登记（`OB-WB-*` 的 door）同轮一致。 */
+  for (const lane of stoneLanes) {
+    const ob = LAYOUT.OBSTACLES.find((o) => o.id === `OB-${lane.pondId}`);
+    assert(ob, `${lane.id}: 水体障碍 ${lane.pondId} 必须存在`);
+    assert(ob.blocks === 'exceptDoor' && ob.door, `${lane.id}: 开槽水体必须登记 exceptDoor + door`);
+    assertEqual(ob.door.width, lane.corridor.width, `${lane.id}: 通道宽应 = 走廊宽`);
+    assertEqual(ob.door.axis, lane.corridor.axis, `${lane.id}: 通道法线轴应 = 走廊轴`);
+    const surfaceIds = lane.steps.map((s2) => s2.id);
+    const mine = LAYOUT.WALKABLE.filter((w) => surfaceIds.includes(w.id));
+    assertEqual(mine.length, surfaceIds.length, `${lane.id}: 每级汀步都必须有登记可走面`);
+    assert(mine.every((w) => w.kind === 'bridgeDeck'), `${lane.id}: 汀步面 kind 应取既有白名单值 bridgeDeck（跨水面石桥面）`);
+    assert(!blockedAll.some((o) => o.id === `OB-${lane.pondId}`), `${lane.id}: 开槽后的水体不得再计入整足迹阻挡清单`);
+  }
+  /* t8：「批量装饰」组的集合相等已在上方用 `residualIds` 断言（取代旧的「其它」分组写死计数 12） */
+  assertEqual(residualIds.length, bulkAnnexIds.length, `「批量装饰」组条数必须等于 GARDEN_BULK_SLOTS（实际 ${residualIds.length} / ${bulkAnnexIds.length}）`);
+  for (const id of bulkAnnexIds) {
+    const row = blockedAll.find((o) => o.id === id);
+    assert(row, `${id} 必须在整足迹阻挡清单内（t9 批量装饰建筑为实心 blocks:'all'）`);
+    assert(row.door == null, `${id} 不得有门洞（实心体块）`);
+    const slot = LAYOUT.SLOTS.find((s) => s.id === row.buildingId);
+    assert(slot && slot.visitable === false && slot.hasDoor === false, `${id} 对应槽位必须非 visitable 且无门洞`);
+    const bulkHint = hintCatalog.hintFor(id);
+    assert(bulkHint?.title && bulkHint.title !== '此路不通', `${id} 必须给出具名提示（实际「${bulkHint?.title}」）`);
+  }
   for (const o of blockedAll) {
     assert(o.kind !== 'pavilion' && !pavilionSlots.some((s) => `OB-${s.id}` === o.id), `${o.id} 不得是亭（亭已可通行）`);
     const hint = hintCatalog.hintFor(o.id);
@@ -2266,6 +2405,7 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   const mutatedSolver = createWalkSolver({ obstacles: mutated });
   const mutatedAudit = createTraversalAudit({ solver: mutatedSolver, layout: LAYOUT, cellSize: 3, start: { x: 0, z: -480 } });
   const mutatedAirWalls = mutatedAudit.auditAirWalls();
+  // 1 = 本用例**主动注入**的突变数（把一座亭改回 blocks:'all'），非数据快照
   assertEqual(mutatedAirWalls.length, 1, `突变后应有 1 座空气墙（实际 ${mutatedAirWalls.length}）`);
   assertEqual(mutatedAirWalls[0].kind, 'pavilion', '突变后该空气墙必须是亭');
   assert(
@@ -2274,6 +2414,37 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   );
   const mutatedHint = blockedHint({ sourceType: 'building', name: pavilionSlots[0].name, blocks: 'all', kind: 'pavilion', visitable: false, sourceLabel: '建筑' });
   assert(/开敞构筑物/.test(mutatedHint.title), `突变后提示应翻转为「开敞构筑物」（实际「${mutatedHint.title}」）`);
+
+  /* ★ t8 突变对照（**不假绿**的三证之一）：把三类真实缺陷各注入一次，上面的判据必须各自转红。
+     这证明"双向集合相等 + 水体状态合法性"不是恒真断言，而是真的会失败。 */
+  const solidProbeId = `OB-${solidSlots[0].id}`;
+  const mutA = auditBlockers(
+    solver.obstacles().map((o) =>
+      o.id === solidProbeId
+        ? { ...o, blocks: 'exceptDoor', door: { axis: 'z', center: { x: (o.bounds.minX + o.bounds.maxX) / 2, z: (o.bounds.minZ + o.bounds.maxZ) / 2 }, width: 4, height: 3, sillY: o.y0 ?? 0 } }
+        : o,
+    ),
+  );
+  assertEqual(mutA.missing.join(','), solidProbeId, `突变 A（实心体块被静默改成可通行）必须被"缺失"抓住（missing=${mutA.missing.join(',')} extra=${mutA.extra.join(',')}）`);
+  const moatProbeId = `OB-${moatRects[0].id}`;
+  const mutB = auditBlockers(
+    solver.obstacles().map((o) => (o.id === moatProbeId ? { ...o, blocks: 'exceptDoor', door: { axis: 'x', center: { x: 0, z: 0 }, width: 8, height: 3, sillY: o.y0 ?? 0 } } : o)),
+  );
+  assertEqual(mutB.missing.join(','), moatProbeId, `突变 B（护城河被开槽）必须被"缺失"抓住（missing=${mutB.missing.join(',')}）`);
+  const pondProbeId = waterObstacles.find((o) => !/^OB-MOAT/.test(o.id))?.id ?? null;
+  let mutC = null;
+  if (pondProbeId) {
+    mutC = auditBlockers(solver.obstacles().map((o) => (o.id === pondProbeId ? { ...o, blocks: 'exceptDoor', door: null } : o)));
+    assertEqual(mutC.illegalWater.join(','), pondProbeId, `突变 C（水体开槽却不登记 door 通道）必须被"非法状态"抓住（illegal=${mutC.illegalWater.join(',')}）`);
+  }
+  // 突变 D：凭空多出一条实心阻挡（未登记在 SLOTS/MOAT/rockery 语义里）⇒ "多余"必须抓住
+  const ghost = { id: 'OB-T8-GHOST', sourceType: 'building', zone: 'F', bounds: { minX: -600, maxX: -599, minZ: -600, maxZ: -599 }, y0: 0, y1: 1, blocks: 'all', door: null };
+  const mutD = auditBlockers([...solver.obstacles(), ghost]);
+  assertEqual(mutD.extra.join(','), 'OB-T8-GHOST', `突变 D（凭空多出整足迹阻挡者）必须被"多余"抓住（extra=${mutD.extra.join(',')}）`);
+  runner.info(
+    `  突变对照（不假绿）：基线 missing/extra/illegal = ${blockerAudit.missing.length}/${blockerAudit.extra.length}/${blockerAudit.illegalWater.length}｜` +
+      `A(实心改可通行)→missing ${mutA.missing.length}｜B(护城河开槽)→missing ${mutB.missing.length}｜C(水体开槽无 door)→illegal ${mutC?.illegalWater?.length ?? 'n/a'}｜D(凭空多出)→extra ${mutD.extra.length}`,
+  );
 
   // ④ 单向高差：上下阈值不对称造成的有向边（|Δy| ∈ (maxStepHeight, snapDownDistance]）
   const oneWay = report.oneWayHeight;
@@ -2471,7 +2642,13 @@ await runner.test('E16 成对可达性（不许单向）：43 栋内景 + 出生
   const interiors = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').map((v) => ({ name: v.id, kind: '内景机位', x: v.position.x, z: v.position.z }));
   const spawns = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'fp-spawn').map((v) => ({ name: v.id, kind: '第一人称出生点', x: v.position.x, z: v.position.z }));
   const route = LAYOUT.FP_ROUTE.map((w) => ({ name: w.name, kind: '走查路点', x: w.position.x, z: w.position.z }));
-  assertEqual(interiors.length, 43, `内景机位应为 43 个（每栋可进入建筑 1 个），实际 ${interiors.length}`);
+  /* t8：内景机位数由**数据推导**（不再写死 43）——并与另两个独立来源交叉核对：
+     `INTERIOR_BY_SLOT` 的键数、`SLOTS` 里 visitable 的栋数（三者必须一致）。 */
+  const interiorKeys = Object.keys(LAYOUT.INTERIOR_BY_SLOT ?? {}).length;
+  const visitableSlots = LAYOUT.SLOTS.filter((s) => s.visitable === true).length;
+  assertEqual(interiors.length, interiorKeys, `内景机位数必须等于 INTERIOR_BY_SLOT 键数（${interiorKeys}；实际 ${interiors.length}）`);
+  assertEqual(interiorKeys, visitableSlots, `INTERIOR_BY_SLOT 必须与 visitable 槽位一一对应（${interiorKeys} vs ${visitableSlots}）`);
+  assert(interiors.length >= 43, `内景机位不得少于历史快照 43（实际 ${interiors.length}）`);
   assert(spawns.length >= 1, '至少应有 1 个第一人称出生点');
 
   const report = audit.audit({ paired: [...interiors, ...spawns, ...route] });
@@ -2549,7 +2726,9 @@ await runner.test('F21 t87 UI 与按键：G 键映射脱困、亭的撞墙提示
     assert(r.blocked.every((id) => /^OB-/.test(id) || WORLD_BLOCK_REASONS.includes(id)), `${r.id} 的阻挡原因必须有名有姓：${JSON.stringify(r.blocked)}`);
   }
   assert(enteredCount >= 8, `至少 8/10 座亭应能经门洞带走进足迹（实测 ${enteredCount}/10）：${JSON.stringify(doorResults)}`);
-  assertEqual(enteredCount + blockedNamed.length, 10, '两类之和必须等于 10（无遗漏）');
+  // t8：和数改为**样本自身长度**（不再写死 10）；"无遗漏"语义不变
+  assertEqual(enteredCount + blockedNamed.length, doorResults.length, `两类之和必须等于样本数 ${doorResults.length}（无遗漏）`);
+  assert(doorResults.length >= 10, `门洞走查样本不得少于历史快照 10（实际 ${doorResults.length}）`);
   runner.info(
     `  亭门洞带可走性：${enteredCount}/10 走进足迹（无阻挡）；${blockedNamed.length} 座被**有名**阻挡：` +
       blockedNamed.map((r) => `${r.id}←${r.blocked.join('/')}`).join('、') + `｜明细 ${JSON.stringify(doorResults)}`,
@@ -2966,8 +3145,12 @@ await runner.test('E18 关节连通诊断（t116）：通道面↔室内面在�
     const dz = Math.max(0, Math.max(a.bounds.minZ - b.bounds.maxZ, b.bounds.minZ - a.bounds.maxZ));
     return Math.hypot(dx, dz);
   };
-  assertEqual(interiors.length, 43, `内景面应为 43（实际 ${interiors.length}）`);
-  assertEqual(passages.length, 43, `门洞通道面应为 43（实际 ${passages.length}）`);
+  /* t8：内景面 / 通道面数量由数据推导（不再写死 43），并与机位侧交叉核对 */
+  const interiorSurfaceExpected = Object.keys(LAYOUT.INTERIOR_BY_SLOT ?? {}).length;
+  const visitableExpected = LAYOUT.SLOTS.filter((s) => s.visitable === true).length;
+  assertEqual(interiors.length, interiorSurfaceExpected, `内景面数必须等于可进入建筑数（${interiorSurfaceExpected}；实际 ${interiors.length}）`);
+  assertEqual(passages.length, visitableExpected, `门洞通道面数必须等于可进入建筑数（${visitableExpected}；实际 ${passages.length}）`);
+  assert(interiors.length >= 43 && passages.length >= 43, `内景面/通道面不得少于历史快照 43（实际 ${interiors.length} / ${passages.length}）`);
 
   // ── ① t77 的两条硬事实：相接 43/43；"相接却不可跨"是否成立？
   const rows = [];
@@ -3312,6 +3495,305 @@ await runner.test('F27 库级口径一致（t156）：connected([a,b]).ok ≡ pa
     `  过渡带双向审计（F12）：${bands.length} 处（-transition-*/-descent-*/-threshold）｜正向可达 ${bandRows.filter((r) => r.forward).length}｜反向可达 ${bandRows.filter((r) => r.backward).length}｜单向 ${oneWay.length}｜两侧均不可达 ${notInMain.length}` +
       (notInMain.length ? `：${notInMain.map((r) => r.id).slice(0, 6).join('、')}` : ''),
   );
+});
+
+/* ==========================================================================
+ *  G. t7 面板默认折叠 + 箭头（可点击 / 键盘可达 / 等价 a11y）
+ * ======================================================================== */
+
+runner.section('G. t7 面板默认折叠 + 箭头');
+
+/** 面板查找与折叠状态读取（唯一口径）：值来自 DOM 属性，不看 CSS 猜测。 */
+const panelOf = (app, id) => app.app.querySelectorAll('[data-ui-panel]').find((el) => el.attrs['data-ui-panel'] === id);
+const partOf = (panel, name) => panel.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === name);
+const toggleOf = (panel) => panel.querySelectorAll('[data-action]').find((el) => el.attrs['data-action'] === 'toggle-panel');
+/** 面板清单（t7 盘点结果）：13 个 data-ui-panel = 9 个可折叠内容面板 + 4 个非折叠件。 */
+const COLLAPSIBLE_IDS = ['hud', 'views', 'zones', 'env', 'tour', 'minimap', 'help', 'loading', 'info'];
+const NON_COLLAPSIBLE_IDS = ['brand', 'labels', 'stuck', 'toast'];
+
+await runner.test('G1 盘点 + 默认全折叠（**逐面板**精确断言，不是"存在即可见"）', async () => {
+  const app = await makeApp();
+  const panels = app.app.querySelectorAll('[data-ui-panel]');
+  // t8：面板总数由**清单推导**（9 可折叠 + 4 非折叠 = CONTRACTS §11.3.1 登记），不再写死 13
+  assertEqual(panels.length, COLLAPSIBLE_IDS.length + NON_COLLAPSIBLE_IDS.length, `data-ui-panel 总数应为清单之和 ${COLLAPSIBLE_IDS.length + NON_COLLAPSIBLE_IDS.length}（实际 ${panels.map((p) => p.attrs['data-ui-panel']).join(',')}）`);
+  for (const id of COLLAPSIBLE_IDS) {
+    const panel = panelOf(app, id);
+    assert(panel, `应存在面板 ${id}`);
+    assertEqual(panel.attrs['data-collapsible'], '1', `${id} 应登记为可折叠`);
+    assertEqual(panel.attrs['data-collapsed'], '1', `${id} 默认必须是**折叠**态`);
+    const toggle = toggleOf(panel);
+    assert(toggle, `${id} 应有折叠头（data-action="toggle-panel"）`);
+    assertEqual(toggle.attrs['aria-expanded'], 'false', `${id} 折叠时 aria-expanded 必须为 false`);
+    const body = partOf(panel, 'panel-body');
+    assert(body, `${id} 应有内容体（data-ui-part="panel-body"）`);
+    assertEqual(body.hidden, true, `${id} 折叠时内容体必须 hidden（不占布局）`);
+    assertEqual(partOf(panel, 'arrow').textContent, '▸', `${id} 折叠箭头字形应为 ▸`);
+  }
+  for (const id of NON_COLLAPSIBLE_IDS) {
+    const panel = panelOf(app, id);
+    assert(panel, `应存在非折叠件 ${id}`);
+    assertEqual(toggleOf(panel), undefined, `${id} 不应有折叠头（它不属于"内容面板"：见回执盘点表）`);
+    assertEqual(panel.attrs['data-collapsible'], undefined, `${id} 不应登记为可折叠`);
+  }
+  // 面板读数（机器可判）
+  const stats = app.ui.stats();
+  assertEqual(stats.collapsible.length, COLLAPSIBLE_IDS.length, 'stats().collapsible 应逐面板登记');
+  for (const id of COLLAPSIBLE_IDS) assertEqual(stats.collapsed[id], true, `stats().collapsed.${id} 应为 true（默认折叠）`);
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('G2 箭头可切换（点击）：折叠 ⇄ 展开，且四项读数同步', async () => {
+  const app = await makeApp();
+  const panel = panelOf(app, 'views');
+  const toggle = toggleOf(panel);
+  const body = partOf(panel, 'panel-body');
+  const arrow = partOf(panel, 'arrow');
+  toggle.dispatch('click', {});
+  assertEqual(panel.attrs['data-collapsed'], '0', '点击后应展开');
+  assertEqual(toggle.attrs['aria-expanded'], 'true', 'aria-expanded 应同步为 true');
+  assertEqual(body.hidden, false, '展开后内容体可见');
+  assertEqual(arrow.textContent, '▾', '展开箭头字形应为 ▾');
+  assertEqual(panel.hidden, false, '折叠 ≠ 移除 DOM：面板始终在文档里');
+  toggle.dispatch('click', {});
+  assertEqual(panel.attrs['data-collapsed'], '1', '再点一次回到折叠');
+  assertEqual(body.hidden, true, '折叠后内容体不可见');
+  assertEqual(toggle.attrs['aria-expanded'], 'false', 'aria-expanded 回到 false');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('G3 键盘可达 + 等价 a11y：原生 button + Enter/Space 切换 + aria-controls 关联', async () => {
+  const app = await makeApp();
+  for (const id of COLLAPSIBLE_IDS) {
+    const panel = panelOf(app, id);
+    const toggle = toggleOf(panel);
+    assertEqual(toggle.tagName, 'BUTTON', `${id} 折叠头必须是原生 <button>（Tab 可达、读屏可识别、Enter/Space 原生激活）`);
+    assertEqual(toggle.attrs.type ?? toggle.type, 'button', `${id} 折叠头 type 应为 button（不触发表单提交）`);
+    assertEqual(toggle.attrs.tabindex ?? null, null, `${id} 不得把折叠头排除在 Tab 顺序外（tabindex 未设 = 可聚焦）`);
+    const body = partOf(panel, 'panel-body');
+    assertEqual(toggle.attrs['aria-controls'], body.attrs.id, `${id} aria-controls 必须指向内容体 id`);
+    const sameId = app.app.querySelectorAll('[id]').length;
+    void sameId;
+  }
+  const panel = panelOf(app, 'zones');
+  const toggle = toggleOf(panel);
+  const body = partOf(panel, 'panel-body');
+  // Enter 切换
+  toggle.dispatch('keydown', { key: 'Enter', code: 'Enter' });
+  assertEqual(panel.attrs['data-collapsed'], '0', 'Enter 应展开');
+  assertEqual(toggle.attrs['aria-expanded'], 'true', 'Enter 后 aria-expanded 同步');
+  // Space 切回
+  toggle.dispatch('keydown', { key: ' ', code: 'Space' });
+  assertEqual(panel.attrs['data-collapsed'], '1', 'Space 应折叠');
+  assertEqual(body.hidden, true, 'Space 后内容体隐藏');
+  // 其它键不改状态（不误触）
+  toggle.dispatch('keydown', { key: 'a', code: 'KeyA' });
+  assertEqual(panel.attrs['data-collapsed'], '1', '非 Enter/Space 键不得改变折叠态');
+  // preventDefault 会被调用（抑制原生 click，避免真实浏览器里"键盘 + 原生 click"双重切换）
+  const evt = toggle.dispatch('keydown', { key: 'Enter', code: 'Enter', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } });
+  assertEqual(evt.defaultPrevented, true, 'keydown(Enter) 必须 preventDefault（防止与原生 click 叠加成双切换）');
+  assertEqual(panel.attrs['data-collapsed'], '0', '一次 Enter = 一次切换（不是两次）');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('G4 展开内容不减少（展开等价 + 折叠/展开往返后内容逐值不变）', async () => {
+  const app = await makeApp();
+  const signature = () => ({
+    view: app.app.querySelectorAll('[data-view-mode]').length,
+    zone: app.app.querySelectorAll('[data-zone]').length,
+    reset: app.app.querySelectorAll('[data-action]').filter((el) => el.attrs['data-action'] === 'reset').length,
+    time: app.app.querySelectorAll('[data-time-preset]').length,
+    quality: app.app.querySelectorAll('[data-quality-tier]').length,
+    helpKeys: panelOf(app, 'help').querySelectorAll('[data-ui-part]').filter((el) => el.attrs['data-ui-part'] === 'help-row').length,
+    helpTouch: partOf(panelOf(app, 'help'), 'help-touch').textContent.length,
+    minimapCanvas: panelOf(app, 'minimap').querySelectorAll('[data-ui-part]').filter((el) => el.attrs['data-ui-part'] === 'minimap').length,
+    tourButtons: panelOf(app, 'tour').querySelectorAll('[data-variant]').length,
+  });
+  const before = signature();
+  assertEqual(before.view, 8, '视角按钮 8 个');
+  assertEqual(before.time, TIME_PRESETS.length, '时辰按钮逐值等于 config 的时辰数');
+  assertEqual(before.quality, QUALITY_ORDER.length, '质量档按钮逐值等于档位数');
+  assert(before.zone >= 7, `分区按钮应 ≥7（实际 ${before.zone}）`);
+  assert(before.helpKeys >= 13, `操作提示条目应 ≥13（实际 ${before.helpKeys}）`);
+  // 全部展开 → 再全部折叠 → 再展开：内容签名必须逐值不变（"展开等价"）
+  for (const id of COLLAPSIBLE_IDS) toggleOf(panelOf(app, id)).dispatch('click', {});
+  const expanded = signature();
+  assertEqual(JSON.stringify(expanded), JSON.stringify(before), '展开后内容不得增加/减少（结构签名逐值一致）');
+  for (const id of COLLAPSIBLE_IDS) toggleOf(panelOf(app, id)).dispatch('click', {});
+  const collapsed = signature();
+  assertEqual(JSON.stringify(collapsed), JSON.stringify(before), '折叠后内容**不删除**（DOM 保留，只是 hidden）');
+  for (const id of COLLAPSIBLE_IDS) toggleOf(panelOf(app, id)).dispatch('click', {});
+  assertEqual(JSON.stringify(signature()), JSON.stringify(before), '再展开后仍逐值一致');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('G5 折叠不遮挡：折叠态只留折叠头（不占布局、不截获指针），且折叠头始终可点', async () => {
+  const app = await makeApp();
+  for (const id of COLLAPSIBLE_IDS) {
+    const panel = panelOf(app, id);
+    const toggle = toggleOf(panel);
+    const body = partOf(panel, 'panel-body');
+    assertEqual(body.hidden, true, `${id} 折叠时内容体不参与布局（hidden）`);
+    assertEqual(toggle.hidden, false, `${id} 折叠头必须可见（用户始终找得到展开入口）`);
+    assertEqual(panel.hidden ? 'hidden' : 'shown', id === 'info' ? 'hidden' : 'shown', `${id} 折叠不等于整块隐藏（info 例外：未选中建筑时不出现）`);
+  }
+  // 折叠态下所有面板仍留在原列（不产生第二套定位/浮层）
+  const left = app.app.querySelectorAll('[data-ui-region]').find((el) => el.attrs['data-ui-region'] === 'left-column');
+  const order = left.childNodes.map((child) => child.attrs?.['data-ui-panel']);
+  assertEqual(order.join(','), 'brand,hud,info', '左列装配顺序不变（折叠只改高度，不改结构）');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('G6 ?ui=0&shot=1 仍全隐藏：根层隐藏 ⇒ 逐面板不可见（不靠 CSS 透明度）', async () => {
+  const app = await makeApp({ query: { ui: false, shot: true } });
+  assertEqual(app.ui.root.hidden, true, '根层必须 hidden');
+  assertEqual(app.ui.stats().visible, false, 'stats().visible = false');
+  const all = app.app.querySelectorAll('[data-ui-panel]');
+  assertEqual(all.length, COLLAPSIBLE_IDS.length + NON_COLLAPSIBLE_IDS.length, '面板仍在 DOM（隐藏 ≠ 不注册；数量由清单推导）');
+  for (const panel of all) {
+    let node = panel;
+    let hiddenAncestor = false;
+    while (node) { if (node.hidden) { hiddenAncestor = true; break; } node = node.parentNode; }
+    assertEqual(hiddenAncestor, true, `面板 ${panel.attrs['data-ui-panel']} 必须处于隐藏祖先之下（⇒ 实际不可见）`);
+  }
+  assertEqual(app.interaction.pickEnabled, false, '隐藏时拾取器关闭（点过 UI 区域不触发选中）');
+  app.interaction.dispose();
+  app.ui.dispose();
+  // 对照：普通 URL 下根层可见（证明上面的隐藏不是"永远隐藏"的假绿）
+  const shown = await makeApp({ query: { ui: true, shot: false } });
+  assertEqual(shown.ui.root.hidden, false, '普通 URL 下根层可见');
+  assertEqual(shown.ui.stats().visible, true, '普通 URL 下 UI 可见');
+  shown.interaction.dispose();
+  shown.ui.dispose();
+});
+
+await runner.test('G7 失败提示不被折叠吃掉：assetsFailed / zoneFailed 自动展开 loading 面板', async () => {
+  const app = await makeApp();
+  const loading = panelOf(app, 'loading');
+  assertEqual(loading.attrs['data-collapsed'], '1', 'loading 默认折叠');
+  app.events.emit(EVENTS.assetsFailed, { url: '/x.png', error: 'boom', retriable: true });
+  assertEqual(loading.attrs['data-collapsed'], '0', '资源失败必须自动展开（"加载与失败提示"是既定要求）');
+  const errText = partOf(loading, 'loading-error').textContent;
+  assert(errText.includes('boom'), `失败原因必须可见（实际"${errText}"）`);
+  const retry = loading.querySelectorAll('[data-action]').find((el) => el.attrs['data-action'] === 'retry');
+  assertEqual(retry.hidden, false, '可重试时"重试"按钮必须可见');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('G8 H / M 与箭头是**同一个**折叠状态机（不出现两套 hidden 逻辑）', async () => {
+  const app = await makeApp();
+  const help = panelOf(app, 'help');
+  const helpToggle = toggleOf(help);
+  assertEqual(help.attrs['data-collapsed'], '1', '操作提示默认折叠');
+  app.win.key('KeyH');
+  assertEqual(help.attrs['data-collapsed'], '0', 'H 展开');
+  assertEqual(helpToggle.attrs['aria-expanded'], 'true', 'H 展开后 aria 同步（同一状态机）');
+  helpToggle.dispatch('click', {});
+  assertEqual(help.attrs['data-collapsed'], '1', '箭头点击折叠');
+  app.win.key('KeyH');
+  assertEqual(help.attrs['data-collapsed'], '0', 'H 再按又展开（状态机单一真相源）');
+  const mini = panelOf(app, 'minimap');
+  assertEqual(mini.attrs['data-collapsed'], '1', '小地图默认折叠');
+  app.win.key('KeyM');
+  assertEqual(mini.attrs['data-collapsed'], '0', 'M 展开小地图');
+  toggleOf(mini).dispatch('click', {});
+  assertEqual(mini.attrs['data-collapsed'], '1', '箭头折叠小地图（与 M 同源）');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+/* ==========================================================================
+ *  H. t15 选中即传送（交互链路）：落点来源、Esc/G/F 互不冲突
+ * ======================================================================== */
+
+runner.section('H. t15 选中即传送（交互链路）');
+
+await runner.test('S1 选中建筑 + 进入第一人称（面板按钮 / 请求链路）⇒ 落在该建筑旁', async () => {
+  const app = await makeApp();
+  app.interaction.select('B-hall-main', 'test');
+  const slot = LAYOUT.SLOT_BY_ID['B-hall-main'];
+  // ① 信息面板「走过去（第一人称）」按钮（真实点击）
+  const fpButton = app.app.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === 'info-fp');
+  assert(fpButton, '信息面板应有「走过去（第一人称）」按钮');
+  fpButton.dispatch('click', {});
+  app.rig.update(1 / 60, 0, app.store.state);
+  assertEqual(app.rig.isFp, true, '按钮应进入第一人称');
+  const dist = Math.hypot(app.rig.position.x - slot.door.facade.x, app.rig.position.z - slot.door.facade.z);
+  runner.info(`面板按钮：落点 (${app.rig.position.x.toFixed(2)}, ${app.rig.position.y.toFixed(3)}, ${app.rig.position.z.toFixed(2)})｜距门外锚点 ${dist.toFixed(2)}m`);
+  assert(dist <= 1.0, `面板按钮进入也必须落在门外锚点 1m 内（实际 ${dist.toFixed(2)}m）`);
+  assertEqual(app.rig.position.y, (LAYOUT.floorYAt(app.rig.position.x, app.rig.position.z) ?? 0) + CONFIG.CAMERA.fpEyeHeight, '眼高必须逐值 = 面高 + fpEyeHeight');
+  assertEqual(app.rig.describe().fpSelectionLanding.buildingId, 'B-hall-main', '读数必须标明落点来自哪个选中建筑');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('S2 传送后 Esc / G / F 互不冲突：Esc 不动位置、G 仍回登记出生点、F 退出逐值恢复', async () => {
+  const app = await makeApp();
+  const beforeEntry = { ...app.rig.describe().position };
+  const beforeMode = app.store.state.viewMode;
+  app.interaction.select('C-hall-bed-main', 'test');
+  app.interaction.requester.viewMode('fp');
+  app.rig.update(1 / 60, 0, app.store.state);
+  const landed = { ...app.rig.describe().position };
+  const slot = LAYOUT.SLOT_BY_ID['C-hall-bed-main'];
+  assert(Math.hypot(landed.x - slot.door.facade.x, landed.z - slot.door.facade.z) <= 1.0, '应先落在选中建筑旁');
+
+  // ① Esc：只释放指针锁，**不退出第一人称、不动位置**
+  app.win.key('Escape');
+  app.rig.update(1 / 60, 0, app.store.state);
+  assertEqual(app.rig.isFp, true, 'Esc 不得退出第一人称（§6.4）');
+  assertEqual(JSON.stringify(app.rig.describe().position), JSON.stringify(landed), 'Esc 不得改动位置（逐值）');
+
+  // ② G：脱困必须仍回"最近的已登记出生点"——**不得**被选中传送劫持（禁止把脱困变成"走回选中建筑"）
+  app.win.key('KeyG');
+  app.rig.update(1 / 60, 0, app.store.state);
+  const rescued = { ...app.rig.describe().position };
+  const near = app.registry.nearestFpSpawn(app.interaction.stats().traversal ? landed : landed);
+  const spawn = app.registry.ids().viewpoints;
+  const lastEscape = app.interaction.stats().escapes > 0 ? true : false;
+  void near;
+  void spawn;
+  const distToFacadeAfterG = Math.hypot(rescued.x - slot.door.facade.x, rescued.z - slot.door.facade.z);
+  runner.info(`G 脱困后落点 (${rescued.x.toFixed(2)}, ${rescued.z.toFixed(2)})｜距该建筑门外锚点 ${distToFacadeAfterG.toFixed(1)}m`);
+  assert(distToFacadeAfterG > 5, `G 必须回到登记出生点（远离选中建筑），不得被选中传送语义劫持（实际距门外锚点 ${distToFacadeAfterG.toFixed(1)}m）`);
+  assertEqual(app.rig.isFp, true, 'G 之后仍应在第一人称');
+  const surfaceAfterG = LAYOUT.floorYAt(rescued.x, rescued.z);
+  assertEqual(rescued.y, (surfaceAfterG ?? 0) + CONFIG.CAMERA.fpEyeHeight, 'G 落点眼高必须逐值 = 面高 + fpEyeHeight');
+  assertEqual(app.interaction.stats().lastEscape?.ok, true, 'G 的结果读数应报告成功');
+
+  // ③ F：再按一次退出（t2 语义），并**逐值恢复**进入前机位
+  app.win.key('KeyF');
+  app.rig.update(1 / 60, 0, app.store.state);
+  for (let i = 0; i < 5; i += 1) app.rig.update(1 / 60, i / 60, app.store.state);
+  assertEqual(app.rig.isFp, false, 'F 再按一次必须退出第一人称');
+  assertEqual(app.store.state.viewMode, beforeMode, `退出后视图模式必须恢复为 ${beforeMode}`);
+  const restored = { ...app.rig.describe().position };
+  assertEqual(JSON.stringify(restored), JSON.stringify(beforeEntry), '退出后机位必须逐值恢复到进入前（t2 保存/恢复不受本卡影响）');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+await runner.test('S3 不可进入建筑的选中同样可就近落地（entrance 锚点，tier2）', async () => {
+  const app = await makeApp();
+  const id = 'F-tower-corner-nw';
+  const slot = LAYOUT.SLOT_BY_ID[id];
+  app.interaction.select(id, 'test');
+  app.interaction.requester.viewMode('fp');
+  app.rig.update(1 / 60, 0, app.store.state);
+  assertEqual(app.rig.isFp, true, '应进入第一人称');
+  const d = app.rig.describe();
+  const dist = Math.hypot(d.position.x - slot.entrance.x, d.position.z - slot.entrance.z);
+  runner.info(`不可进入建筑 ${id}：距 entrance ${dist.toFixed(2)}m（tier ${d.fpSelectionLanding.tier}）`);
+  assert(dist <= 1.0, `无门洞建筑也必须落在 entrance 锚点 1m 内（实际 ${dist.toFixed(2)}m）`);
+  assertEqual(d.fpSelectionLanding.tier, 2, '应走 tier2（entrance）');
+  assertEqual(d.fpSelectionLanding.buildingId, id, '读数必须标明建筑 id');
+  app.interaction.dispose();
+  app.ui.dispose();
 });
 
 /* ==========================================================================

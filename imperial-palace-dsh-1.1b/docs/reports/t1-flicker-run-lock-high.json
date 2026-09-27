@@ -1,0 +1,211 @@
+{
+ "protocol": {
+  "frames": 30,
+  "size": [
+   1440,
+   900
+  ],
+  "view": "oblique",
+  "quality": "high",
+  "aa": "(档位默认)",
+  "ui": "1",
+  "phases": [
+   "lock"
+  ],
+  "drive": "页面自身 rAF + 每次捕获前 renderSystem.recordFrame(16)",
+  "metric": "unstablePixels = 相邻帧间发生过任何位差的**不同像素**数（阈值 0）"
+ },
+ "phases": [
+  {
+   "id": "lock",
+   "candidate": "渲染确定性（冻相机 + 冻环境：同状态重复渲染）",
+   "setup": {
+    "rig": true,
+    "env": true
+   },
+   "frames": 30,
+   "unstablePixels": 0,
+   "changedTotal": 0,
+   "changedPerPair": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "changedMax": 0,
+   "maxChannelDelta": 0,
+   "pairsWithChange": 0,
+   "redChangedTotal": 0,
+   "cameraStable": true,
+   "envStable": true,
+   "elapsedDistinct": 30,
+   "elapsedSeries": [
+    0.8167,
+    1.15,
+    1.4833,
+    1.8167,
+    2.15,
+    2.4833,
+    2.8167,
+    3.15,
+    3.4833,
+    3.8167,
+    4.15,
+    4.4833,
+    4.8167,
+    5.15,
+    5.4833,
+    5.8167,
+    6.15,
+    6.4833,
+    6.8167,
+    7.15,
+    7.4833,
+    7.8167,
+    8.15,
+    8.4833,
+    8.8167,
+    9.15,
+    9.4833,
+    9.8167,
+    10.15,
+    10.4833
+   ],
+   "stepSeconds": null,
+   "mainFrames": [
+    14,
+    159
+   ],
+   "aa": {
+    "mode": "msaa",
+    "samples": 4,
+    "reason": "tier",
+    "contextFlagEffective": false
+   },
+   "smokeLodMaxPointPx": null,
+   "smokeVisibleEnd": true,
+   "camera": {
+    "x": 0,
+    "y": 520,
+    "z": -1180
+   },
+   "mode": "oblique",
+   "selectInfo": null,
+   "unstableTop": [],
+   "unstableByCol": {},
+   "samplePairs": [
+    {
+     "pair": "0->1",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "1->2",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "2->3",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "3->4",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    }
+   ]
+  }
+ ],
+ "identify": null,
+ "pointLights": [
+  {
+   "visible": false,
+   "intensity": 0,
+   "base": null,
+   "pos": [
+    0,
+    0,
+    0
+   ],
+   "anchor": null
+  },
+  {
+   "visible": false,
+   "intensity": 0,
+   "base": null,
+   "pos": [
+    0,
+    0,
+    0
+   ],
+   "anchor": null
+  },
+  {
+   "visible": false,
+   "intensity": 0,
+   "base": null,
+   "pos": [
+    0,
+    0,
+    0
+   ],
+   "anchor": null
+  },
+  {
+   "visible": false,
+   "intensity": 0,
+   "base": null,
+   "pos": [
+    0,
+    0,
+    0
+   ],
+   "anchor": null
+  }
+ ],
+ "highlight": {
+  "children": 2,
+  "visible": [
+   false,
+   false
+  ],
+  "opacity": [
+   0.45,
+   0.95
+  ]
+ }
+}

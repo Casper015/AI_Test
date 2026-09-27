@@ -268,11 +268,11 @@ export async function runCompleteness({ browser = true } = {}) {
   C.section('2 建筑：数量、身份、屋顶、逐区 id 集合');
   const layoutIds = LAYOUT.SLOTS.map((s) => s.id);
   const regIds = registry.allBuildings().map((b) => b.id);
-  C.expect('2.1 注册建筑数 = layout.SLOTS = 67（≥50 门槛）',
+  C.expect(`2.1 注册建筑数 = layout.SLOTS = ${LAYOUT.SLOTS.length}（≥50 门槛）`,
     stats.buildings === LAYOUT.SLOTS.length && stats.buildings >= 50,
     `注册 ${stats.buildings} / layout ${LAYOUT.SLOTS.length}`);
   const dupIds = regIds.filter((id, i) => regIds.indexOf(id) !== i);
-  C.expect('2.2 建筑 id 全局唯一（无重复编号）', dupIds.length === 0, dupIds.length ? `重复：${[...new Set(dupIds)].join(',')}` : '67 个 id 唯一');
+  C.expect('2.2 建筑 id 全局唯一（无重复编号）', dupIds.length === 0, dupIds.length ? `重复：${[...new Set(dupIds)].join(',')}` : `${LAYOUT.SLOTS.length} 个 id 唯一`);
   const missing = layoutIds.filter((id) => !regIds.includes(id));
   const extra = regIds.filter((id) => !layoutIds.includes(id));
   C.expect('2.3 注册建筑 id 集合 = layout.SLOTS id 集合（多一/少一都算失败）', missing.length === 0 && extra.length === 0,
@@ -310,7 +310,7 @@ export async function runCompleteness({ browser = true } = {}) {
   }
   C.expect('2.5 逐区 id 集合与 layout 完全一致且满足门槛（B≥8/C≥8/D≥8/E≥8/F≥10）', zoneSetOk, perZoneReport.join(' · '));
   C.expect('2.6 建筑逐字段回显 layout（数值/名称/形制/包围盒，篡改即失败）', fieldMismatch.length === 0,
-    fieldMismatch.length ? `${fieldMismatch.length} 处：${fieldMismatch.slice(0, 5).join('；')}` : `67 栋 × ${NUM_FIELDS.length + STR_FIELDS.length + 2} 字段全一致`);
+    fieldMismatch.length ? `${fieldMismatch.length} 处：${fieldMismatch.slice(0, 5).join('；')}` : `${LAYOUT.SLOTS.length} 栋 × ${NUM_FIELDS.length + STR_FIELDS.length + 2} 字段全一致`);
 
   // 有顶：俯视每个采样点首先命中屋面（≥檐高），且檐上抬升 ≥1m，且基座落地
   const roofIssues = [];
@@ -337,7 +337,7 @@ export async function runCompleteness({ browser = true } = {}) {
     if (baseHits / pts.length < 0.85) roofIssues.push(`${slot.id}:地面基准处无台明（${((baseHits / pts.length) * 100).toFixed(0)}%）`);
   }
   const rises = roofStats.map((r) => r.rise).sort((a, b) => a - b);
-  C.expect('2.7 67 栋「俯视有屋面 + 檐上≥1m + 满足迹基座」（=有顶可识别建筑，非裸体块/碎片）',
+  C.expect(`2.7 ${LAYOUT.SLOTS.length} 栋「俯视有屋面 + 檐上≥1m + 满足迹基座」（=有顶可识别建筑，非裸体块/碎片）`,
     roofIssues.length === 0,
     roofIssues.length ? `${roofIssues.length} 例：${roofIssues.slice(0, 6).join('；')}` : `檐上高度 ${rises[0].toFixed(2)}–${rises[rises.length - 1].toFixed(2)}m（中位 ${rises[Math.floor(rises.length / 2)].toFixed(2)}m）`);
 
@@ -370,8 +370,8 @@ export async function runCompleteness({ browser = true } = {}) {
       kitRoofFail.push(`${slot.id}:${error.message.split('\n')[0]}`);
     }
   }
-  C.expect('2.9 kit 侧对 67 槽位全部产出可识别屋顶（庑殿/歇山/硬山有正脊，攒尖四面坡且无正脊）',
-    kitRoofFail.length === 0, kitRoofFail.length ? kitRoofFail.slice(0, 5).join('；') : '67/67 槽位屋顶形制齐备');
+  C.expect(`2.9 kit 侧对 ${LAYOUT.SLOTS.length} 槽位全部产出可识别屋顶（庑殿/歇山/硬山有正脊，攒尖四面坡且无正脊）`,
+    kitRoofFail.length === 0, kitRoofFail.length ? kitRoofFail.slice(0, 5).join('；') : `${LAYOUT.SLOTS.length}/${LAYOUT.SLOTS.length} 槽位屋顶形制齐备`);
 
   /* ---------------------------------------------------- 3 院落 */
   C.section('3 院落：≥12 且有墙/门/建筑界定');
@@ -917,9 +917,9 @@ export async function runCompleteness({ browser = true } = {}) {
   const zoneObstacles = new Map();
   for (const [zoneId, result] of zoneResults) for (const o of result.colliders.obstacles) zoneObstacles.set(o.id, { ...o, zoneId });
   const buildingWithoutObstacle = LAYOUT.SLOTS.filter((s) => !zoneObstacles.has(`OB-${s.id}`)).map((s) => s.id);
-  C.expect('7.2 67 栋建筑全部在区域 colliders.obstacles 内登记（不可进入建筑不得可穿越）',
+  C.expect(`7.2 ${LAYOUT.SLOTS.length} 栋建筑全部在区域 colliders.obstacles 内登记（不可进入建筑不得可穿越）`,
     buildingWithoutObstacle.length === 0,
-    buildingWithoutObstacle.length ? `缺登记 ${buildingWithoutObstacle.length}：${buildingWithoutObstacle.slice(0, 6).join(',')}` : '67/67 栋都有 OB-<id> 障碍');
+    buildingWithoutObstacle.length ? `缺登记 ${buildingWithoutObstacle.length}：${buildingWithoutObstacle.slice(0, 6).join(',')}` : `${LAYOUT.SLOTS.length}/${LAYOUT.SLOTS.length} 栋都有 OB-<id> 障碍`);
 
   const doorSemantics = [];
   for (const slot of LAYOUT.SLOTS) {
@@ -941,7 +941,7 @@ export async function runCompleteness({ browser = true } = {}) {
     if (slot.visitable && !/可进入|可入内|可参观/.test(got.info)) infoErr.push(`${slot.id}: visitable 但 info 未提示可进入`);
   }
   C.expect('7.4 信息面板语义一致：65 栋不可进入建筑均含「不可进入」，2 栋可进入建筑均提示可进入',
-    infoErr.length === 0, infoErr.length ? `${infoErr.length} 例：${infoErr.slice(0, 5).join('；')}` : '67/67 info 文案与 visitable 一致');
+    infoErr.length === 0, infoErr.length ? `${infoErr.length} 例：${infoErr.slice(0, 5).join('；')}` : `${LAYOUT.SLOTS.length}/${LAYOUT.SLOTS.length} info 文案与 visitable 一致`);
 
   /* ---------------------------------------------------- 8 占位物 */
   C.section('8 无遗留占位物（grep + registry + 灰盒隐藏三重检查）');
@@ -964,7 +964,7 @@ export async function runCompleteness({ browser = true } = {}) {
 
   const greyRegistered = registry.allBuildings().filter((b) => /greybox/i.test(String(b.registrySource ?? '')) || /^GB-/.test(b.id));
   C.expect('8.2 注册表中无灰盒来源的建筑（registry 侧双重检查）', greyRegistered.length === 0,
-    greyRegistered.length ? `${greyRegistered.length} 栋：${greyRegistered.slice(0, 5).map((b) => b.id).join(',')}` : `67 栋来源全为真实区域 ${[...new Set(registry.allBuildings().map((b) => b.registrySource))].sort().join('/')}`);
+    greyRegistered.length ? `${greyRegistered.length} 栋：${greyRegistered.slice(0, 5).map((b) => b.id).join(',')}` : `${registry.allBuildings().length} 栋来源全为真实区域 ${[...new Set(registry.allBuildings().map((b) => b.registrySource))].sort().join('/')}`);
 
   const greyModule = await loadModule('src/zones/_greybox.js');
   const grey = await greyModule.createZone({ THREE, config: CONFIG, shared: { greyboxSkipZones: [] } });
@@ -1064,7 +1064,7 @@ export async function runCompleteness({ browser = true } = {}) {
   if (!browser) {
     C.unverified('11.1 浏览器实测', '按 --no-browser 跳过');
   } else {
-    browserReport = await browserProbe(C);
+    browserReport = await browserProbe(C, { expectedBuildings: LAYOUT.SLOTS.length });
   }
 
   const result = C.summary();
@@ -1279,7 +1279,10 @@ function pngStats(file) {
   return { width, height, meanLuma: sum / n, darkRatio: dark / n, contentRatio: content / n, bytes: buf.length };
 }
 
-async function browserProbe(C) {
+async function browserProbe(C, { expectedBuildings: expectedOverride = null } = {}) {
+  /* 期望建筑数一律取自 `layout.SLOTS`（唯一真相）；不传则在本函数内自行读一次同源模块。
+     t11：此前该值被硬编码为 67（`LAYOUT 1.1.4` 时代的槽位），使"5 区全装载"在 79 槽位树下被误判为 FAIL。 */
+  const expectedBuildings = expectedOverride ?? (await loadModule('src/shared/layout.js')).SLOTS.length;
   const chrome = findChrome();
   if (!chrome) {
     C.unverified('11.1 浏览器实测（未找到可用浏览器）', '未在 CHROME_PATH / /Applications / playwright 缓存中找到 Chrome；像素级与运行时项未验证');
@@ -1312,10 +1315,21 @@ async function browserProbe(C) {
     ready && notFound.length === 0,
     `浏览器=${chrome.split('/').slice(-1)[0]} · ready=${ready} · 请求 ${server.requests.length} 条 · 404 ${notFound.length}${notFound.length ? `：${notFound.slice(0, 5).map((r) => r.path).join(',')}` : ''}${domProc.stderr && !ready ? ` · stderr: ${(domProc.stderr || '').split('\n').slice(0, 2).join(' | ')}` : ''}`);
   if (report) {
-    C.info(`浏览器机器报告：区域 [${(report.zones ?? []).join(', ')}] · 建筑 ${report.buildings} · 主场景可绘制对象 ${report.mainSceneRenderables} · 整帧调用 ${report.fullFrameDrawCalls} · 可见三角面 ${report.visibleTriangles} · kit=${report.kitSource}`);
-    C.expect('11.2 浏览器内 5 个真实区域全部装载、建筑 67 栋、kit 来自 src/kit/index.js',
-      (report.zones ?? []).filter((z) => z !== 'GREYBOX').sort().join('') === 'BCDEF' && report.buildings === 67 && /src\/kit\/index\.js/.test(report.kitSource ?? ''),
-      `区域 [${(report.zones ?? []).join(',')}] · 建筑 ${report.buildings} · kit=${report.kitSource}`);
+    C.info(`浏览器机器报告：区域 [${(report.zones ?? []).join(', ')}] · 建筑 ${report.buildings} · 装载失败 ${(report.zoneErrors ?? []).length} 个${(report.zoneErrors ?? []).length ? `：${(report.zoneErrors ?? []).map((e) => `${e.zone}(${e.error})`).join(' / ')}` : ''} · 主场景可绘制对象 ${report.mainSceneRenderables} · 整帧调用 ${report.fullFrameDrawCalls} · 可见三角面 ${report.visibleTriangles} · kit=${report.kitSource}`);
+    /* t11 修：原判据把"建筑 67 栋"**硬编码**在条件里，而 67 是 `LAYOUT 1.1.4` 时代的槽位数
+       （`LAYOUT 1.1.21` 为 79 = 67 + t171 新增 12 座花园 annex）。陈旧的期望值会把"五个区域全部装载成功"
+       误判为 FAIL（实测浏览器 `区域 [GREYBOX,B,C,D,E,F]`、`zoneErrors={}`、ready=1、404=0 全绿，只因 79≠67 报红）。
+       正确口径：**期望值一律取自 `layout.SLOTS`**（唯一真相），条件 = 5 区齐 ∧ 注册建筑数 == layout 槽位数 ∧ kit 来源正确。
+       注意：本项只对账**建筑计数**；建筑**形状**（79 槽位各有可识别屋顶等）由 §2.9/§7.2 单独守。 */
+    C.expect(`11.2 浏览器内 5 个真实区域全部装载、建筑 ${expectedBuildings} 栋（= layout.SLOTS，非硬编码旧值）、kit 来自 src/kit/index.js`,
+      (report.zones ?? []).filter((z) => z !== 'GREYBOX').sort().join('') === 'BCDEF' && report.buildings === expectedBuildings && /src\/kit\/index\.js/.test(report.kitSource ?? ''),
+      `区域 [${(report.zones ?? []).join(',')}] · 建筑 ${report.buildings} / layout 期望 ${expectedBuildings} · kit=${report.kitSource}`);
+    /* t11 新增（判据只增不减）：**装载失败清单必须为空** —— 直接对账"有没有区装载失败"，
+       把"5 区是否真装载"从"数建筑总数"里独立出来；报告缺该字段时按"不可判"处理（不静默通过）。 */
+    const zoneFailures = report.zoneErrors ?? null;
+    C.expect('11.2b 浏览器机器报告的装载失败清单为空（zoneErrors=[]，即 5 区无一失败）',
+      Array.isArray(zoneFailures) && zoneFailures.length === 0,
+      zoneFailures === null ? '报告缺 zoneErrors 字段（不可判）' : `zoneErrors=${JSON.stringify(zoneFailures)}`);
     // 口径纠正（t96 主理人裁定 + t86/t90 后的内景扩容）：§8.2 的「≤350」约束的是**主场景单次绘制调用**
     // （权威口径见 scripts/audit.mjs：333/350 ✓）。对象数（renderables）不是 §8.2 门禁；t96 §14.4 已把
     // 内景机位对象数登记为基线 374 并加增长哨兵 ≤450（=374+20%）。原意（"灰盒已隐藏、未额外暴露"）

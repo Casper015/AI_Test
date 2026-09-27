@@ -1,0 +1,139 @@
+{
+ "dpr": 1,
+ "drawingBuffer": {
+  "w": 1440,
+  "h": 900
+ },
+ "css": {
+  "w": 1440,
+  "h": 900
+ },
+ "censers": 4,
+ "systems": [
+  {
+   "particles": 12,
+   "size": 1.1,
+   "opacity": 0.16,
+   "transparent": true,
+   "sizeAttenuation": true,
+   "distance": {
+    "min": 935,
+    "max": 938.2
+   },
+   "pointSizePx": {
+    "min": 0.528,
+    "max": 0.529
+   },
+   "footprintPx": {
+    "w": 2.38,
+    "h": 5.29,
+    "x": [
+     719,
+     721
+    ],
+    "y": [
+     634,
+     639
+    ]
+   },
+   "maxStackSamePixel": 3,
+   "aggregateAlpha": 0.4073,
+   "visible": true
+  },
+  {
+   "particles": 12,
+   "size": 1.1,
+   "opacity": 0.16,
+   "transparent": true,
+   "sizeAttenuation": true,
+   "distance": {
+    "min": 1157.6,
+    "max": 1160.2
+   },
+   "pointSizePx": {
+    "min": 0.427,
+    "max": 0.428
+   },
+   "footprintPx": {
+    "w": 2.45,
+    "h": 4.97,
+    "x": [
+     719,
+     721
+    ],
+    "y": [
+     496,
+     501
+    ]
+   },
+   "maxStackSamePixel": 2,
+   "aggregateAlpha": 0.2944,
+   "visible": true
+  },
+  {
+   "particles": 12,
+   "size": 1.1,
+   "opacity": 0.16,
+   "transparent": true,
+   "sizeAttenuation": true,
+   "distance": {
+    "min": 1362,
+    "max": 1364.2
+   },
+   "pointSizePx": {
+    "min": 0.363,
+    "max": 0.363
+   },
+   "footprintPx": {
+    "w": 1.62,
+    "h": 3.59,
+    "x": [
+     719,
+     721
+    ],
+    "y": [
+     421,
+     425
+    ]
+   },
+   "maxStackSamePixel": 4,
+   "aggregateAlpha": 0.5021,
+   "visible": true
+  },
+  {
+   "particles": 12,
+   "size": 1.1,
+   "opacity": 0.16,
+   "transparent": true,
+   "sizeAttenuation": true,
+   "distance": {
+    "min": 1423.8,
+    "max": 1426.2
+   },
+   "pointSizePx": {
+    "min": 0.347,
+    "max": 0.348
+   },
+   "footprintPx": {
+    "w": 1.32,
+    "h": 3.72,
+    "x": [
+     720,
+     721
+    ],
+    "y": [
+     401,
+     405
+    ]
+   },
+   "maxStackSamePixel": 5,
+   "aggregateAlpha": 0.5818,
+   "visible": true
+  }
+ ],
+ "perSecond": {
+  "respawns": 14,
+  "particles": 48,
+  "avgStepPxPerParticle": 0.071
+ }
+}

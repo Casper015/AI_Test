@@ -17,7 +17,7 @@ import { CONFIG, UI, EVENTS } from '../shared/config.js';
 import * as LAYOUT from '../shared/layout.js';
 import { VIEW_LABELS, ZONE_BUTTONS, TIME_PRESETS, TIME_LABELS, QUALITY_ORDER, QUALITY_LABELS } from '../interaction/requests.js';
 import { helpKeyList, TOUCH_SUPPORT_NOTE } from '../interaction/keymap.js';
-import { h, append, clear, button, setOwnerDocument } from './dom.js';
+import { h, append, clear, button, collapsiblePanel, setOwnerDocument } from './dom.js';
 import { cssVariables, TRANSITION_MS, MINIMAP, assertTokens } from './tokens.js';
 import { createInteraction } from '../interaction/index.js';
 import { planLabels } from './labels.js';
@@ -71,7 +71,10 @@ export function createUI({
   ensureStyles({ doc });
 
   const host = container ?? doc.body;
-  const refs = { labels: new Map(), toastTimer: 0, minimapAccum: 0, lastSnapshot: null };
+  const refs = { labels: new Map(), toastTimer: 0, minimapAccum: 0, lastSnapshot: null, helpExpanded: false, minimapCollapsed: true };
+  /** t7：可折叠面板登记（唯一状态源 = collapsiblePanel；stats() 逐面板回报折叠态） */
+  const collapsibles = [];
+  const registerCollapsible = (id, section) => { collapsibles.push({ id, section }); return section; };
   const disposers = [];
 
   /* ------------------------------------------------------------------ 根层 */
@@ -102,13 +105,16 @@ export function createUI({
   // t59：HUD 压缩为 4 行（分区并入位置、加载仅在加载中出现），把左列高度预算让给建筑详情面板
   const hudLoadRow = hudRow('加载', hudRows.load);
   hudLoadRow.hidden = true;
-  const hud = h('div', { class: 'palace-panel palace-hud', attrs: { 'data-ui-panel': 'hud' } }, [
+  /* t7：所有内容型 HUD 面板统一「默认折叠 + 箭头」（可点击 / Tab 可达 / Enter·Space 可切换，aria-expanded 如实反映） */
+  const hudSec = collapsiblePanel({ id: 'hud', title: '状态', panelClass: 'palace-panel palace-hud' }, [
     hudRow('视角', hudRows.view),
     hudRow('时辰', hudRows.time),
     hudRow('质量', hudRows.quality),
     hudRow('位置', hudRows.position),
     hudLoadRow,
   ]);
+  const hud = hudSec.panel;
+  registerCollapsible('hud', hudSec);
 
   /* ------------------------------------------------------------------ 八视角切换器 */
   const viewButtons = new Map();
@@ -125,11 +131,12 @@ export function createUI({
     viewButtons.set(entry.mode, btn);
     viewGrid.appendChild(btn);
   });
-  const viewPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'views' } }, [
-    h('h2', { class: 'palace-panel__title', text: '视角（1–8）' }),
+  const viewSection = collapsiblePanel({ id: 'views', title: '视角（1–8）' }, [
     viewGrid,
     h('div', { class: 'palace-hint', text: '键盘 1–8、按钮与 F 走同一条请求事件' }),
   ]);
+  const viewPanel = viewSection.panel;
+  registerCollapsible('views', viewSection);
 
   /* ------------------------------------------------------------------ 七分区跳转 */
   const zoneButtons = new Map();
@@ -160,11 +167,12 @@ export function createUI({
       },
     },
   });
-  const zonePanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'zones' } }, [
-    h('h2', { class: 'palace-panel__title', text: '分区' }),
+  const zoneSection = collapsiblePanel({ id: 'zones', title: '分区' }, [
     zoneGrid,
     h('div', { class: 'palace-row' }, [resetButton]),
   ]);
+  const zonePanel = zoneSection.panel;
+  registerCollapsible('zones', zoneSection);
 
   /* ------------------------------------------------------------------ 三时辰 / 质量档 */
   const timeButtons = new Map();
@@ -187,13 +195,14 @@ export function createUI({
     qualityButtons.set(tier, btn);
     qualityRow.appendChild(btn);
   });
-  const envPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'env' } }, [
-    h('h2', { class: 'palace-panel__title', text: '时辰 / 质量' }),
+  const envSection = collapsiblePanel({ id: 'env', title: '时辰 / 质量' }, [
     h('div', { class: 'palace-hint', text: '时辰' }),
     timeRow,
     h('div', { class: 'palace-hint', text: '质量（键盘 Y 轮转）' }),
     qualityRow,
   ]);
+  const envPanel = envSection.panel;
+  registerCollapsible('env', envSection);
 
   /* ------------------------------------------------------------------ 中轴导览 */
   const tourText = h('p', { class: 'palace-tour__text', text: '中轴导览：南桥 → 南城门 → 礼仪广场 → 主殿 → 金銮殿 → 内廷门 → 寝殿 → 御花园' });
@@ -205,13 +214,14 @@ export function createUI({
     stop: button('退出', { variant: 'ghost', on: { click: () => interaction.tour.stop() } }),
     next: button('下一点', { variant: 'ghost', on: { click: () => interaction.tour.next() } }),
   };
-  const tourPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'tour' } }, [
-    h('h2', { class: 'palace-panel__title', text: '中轴导览' }),
+  const tourSection = collapsiblePanel({ id: 'tour', title: '中轴导览' }, [
     tourDots,
     tourText,
     h('div', { class: 'palace-row' }, [tourButtons.start, tourButtons.pause, tourButtons.resume, tourButtons.next, tourButtons.stop]),
     h('div', { class: 'palace-hint', text: '导览中手动操作相机（拖动/滚轮/切视角）会自动暂停' }),
   ]);
+  const tourPanel = tourSection.panel;
+  registerCollapsible('tour', tourSection);
 
   /* ------------------------------------------------------------------ 小地图 */
   const minimapCanvas = h('canvas', {
@@ -221,11 +231,9 @@ export function createUI({
   minimapCanvas.width = MINIMAP.size;
   minimapCanvas.height = MINIMAP.size;
   const minimapNote = h('div', { class: 'palace-minimap__note', text: '点按分区定位 · 金点 = 当前位置' });
-  const minimapPanel = h('div', { class: 'palace-panel palace-minimap', attrs: { 'data-ui-panel': 'minimap' } }, [
-    h('h2', { class: 'palace-panel__title', text: '小地图' }),
-    minimapCanvas,
-    minimapNote,
-  ]);
+  const minimapSection = collapsiblePanel({ id: 'minimap', title: '小地图', panelClass: 'palace-panel palace-minimap' }, [minimapCanvas, minimapNote]);
+  const minimapPanel = minimapSection.panel;
+  registerCollapsible('minimap', minimapSection);
   minimapCanvas.addEventListener?.('click', (event) => {
     const rect = minimapCanvas.getBoundingClientRect?.() ?? { left: 0, top: 0, width: MINIMAP.size, height: MINIMAP.size };
     const scaleX = MINIMAP.size / Math.max(1, rect.width);
@@ -243,15 +251,14 @@ export function createUI({
   /* ------------------------------------------------------------------ 操作提示 */
   const helpList = h('ul', { class: 'palace-help__list' });
   helpKeyList().forEach((row) => {
-    helpList.appendChild(h('li', {}, [h('span', { class: 'palace-help__key', text: row.code }), h('span', { text: row.label })]));
+    helpList.appendChild(h('li', { attrs: { 'data-ui-part': 'help-row' } }, [h('span', { class: 'palace-help__key', text: row.code }), h('span', { text: row.label })]));
   });
-  const helpBody = h('div', { class: 'palace-help__body', attrs: { 'data-ui-part': 'help-body' } }, [helpList, h('p', { class: 'palace-help__touch', text: TOUCH_SUPPORT_NOTE, attrs: { 'data-ui-part': 'help-touch' } })]);
-  const helpPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'help' } }, [
-    h('h2', { class: 'palace-panel__title', text: '操作提示' }),
-    helpBody,
-  ]);
-  const helpToggle = button('收起提示', { variant: 'ghost', attrs: { 'data-action': 'toggle-help' }, on: { click: () => toggleHelp() } });
-  helpPanel.insertBefore(helpToggle, helpBody);
+  // t7：helpBody 由 collapsiblePanel 统一提供（见下方 helpSection），此处不再另建一份 DOM
+  const helpSection = collapsiblePanel({ id: 'help', title: '操作提示' }, [helpList, h('p', { class: 'palace-help__touch', text: TOUCH_SUPPORT_NOTE, attrs: { 'data-ui-part': 'help-touch' } })]);
+  const helpPanel = helpSection.panel;
+  // 兼容钩子：既有 consumers 通过 [data-ui-part="help-body"] 找到内容体（折叠箭头成为唯一切换入口）
+  const helpToggle = helpSection.toggle;
+  registerCollapsible('help', helpSection);
 
   /* ------------------------------------------------------------------ 加载 / 失败 / 重试 */
   const loadTitle = h('span', { class: 'palace-loading__stage', text: '准备中' });
@@ -271,15 +278,22 @@ export function createUI({
     },
   });
   retryButton.hidden = true;
-  const loadingPanel = h('div', { class: 'palace-panel', attrs: { 'data-ui-panel': 'loading' } }, [
-    h('h2', { class: 'palace-panel__title' }, [loadTitle]),
+  const loadingSection = collapsiblePanel({ id: 'loading', title: '加载' }, [
+    /**
+     * t7：折叠头用**静态**标题（"加载"），动态阶段文本留在内容体里 ——
+     * 否则折叠态会把内部计数当标题展示（实测截图出现过 `lamps:152 (152/152)` 这种"标题泄漏"）。
+     */
+    h('div', { class: 'palace-loading__stage-row' }, [loadTitle]),
     loadBar,
     loadError,
     h('div', { class: 'palace-row' }, [retryButton]),
   ]);
+  const loadingPanel = loadingSection.panel;
+  registerCollapsible('loading', loadingSection);
 
   /* ------------------------------------------------------------------ 建筑详情面板（t59：左上角，品牌/HUD 之下同列） */
-  const infoName = h('h2', { class: 'palace-info__name', attrs: { 'data-ui-part': 'info-name' }, text: '' });
+  // t7：折叠头标题用 span（`titleTag` 默认 span）——若用 h2 会形成 h2 套 h2（非法嵌套 ⇒ 浏览器重排导致箭头与标题分行的视觉缺陷）
+  const infoName = h('span', { class: 'palace-info__name', attrs: { 'data-ui-part': 'info-name' }, text: '' });
   const infoVisit = h('span', { class: 'palace-info__tag', attrs: { 'data-ui-part': 'info-visit' }, text: '' });
   const infoUsage = h('p', { class: 'palace-info__text', attrs: { 'data-ui-part': 'info-usage' }, text: '' });
   const infoMeta = h('p', { class: 'palace-info__text', attrs: { 'data-ui-part': 'info-meta' }, text: '' });
@@ -312,8 +326,8 @@ export function createUI({
     },
   });
   const infoClose = button('关闭', { variant: 'ghost', attrs: { 'data-ui-part': 'info-close' }, on: { click: () => interaction.select(null, 'panel') } });
-  const infoPanel = h('div', { class: 'palace-panel palace-info', attrs: { 'data-ui-panel': 'info' } }, [
-    h('div', { class: 'palace-row' }, [infoName, infoVisit]),
+  const infoSection = collapsiblePanel({ id: 'info', title: infoName, panelClass: 'palace-panel palace-info' }, [
+    h('div', { class: 'palace-row' }, [infoVisit]),
     infoUsage,
     infoMeta,
     infoSpec,
@@ -322,7 +336,9 @@ export function createUI({
     infoFHint,
     h('div', { class: 'palace-row' }, [infoFp, infoNear, infoInterior, infoClose]),
   ]);
-  infoPanel.hidden = true;
+  const infoPanel = infoSection.panel;
+  infoPanel.hidden = true; // 未选中建筑时整块不出现（选中后默认仍是**折叠**态，标题即建筑名）
+  registerCollapsible('info', infoSection);
 
   /* ------------------------------------------------------------------ 提示条 */
   /**
@@ -367,12 +383,35 @@ export function createUI({
     interaction.requester.viewMode(mode);
   }
 
+  /**
+   * t7：H 键与箭头走**同一个**折叠状态机（不再是两套 hidden 逻辑）。
+   * `force` 语义保持向后兼容：`toggleHelp(false)` = 折叠，`toggleHelp(true)` = 展开，缺省 = 切换。
+   * 返回值 = 展开后为 true（与旧实现一致），供既有调用方/断言使用。
+   */
   function toggleHelp(force = null) {
-    const next = force === null ? !helpBody.hidden : !force;
-    helpBody.hidden = next;
-    helpToggle.textContent = next ? '展开提示' : '收起提示';
-    helpToggle.classList.toggle('is-active', !next);
-    return !next;
+    if (force === null) helpSection.setCollapsed(!helpSection.isCollapsed());
+    else helpSection.setCollapsed(!force);
+    syncHelpNote();
+    return !helpSection.isCollapsed();
+  }
+
+  /**
+   * t7：M 键 = 切换小地图**折叠**（与箭头同一个状态机；不再用"整块 hidden"这一套平行语义）。
+   * 折叠态仍保留折叠头（含"小地图"标题与箭头）⇒ 用户始终知道它在哪里、怎么展开。
+   */
+  function toggleMinimap(force = null) {
+    if (force === null) minimapSection.setCollapsed(!minimapSection.isCollapsed());
+    else minimapSection.setCollapsed(!force);
+    const collapsed = minimapSection.isCollapsed();
+    minimapNote.textContent = collapsed ? '点按分区定位 · 金点 = 当前位置（按 M 或点箭头展开）' : '点按分区定位 · 金点 = 当前位置';
+    refs.minimapCollapsed = collapsed;
+    return !collapsed;
+  }
+
+  /** 折叠状态变化时同步 M/H 相关提示文案（折叠面板唯一状态源 = collapsiblePanel）。 */
+  function syncHelpNote() {
+    refs.helpExpanded = !helpSection.isCollapsed();
+    return refs.helpExpanded;
   }
 
   function showToast(hint) {
@@ -626,10 +665,7 @@ export function createUI({
   disposers.push(
     interaction.onCommand((name) => {
       if (name === 'toggleHelp') toggleHelp();
-      else if (name === 'toggleMinimap') {
-        minimapPanel.hidden = !minimapPanel.hidden;
-        minimapNote.textContent = minimapPanel.hidden ? '小地图已收起（按 M 展开）' : '点按分区定位 · 金点 = 当前位置';
-      }
+      else if (name === 'toggleMinimap') toggleMinimap();
     }),
   );
 
@@ -643,10 +679,13 @@ export function createUI({
   const onAssetFailure = (payload) => {
     loadError.textContent = `资源失败：${payload?.url ?? ''} ${payload?.error ?? ''}${payload?.retriable ? '（可重试）' : '（不可重试）'}`;
     retryButton.hidden = payload?.retriable === false;
+    // t7：失败提示**不得**被默认折叠吃掉 ⇒ 出错即自动展开（"加载与失败提示"是既定要求）
+    loadingSection.setCollapsed(false);
   };
   const onZoneFailure = (payload) => {
     loadError.textContent = `区域装载失败：${payload?.zone ?? ''} ${payload?.error ?? ''}`;
     retryButton.hidden = false;
+    loadingSection.setCollapsed(false);
     showToast({ title: `区域 ${payload?.zone ?? ''} 装载失败`, detail: '可在右下角面板点「重试」重新装载。' });
   };
   disposers.push(events.on(EVENTS.assetsProgress, onProgress));
@@ -665,7 +704,9 @@ export function createUI({
     root.dataset.narrow = width <= UI.breakpoints.narrow ? '1' : '0';
     root.dataset.medium = width <= UI.breakpoints.medium ? '1' : '0';
     if (root.dataset.narrow === '1') {
+      // t7：窄屏默认全折叠（本卡新默认即"全折叠"，此处只是再保证一次）
       toggleHelp(false);
+      toggleMinimap(false);
       minimapNote.textContent = '点按分区定位（窄屏）';
     }
     return width;
@@ -699,9 +740,9 @@ export function createUI({
   if (forcedHidden) setVisible(false);
   // core 的 ?stats=1 诊断面板在左下角：给左下列让位（样式表用 data-stats-overlay 处理）
   root.dataset.statsOverlay = api.query?.stats ? '1' : '0';
-  // 操作提示默认折叠（任何宽度）：面板高度收敛，展开状态由 H 键/按钮控制
-  helpBody.hidden = true;
-  helpToggle.textContent = '展开提示';
+  // t7：所有内容型面板默认折叠（由 collapsiblePanel 构造即 collapsed），展开状态由箭头 / H / M / 失败事件控制
+  syncHelpNote();
+  refs.minimapCollapsed = minimapSection.isCollapsed();
 
   applyResponsive();
   applySnapshot(interaction.snapshot());
@@ -749,6 +790,11 @@ export function createUI({
         minimapDrawn: !!refs.minimapDrawn,
         stuck: refs.stuck === true,
         panels: [...(root.querySelectorAll?.('[data-ui-panel]') ?? [])].map((el) => el.dataset?.uiPanel ?? el.getAttribute?.('data-ui-panel')),
+        /** t7：逐面板折叠状态（默认全折叠 = 每个可折叠面板 collapsed 为 true） */
+        collapsed: Object.fromEntries(collapsibles.map((s) => [s.id, s.section.isCollapsed()])),
+        collapsible: collapsibles.map((s) => s.id),
+        helpExpanded: refs.helpExpanded === true,
+        minimapCollapsed: minimapSection.isCollapsed(),
         spacingProblems,
       };
     },

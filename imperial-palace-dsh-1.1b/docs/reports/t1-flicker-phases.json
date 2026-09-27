@@ -1,0 +1,200 @@
+{
+ "card": "t1 [flicker] 复现并修复「红色边缘持续闪烁」",
+ "protocol": {
+  "browser": "headless Chrome (chrome-headless-shell 1243, --disable-gpu ⇒ SwiftShader WebGL)",
+  "viewport": [
+   1440,
+   900
+  ],
+  "view": "oblique（?view=oblique&quality=medium）",
+  "frames": 30,
+  "metric": "unstablePixels = 相邻帧间发生过任何位差的**不同像素**数（阈值 0）",
+  "drive": "页面自身 rAF + 每次捕获前 renderSystem.recordFrame(16)；精确帧步长相位另用 freezeLoop+stepFrame（复刻 main.js frameStep）",
+  "probe": "scripts/probe-flicker.mjs",
+  "metricsTool": "work/probe/smoke-metrics.mjs"
+ },
+ "baseline": {
+  "unstablePixels": 79,
+  "changedTotal": 1285,
+  "changedPerPairMax": 50,
+  "pairsWithChange": "29/29",
+  "bbox": {
+   "minX": 717,
+   "maxX": 722,
+   "minY": 400,
+   "maxY": 637
+  },
+  "byCol": {
+   "717": 4,
+   "718": 17,
+   "719": 20,
+   "720": 20,
+   "721": 17,
+   "722": 1
+  },
+  "true60fps": {
+   "unstablePixels": 58,
+   "changedTotal": 178,
+   "changedPerPairMax": 11,
+   "pairsWithChange": "28/29",
+   "note": "冻结页面 rAF，每帧精确推进 dt=1/60s（真·相邻帧）"
+  },
+  "at15fps": {
+   "unstablePixels": 70,
+   "changedPerPairMax": 26
+  }
+ },
+ "attribution": {
+  "soleSource": "environment-smoke",
+  "redWallBehind": "#962822",
+  "firstChangedFramePair": "29/29",
+  "highlightAddedPixels": 493
+ },
+ "candidates": {
+  "smoke-hidden": {
+   "phase": "nosmoke（隐藏 environment-smoke）",
+   "frames": 30,
+   "reading": 0,
+   "verdict": "**唯一来源**：隐藏 environment-smoke 后不稳定像素精确为 0（本卡症状本体）"
+  },
+  "dust-hidden": {
+   "phase": "nodust（隐藏 environment-dust）",
+   "frames": 12,
+   "reading": 78,
+   "verdict": "排除：尘埃粒子与闪烁无关（隐藏后读数不变）"
+  },
+  "lamp-flicker-pinned": {
+   "phase": "noflicker（渲染前把实时点光强度钉回 baseIntensity）",
+   "frames": 12,
+   "reading": 77,
+   "verdict": "排除：宫灯实时点光 flicker（±5%）不产生像素差（t5 已单独治理灯光瞬移，见 docs/reports/report-t5-lamp-flicker.md）"
+  },
+  "lamps-hidden": {
+   "phase": "nolamps（隐藏 environment-lamps + 关点光）",
+   "frames": 12,
+   "reading": 77,
+   "verdict": "排除：灯体与点光整体关掉后读数不变"
+  },
+  "bloom-off": {
+   "phase": "nobloom（setBloom({enabled:false})）",
+   "frames": 12,
+   "reading": 79,
+   "verdict": "排除：Bloom 溢色不是成因（关掉后读数不变）"
+  },
+  "shadow-off": {
+   "phase": "noshadow（environment-sun.castShadow=false）",
+   "frames": 12,
+   "reading": 76,
+   "verdict": "排除：阴影贴图抖动（关阴影后读数不变）"
+  },
+  "highlight-idle": {
+   "phase": "live 相位的对象级读数（palace-ui-highlight.visible=[false,false]）",
+   "frames": 30,
+   "reading": 0,
+   "verdict": "排除：未选中/未悬停时高亮线框**不可见** ⇒ 贡献 0 像素（\"红色边缘\"最像的候选）"
+  },
+  "highlight-selected": {
+   "phase": "sel-live 与 sel-nohl 的差集（同一选中态，仅隐藏线框组）",
+   "frames": 30,
+   "reading": 493,
+   "verdict": "分离登记：选中时线框脉动**是设计项**（#ffc83b，opacity 0.7–1.0 / 900ms），仅在选中态出现；专属不稳定像素 493（sel-live 571 vs sel-nohl 79，差值 492）"
+  },
+  "aa-off": {
+   "phase": "aa-low（质量档 low，aaSamples=0）",
+   "frames": 30,
+   "reading": 146,
+   "verdict": "排除：关 AA 后仍闪烁（读数更大 ⇒ AA 只影响走样幅度，不制造闪烁）"
+  },
+  "aa-msaa2": {
+   "phase": "live（质量档 medium，aaSamples=2，默认）",
+   "frames": 30,
+   "reading": 79,
+   "verdict": "排除：默认档 MSAA×2 下仍闪烁"
+  },
+  "aa-msaa4": {
+   "phase": "aa-high（质量档 high，aaSamples=4）",
+   "frames": 30,
+   "reading": 87,
+   "verdict": "排除：MSAA×4 下仍闪烁（三档都 >0 ⇒ 与 AA 无关）"
+  },
+  "camera-drift": {
+   "phase": "lock-rig（只冻相机，环境动画照常；--frames=10）",
+   "frames": 10,
+   "reading": 75,
+   "verdict": "排除：冻住相机后闪烁照旧（75）⇒ 与相机缓动/浮点漂移无关"
+  },
+  "renderer-determinism": {
+   "phase": "lock（同状态重复渲染；AA 关 / MSAA×2 / MSAA×4 三档）",
+   "frames": 30,
+   "reading": 0,
+   "verdict": "排除：锁定状态后精确 0（三档全 0）⇒ 渲染逐位确定，读数不假绿"
+  }
+ },
+ "aa": {
+  "live": {
+   "low": 146,
+   "medium": 79,
+   "high": 87
+  },
+  "lock": {
+   "off": 0,
+   "msaa2": 0,
+   "msaa4": 0
+  },
+  "note": "锁状态读数（同状态重复渲染）在 AA 关 / MSAA×2 / MSAA×4 三档下都是精确 0 ⇒ AA 不制造闪烁；live 三档都 >0 ⇒ 与 AA 无关"
+ },
+ "fix": {
+  "candidate": "烟柱 LOD：投影点径 < 1px 时整柱不绘制（运行时验证，未改产品代码）",
+  "smoke-lod": 0,
+  "frame-60-lod": 0,
+  "evidence": {
+   "smoke-lod": {
+    "phase": "smoke-lod",
+    "frames": 30,
+    "unstablePixels": 0,
+    "changedTotal": 0,
+    "changedMax": 0,
+    "pairsWithChange": 0,
+    "pairs": 29,
+    "bbox": null,
+    "byCol": {}
+   },
+   "frame-60-lod": {
+    "phase": "frame-60-lod",
+    "frames": 30,
+    "unstablePixels": 0,
+    "changedTotal": 0,
+    "changedMax": 0,
+    "pairsWithChange": 0,
+    "pairs": 29,
+    "bbox": null,
+    "byCol": {}
+   }
+  }
+ },
+ "readings": {
+  "live": {
+   "phase": "live",
+   "frames": 30,
+   "unstablePixels": 79,
+   "changedTotal": 1285,
+   "changedMax": 50,
+   "pairsWithChange": 29,
+   "pairs": 29,
+   "bbox": {
+    "minX": 717,
+    "maxX": 722,
+    "minY": 400,
+    "maxY": 637
+   },
+   "byCol": {
+    "717": 4,
+    "718": 17,
+    "719": 20,
+    "720": 20,
+    "721": 17,
+    "722": 1
+   }
+  }
+ }
+}

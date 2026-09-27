@@ -40,7 +40,7 @@
 
 import * as THREE from 'three';
 import { CONFIG, MODULES, TERRAIN, INTERACTION, PLANTS, deriveSeed } from '../shared/config.js';
-import { INTERIOR_BY_SLOT, WALKABLE, WATER_BODIES, WALLS } from '../shared/layout.js';
+import { INTERIOR_BY_SLOT, STONE_STEP_LANES, WALKABLE, WATER_BODIES, WALLS } from '../shared/layout.js';
 import { rampsFromRoads } from '../core/layout-slice.js';
 
 export const ZONE_ID = 'D';
@@ -274,6 +274,7 @@ export async function createZone(ctx) {
   const groundY = num(zone.groundY) ? zone.groundY : TERRAIN.sideCourtY;
   const buildingDetail = BUILDING_DETAIL_BY_QUALITY[ctx.quality] ?? BUILDING_DETAIL_BY_QUALITY.medium;
   const playerHeight = INTERACTION.player.height;
+  const playerRadius = INTERACTION.player.radius; // t13：拦阻盒需按玩家半径让开走廊
   const stepHeight = MODULES.stairsStepHeight;
 
   const root = new THREE.Group();
@@ -526,7 +527,9 @@ export async function createZone(ctx) {
   }
 
   /** 白石甬道（复用 kit.terrace 的 terrace/terraceCap 桶）。 */
-  function stonePath({ id, name, minX, maxX, minZ, maxZ, y }) {
+  /* t13：`bottomY` —— 汀步石件下沉到池底（`waterY - depth`），使其视觉上就是"水下石墩"，
+     不可能被读成浮空石板；既有调用不传该参数 ⇒ 行为与改前逐值一致（默认 y - plinthHeightMin）。 */
+  function stonePath({ id, name, minX, maxX, minZ, maxZ, y, bottomY = null }) {
     const terraceKit = kitFactory(kit, 'terrace');
     const w = round(maxX - minX);
     const d = round(maxZ - minZ);
@@ -539,7 +542,7 @@ export async function createZone(ctx) {
       w,
       d,
       bounds: { minX, maxX, minZ, maxZ },
-      y0: round(y - MODULES.plinthHeightMin),
+      y0: round(Number.isFinite(bottomY) ? bottomY : y - MODULES.plinthHeightMin),
       y1: y,
       railing: false,
       detail: 'far',
@@ -676,22 +679,42 @@ export async function createZone(ctx) {
     runRail('D-pond-rail-west', false, round(p.minX - 0.6), p.minZ, p.maxZ, round(groundY + 0.4));
     runRail('D-pond-rail-east', false, round(p.maxX + 0.6), p.minZ, p.maxZ, round(groundY + 0.4));
 
-    // 5.5 汀步石桥（南岸 → 池心小岛，可通行；对应水体拦阻盒的缺口）
+    // 5.5 汀步石（南岸 → 池心，**可通行**；与 `layout.STONE_STEP_LANES` 逐值同源）
+    /* t13：原"汀步石桥 33m @地坪+0.02"只做视觉、**未登记可行走面**（`WALKABLE` 里查无此面）且
+       亭台基面 0.9 与石桥面 0.42 之间是 **0.48** 的落差段 ⇒ 亭子实测不可达（t77-F5 / B4 的 2 座例外）。
+       本卡按 `layout.STONE_STEP_LANES` 的两级汀步（0.65 / 0.90，逐跳 0.25）**同轮建可见石件**：
+       上下石逐值落在登记面内（面 = 石件顶面），池心岛面抬到与上石齐平（0.90）—— 视觉与碰撞同源。 */
+    const stepLane = (STONE_STEP_LANES ?? []).find((l) => l.id === 'D-court3-pavilion') ?? null;
     const pavilion = slotById('D-court3-pavilion');
     const islandCenter = pavilion ? { x: pavilion.x, z: pavilion.z } : { x: walkX, z: round((p.minZ + p.maxZ) / 2) };
     const islandHalf = 9; // 池心岛 18×18 > 亭占地 14×14：四周留 2m 可站立环台，且岛北仍留 1m 水面
-    const walk = stonePath({
-      id: 'D-pond-walkway',
-      name: '荷池汀步石桥',
-      minX: round(walkX - walkwayHalf),
-      maxX: round(walkX + walkwayHalf),
-      minZ: round(p.minZ),
-      maxZ: round(islandCenter.z - islandHalf),
-      y: round(groundY + 0.02),
-    });
-    if (walk) waterFacts.walkway = { x: walkX, half: walkwayHalf, fromZ: round(p.minZ), toZ: round(islandCenter.z - islandHalf) };
+    const stepStones = [];
+    for (const step of (stepLane?.steps ?? [])) {
+      const stone = stonePath({
+        id: `${step.id}-visible`,
+        name: step.name,
+        minX: stepLane.corridor.minX,
+        maxX: stepLane.corridor.maxX,
+        minZ: step.minZ,
+        maxZ: step.maxZ,
+        y: step.y,
+        bottomY: round(waterY - depth), // 石件下沉到池底 ⇒ 独立成"水下石墩"，不可能被读成浮空石板
+      });
+      if (stone) {
+        const box = new THREE.Box3().setFromObject(stone);
+        stepStones.push({
+          id: step.id,
+          node: `${step.id}-visible`,
+          bounds: { minX: round(box.min.x), maxX: round(box.max.x), minY: round(box.min.y), maxY: round(box.max.y), minZ: round(box.min.z), maxZ: round(box.max.z) },
+        });
+      }
+    }
+    if (!stepLane) fail('layout.STONE_STEP_LANES 缺 D-court3-pavilion（汀步走廊未登记，视觉石件无处可依）');
+    waterFacts.walkway = stepLane
+      ? { x: walkX, half: walkwayHalf, fromZ: stepLane.corridor.minZ, toZ: stepLane.corridor.maxZ, steps: stepStones, corridorWidth: stepLane.corridor.width }
+      : null;
 
-    // 5.6 池心小岛（亭基座），比水面高，顶面与汀步齐平
+    // 5.6 池心小岛（亭基座）：顶面抬到与上石齐平（0.90 = 区域地坪 + 亭台基），与亭台明接续
     const island = terraceKit({
       id: 'D-pond-island',
       name: '荷池池心小岛（亭基座）',
@@ -706,33 +729,36 @@ export async function createZone(ctx) {
         maxZ: round(islandCenter.z + islandHalf),
       },
       y0: round(waterY - depth),
-      y1: round(groundY + 0.02),
+      y1: round(groundY + (pavilion?.baseY ?? 0.5)),
       railing: false,
       detail: 'mid',
     });
     island.userData.zone = ZONE_ID;
     groups.water.add(island);
-    waterFacts.island = { x: islandCenter.x, z: islandCenter.z, half: islandHalf, top: round(groundY + 0.02) };
+    waterFacts.island = { x: islandCenter.x, z: islandCenter.z, half: islandHalf, top: round(groundY + (pavilion?.baseY ?? 0.5)) };
     waterFacts.pond = { id: pond.id, bounds: { ...p }, waterY, depth, waterBodyId: pond.id };
 
-    // 5.7 水体拦阻（layout 的水体障碍顶面 0.05 < 地坪 0.4，无法用垂直判定拦人）→ 按地面高度补 4 段，
-    //     南边留出汀步缺口，让"池心亭 + 石桥"成为可走到的实景（与 E 的纯观赏水榭区分）
-    //     拦阻盒 = 池面 \ （汀步走廊 ∪ 池心岛）：5 段覆盖全部水面，岛面与走廊保持可走
+    /* 5.7 水体拦阻（layout 的水体障碍顶面 0.05 < 地坪 0.4，无法用垂直判定拦人）→ 按地面高度补拦阻盒。
+       t13 重构（**同一模式的推广**）：原实现是"池面 −（汀步走廊 ∪ 池心岛）"的 5 段拼贴，
+       但实测出两个**护不到**的口袋（z∈(40,49] 与 z∈(54,67] 的走廊两侧水面 —— 那里旧拦阻盒已收口，
+       而水体盒 y1=0.05 在脚高 0.4 处不成立）⇒ 站立者可以"站到水上"。
+       现改为与走廊同源的**三段**：西块 / 东块（各按 `playerRadius` 让开走廊，保证整条 8m 走廊可走）
+       + 池北窄条。覆盖不变量（由 zone-west 测试逐点断言）：水面 \ 走廊 ⊆ 拦阻盒。
+       注：池心岛只有**走廊宽度**是真的可走 —— 岛的东西两条 2m 环台被水体拦阻盒覆盖
+       （"水面不可站"优先；该处旧几何的"环台可站"说法随之作废，由测试的逐点覆盖断言取代）。 */
     const guardY = { y0: groundY, y1: round(groundY + playerHeight + stepHeight) };
-    const islandWest = round(islandCenter.x - islandHalf);
-    const islandEast = round(islandCenter.x + islandHalf);
-    const islandSouth = round(islandCenter.z - islandHalf);
     const islandNorth = round(islandCenter.z + islandHalf);
+    const corridorMinX = stepLane ? stepLane.corridor.minX : round(walkX - walkwayHalf);
+    const corridorMaxX = stepLane ? stepLane.corridor.maxX : round(walkX + walkwayHalf);
+    const guardClear = playerRadius;
     waterFacts.guard.push(
-      { id: 'OB-D-pond-guard-west', bounds: { minX: p.minX, maxX: islandWest, minZ: p.minZ, maxZ: p.maxZ }, ...guardY },
-      { id: 'OB-D-pond-guard-east', bounds: { minX: islandEast, maxX: p.maxX, minZ: p.minZ, maxZ: p.maxZ }, ...guardY },
-      { id: 'OB-D-pond-guard-lane-west', bounds: { minX: islandWest, maxX: round(walkX - walkwayHalf), minZ: p.minZ, maxZ: islandSouth }, ...guardY },
-      { id: 'OB-D-pond-guard-lane-east', bounds: { minX: round(walkX + walkwayHalf), maxX: islandEast, minZ: p.minZ, maxZ: islandSouth }, ...guardY },
+      { id: 'OB-D-pond-guard-west', bounds: { minX: p.minX, maxX: round(corridorMinX - guardClear), minZ: p.minZ, maxZ: p.maxZ }, ...guardY },
+      { id: 'OB-D-pond-guard-east', bounds: { minX: round(corridorMaxX + guardClear), maxX: p.maxX, minZ: p.minZ, maxZ: p.maxZ }, ...guardY },
     );
     if (p.maxZ > islandNorth + 0.05) {
       waterFacts.guard.push({
         id: 'OB-D-pond-guard-north',
-        bounds: { minX: round(walkX - walkwayHalf), maxX: round(walkX + walkwayHalf), minZ: islandNorth, maxZ: p.maxZ },
+        bounds: { minX: round(corridorMinX - guardClear), maxX: round(corridorMaxX + guardClear), minZ: islandNorth, maxZ: p.maxZ },
         ...guardY,
       });
     }

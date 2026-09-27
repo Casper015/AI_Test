@@ -304,3 +304,101 @@ foundation-lead 已按主理人裁定 (a) 交付 `docs/handoff-config-1.0.1.md`�
 
 回显 `metrics.arch = { radius, rise, crownY, springY, clearance, referenceY, tube }`；桥墩高度公式
 `max(0.8, deckY − 常水位 × 0.4)` 未改（F 区"桥墩落地、水体零重叠"不变）。
+
+---
+
+## 附：t27 修复记录 —— 重檐下檐脊饰归属（`lowerRidge`），2026-09-26
+
+> 任务：`t27`（`kit-engineer`，inScope：`src/kit/**`、`tests/kit.test.mjs`、`docs/handoff-kit.md`）
+> 症状（t24 交回）：`node scripts/verify-g1-baseline.mjs` §5.4 是**该脚本仅剩的唯一 FAIL** ——
+> `B-hall-main` 重檐只有 `lowerRoof`、缺 `lowerRidge`（判据要求重檐建筑 ≥2 类"下檐部件"）。
+
+### 1. 只读定位（file:line）
+
+| 事实 | 位置 |
+| --- | --- |
+| 腰檐（下檐）由 `buildRoof(... roofType:'hip', detail, topHalfW/H=腰身 )` 生成，随后只把 **瓦面** 改名 `roof → lowerRoof` | `src/kit/buildings.js:176-204`（`apron.parts.rename('roof','lowerRoof')`） |
+| `buildRoof` 的脊类部件名：`ridge`（正脊盒，所有非攒尖档都有）、`hipRidge`（垂脊梁，分档）、`ridgeBeast/ridgeEnd`（脊兽，grade≥2 且非 far） | `src/kit/geometry.js:418`、`~440-460`（hipRidge 段）、`:470/479` |
+| 因此腰檐的 **正脊/垂脊** 与**上层**同名构件落进同一个合批桶 ⇒ "看不出两层脊饰" | 同上 |
+| **合批键 = `material.uuid|part`** ⇒ 任何新部位名必然新增 1 个绘制调用 | `src/kit/merge.js:557-563` |
+| B/C/F 三区均为**单档**建造：B=mid（`forecourt.js:66`）、F=mid（`garden-boundary.js:506`）、C 的 `C-hall-bed-main` 属 `NEAR_DETAIL_SLOTS` ⇒ near（`inner-palace.js:54,232`） | 见左列 |
+| g1 判据 5.4 取 `lod:'near'` 的 `B-hall-main`，收集 `lowerRoof\|lowerRidge` 两类 | `scripts/verify-g1-baseline.mjs:330-338`（只读，未改） |
+
+### 2. 最小改动（只改归属、不动几何）
+
+```js
+// src/kit/buildings.js（腰檐段，紧随 `apron.parts.rename('roof','lowerRoof')`）
+if (detail === 'near') {
+  apron.parts.rename('ridge', 'lowerRidge');
+  apron.parts.rename('hipRidge', 'lowerRidge');
+}
+```
+
+**为何只在近景档改名**——这是 §8.2 硬约束，不是形制取舍（实测，见 §3）：
+
+| 方案 | 主场景 | B | C | D | E | **F** | 结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 改前 | 341/350 | 62/70 | 55/60 | 49/56 | 49/56 | **80/80** | — |
+| 全档统一改名 | 344 | 63 | 56 | 49 | 49 | **81 ✗ 超预算** | 不可行（F 无余量） |
+| **仅近景档改名（本卡）** | **342** | **62** | **56** | **49** | **49** | **80 ✓** | 可行 |
+
+要点：B/F 按 `mid` 单档建成（改名的近景档不参与其建造）⇒ 逐值不变；C 的 `C-hall-bed-main` 按 `near`
+建造 ⇒ 55→56（预算 60，余 4）；g1 §5.4 显式 `lod:'near'` ⇒ 转 PASS。
+即：**可见三角面逐值不变、像素级 §12 判据逐值不变，唯一代价是 C 区 +1 个绘制调用**（合批键机制决定，
+不是几何增量）。
+
+若主理人要求"中档也统一归属"，需要 §8.2 裁定二选一：①F 80→81；②授权把两个既有脊饰部位名合并
+（如 `ridgeEnd`+`ridgeBeast` → 一个名）以在 B/C/F 各腾出 1 个桶。**本卡未擅自做这两件事。**
+
+### 3. A/B 实测（同一份代码副本，只切换上述 6 行；同机同参数）
+
+```text
+$ node scripts/verify-g1-baseline.mjs          # 改前 → 改后
+ 改前：exit 1     检查项 48 项：PASS 47 / FAIL 1
+   [FAIL] 5.4 重檐另有下层腰檐 4 坡与下层正脊（apronRise>0，lowerRoof/lowerRidge 部件存在）
+          — apronRise=2.22 上层 slopes=4 部件=lowerRoof
+ 改后：exit 0     检查项 48 项：PASS 48 / FAIL 0
+   [PASS] 5.4 …… — apronRise=2.22 上层 slopes=4 部件=lowerRoof+lowerRidge
+ （5.1/5.2/5.3/5.5/5.6 与 4.x 全部前后一致；等级-形制白名单未动：grade3 仅 doubleEaveHip、gable 仍非法）
+
+$ node scripts/audit.mjs --enforce             # 改前 → 改后（exit 0 两次）
+ 主场景绘制调用 : 341 → 342 / 上限 350  ✓
+ 分区 B 62→62 · C 55→56 · D 49→49 · E 49→49 · F 80→80（✓）· 可见三角面 424401→424401（逐值相同 ✓）
+
+$ 逐部位三角面 A/B（8 栋重檐：2 殿 + 4 角楼 + 2 城门；near 档，仅列差异部位）
+ B-hall-main     total 11932 = 11932 | hipRidge 288→144; ridge 24→12; lowerRidge 0→156
+ C-hall-bed-main total  9844 =  9844 | 同上
+ F-gate-south    total  7648 =  7648 | 同上
+ F-gate-north    total  7648 =  7648 | 同上
+ F-tower-corner-{nw,ne,sw,se} 同上（角楼 `isTower` ⇒ 也是重檐，同样获得 lowerRidge）
+ mid / far 档：**零差异**（改名只在近景档生效 ⇒ B/F 单档建造逐值不变）
+
+$ §12 可读性 A/B（`--view=focus --focus=C-hall-bed-main --preset=golden`，1440×900/DPR1/medium）
+ 改前 内容均值 0.3079 · 内容暗区 9.43% · 高光截断 0.01% · 整帧均值 0.4457  PASS
+ 改后 内容均值 0.3079 · 内容暗区 9.43% · 高光截断 0.01% · 整帧均值 0.4457  PASS
+ 逐像素对比：1,296,000 像素中 4,165 个不同（0.321%），平均通道差 0.098/255 ⇒ 无回退
+ （残留差异可能来自"脊饰拆桶后的绘制顺序"或两份代码副本间的其它并发写入；§12 四项统计逐值相同）
+```
+
+### 4. 判据（`tests/kit.test.mjs` §23，全部为**新增**断言）
+
+```text
+23.1 重檐集合按几何判定（upperEaveY > eaveHeight）= 2 殿 + 4 角楼 + 2 城门 = 8 栋
+23.2 逐栋（8）近景档下檐 ≥2 类部件：lowerRoof > 0 ∧ lowerRidge > 0（= g1 §5.4 口径）
+23.3 逐栋（8）形制完整：slopes == 4 ∧ apronRise > 0 ∧ metrics.ridge.length > 0
+23.4 逐栋（8）归属守恒：lowerRidge == ridge + hipRidge（上层与下檐脊饰几何量相等；只改归属不改几何）
+23.5 零几何改动：逐栋逐档三角面 = 改前实测值（near/mid 共 16 个钉值）
+23.6 §8.2 守卫：**中档不得出现 lowerRidge**（B/F 单档建造、F 无余量；要统一归属需主理人裁定）
+23.7 不外溢：非重檐槽位近景档不得出现 lowerRoof/lowerRidge
+```
+
+`node tests/kit.test.mjs`：**1723 → 1737 / 1737，失败 0**（+14 条，全部新增，旧断言一条未删）。
+
+### 5. 未做 / 待裁定
+
+1. **中档归属未统一**（见 §2 表）：F 80/80 无余量，需主理人 §8.2 裁定（F 81 / 或授权合并两个既有脊饰名腾桶）。
+2. **未改任何几何**：`lowerRidge` 是归属拆分，几何量逐值不变（§3 的 total 列）；因此未新增任何脊饰几何，
+   也没有为通过判据补造构件。
+3. 角楼（4 座）同属重檐并按同一规则获得 `lowerRidge`；其 `roofType` 登记为 `gableHip`，但 `isTower`
+   使其建成重檐 ⇒ §23.1 用**几何**而非 `roofType` 判定重檐集合（避免漏判）。
+4. `metrics.parts` 在近景档会多一个 `lowerRidge` 键（下游若按 `parts` 穷举需知悉）；中/远档不变。

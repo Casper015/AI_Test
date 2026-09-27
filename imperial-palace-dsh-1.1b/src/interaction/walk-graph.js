@@ -37,6 +37,26 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
 
   /** 单元缓存：-1 未知 / 0 不可走 / 1 可走。 */
   const cells = new Int8Array(cols * rows).fill(-1);
+  /**
+   * 格高缓存。**t12（t77-F16）：两条取样路径必须同精度** ——
+   * 精度口径 = **图侧 `Float32Array`**（`CONTRACTS §12.1.4.5`「可跨判定以图侧存储精度为准」），
+   * 因此 `sample()` 的**首次取样也返回 `heights[i]`**（见该函数内注释），不再返回 `probe` 的 float64。
+   *
+   * 旧缺陷（实测证据 `scripts/probe-precision-consistency.mjs` / `work/precision-consistency/`）：
+   *   `sample()` 首次返回 `solver.probe` 的 **float64**、缓存后返回 **float32** ⇒ 同一格对在
+   *   "首次调用"与"缓存后调用"下拿到不同高度；而 `canStep` 的含界判据只留 `BOUNDARY_EPS = 1e-9`，
+   *   float32 在 0.6/1.5 附近的 ulp ≈ **6e-8**（比容差大 60 倍）⇒ 判定**随调用历史翻转**。
+   *   整城实测：**35 对**相邻可走格「首次 ⇒ 可跨 / 缓存后 ⇒ 拒」（全部是设计好的 0.6 下行级差，
+   *   如 `y 1.5 ↔ 0.9`：float64 Δ=0.6 含界可跨，float32 Δ=0.600000023842 > 0.6 被拒）。
+   *   这正是 `report-completeness.md` t77-F16 登记的"±1~2 项不稳定"。
+   *
+   * 修法选择（实测择优，见报告）：**统一为图侧 float32**（本节候选 B）而不是把 `heights` 改 `Float64Array`（候选 A）。
+   *   · 候选 B：判定面校验和与修复前**逐值相同**（`c368beed`，可跨 1,423,122 / 不可跨 2,466 全部不变）⇒ 零判定位移；
+   *   · 候选 A（Float64）：整城 +35 条 0.6 下行边由"双向拒"变"仅下行可跨"，`interaction.test` 的
+   *     **F27 过渡带双向审计**在 `cellSize:3` 粗口径上由绿转红（C 侧两配房梯链 1.5/1.2/0.9 的中间级被 3m 网格跳过 ⇒
+   *     0.9↔1.5 直接相邻成 0.6 单向）⇒ 需先补几何/改粗口径登记，超出本卡范围（已上报）。
+   *   · **阈值一字未改**：`maxStepHeight 0.5` / `snapDownDistance 0.6` / `BOUNDARY_EPS 1e-9`（两侧同一 EPS）。
+   */
   const heights = new Float32Array(cols * rows);
   let labelCache = null; // t148：componentOf 的全图标注缓存（图不可变 ⇒ 可复用）
   const index = (col, row) => row * cols + col;
@@ -54,7 +74,12 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     const result = solver.probe(x, z, null);
     cells[i] = result.ok ? 1 : 0;
     heights[i] = result.surfaceY ?? NaN;
-    return { ok: result.ok, y: result.surfaceY, reasons: result.reasons };
+    /**
+     * t12（t77-F16）：**返回图侧存储值**（与缓存分支 `return { ok: cells[i] === 1, y: heights[i] }` 同精度）。
+     * 旧实现此处返回 `result.surfaceY`（float64）⇒ 同一格"首次 float64 / 缓存 float32"，
+     * 使 `canStep` 的含界判据随调用历史翻转（详见 `heights` 声明处注释）。
+     */
+    return { ok: result.ok, y: heights[i], reasons: result.reasons };
   }
 
   /** 相邻两格是否可通行（共用台阶阈值语义）。 */

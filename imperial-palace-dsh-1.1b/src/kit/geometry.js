@@ -537,7 +537,7 @@ export function buildRoof(T, {
  */
 export function buildBody(T, {
   bodyW, bodyD, eaveTopY, baseY = 0, grade = 2, bays = 3, detail = 'near', kind = 'hall',
-  columnDiameter, columnFootDiameter, bayPitch, tile = 1, door = null, windows = true, openFront = false,
+  columnDiameter, columnFootDiameter, bayPitch, tile = 1, door = null, windows = true, openFront = false, through = false,
 }) {
   const parts = new Parts();
   const colR = columnDiameter / 2;
@@ -587,24 +587,31 @@ export function buildBody(T, {
   const wallH = h * 0.72;
   const wallThick = Math.max(0.4, columnDiameter * 0.8);
   if (!openFront) {
-    // 背墙（整块）
-    parts.add('wall', 'plasterRed', box(T, { w: bodyW - inset * 2, h: wallH, d: wallThick, z: halfD - inset - wallThick / 2, y: baseY, tile }));
     // 正立面：**由真实开口决定**（门洞 + 各开间隔扇窗洞），用"切点网格 + 洞"生成：
     //   - 门洞（doorWidth > 0.2）：整高缺口，净宽 = layout.door.width；
     //   - 隔扇窗洞：每个窗位在 y ∈ [窗台, 窗顶] 处留缺口（窗扇本身填在洞里，见下方 window 段）；
     //   - 无任何开口：整面一块实心墙（单块，避免 x=0 对接留下零宽缝）。
     //   外墙平面（z = −halfD + inset）与墙厚均不变 → 外立面外形不变；变的是"墙上有洞 + 窗扇透光"。
+    //
+    // t6（门洞两侧开口）：**同一函数**生成背面墙。`through = true` 时背面用与正面**同宽、同高**的门洞，
+    //   即"门洞贯穿"（门殿/院门 = 通道口）；两侧开口由同一份切点网格代码产出 ⇒ 两面口径必然一致。
+    //   背面**不切窗、不设门扇门钉**（门扇只在正面），也不动屋顶/额枋/斗栱（开口只在墙带内）。
     const xMin = -halfW + inset;
     const xMax = halfW - inset;
     const yMin = baseY;
     const yMax = baseY + wallH;
     const eps = 1e-3;
-    const openings = [];
-    if (doorWidth > 0.2) openings.push({ x0: -doorHalf, x1: doorHalf, y0: -Infinity, y1: Infinity });
-    for (const rect of winRects) openings.push({ x0: rect.cx - rect.w / 2, x1: rect.cx + rect.w / 2, y0: rect.y0, y1: rect.y1 });
-    if (openings.length === 0) {
-      parts.add('wall', 'plasterRed', box(T, { w: xMax - xMin, h: wallH, d: wallThick, x: (xMin + xMax) / 2, z: -halfD + inset + wallThick / 2, y: baseY, tile }));
-    } else {
+    const frontOpenings = [];
+    if (doorWidth > 0.2) frontOpenings.push({ x0: -doorHalf, x1: doorHalf, y0: -Infinity, y1: Infinity });
+    for (const rect of winRects) frontOpenings.push({ x0: rect.cx - rect.w / 2, x1: rect.cx + rect.w / 2, y0: rect.y0, y1: rect.y1 });
+    const backOpenings = through && doorWidth > 0.2 ? [{ x0: -doorHalf, x1: doorHalf, y0: -Infinity, y1: Infinity }] : [];
+    const facadeWall = (face, openings) => {
+      // face = -1 正面（z = −halfD + inset + 墙厚/2）/ +1 背面（z = +halfD − inset − 墙厚/2）
+      const zCenter = face * (halfD - inset - wallThick / 2);
+      if (openings.length === 0) {
+        parts.add('wall', 'plasterRed', box(T, { w: xMax - xMin, h: wallH, d: wallThick, x: (xMin + xMax) / 2, z: zCenter, y: baseY, tile }));
+        return;
+      }
       const cutPoints = (lo, hi, values) => {
         const set = new Set([lo, hi]);
         for (const v of values) if (Number.isFinite(v) && v > lo + eps && v < hi - eps) set.add(v);
@@ -618,10 +625,12 @@ export function buildBody(T, {
           const cy = (ys[j] + ys[j + 1]) / 2;
           const inHole = openings.some((o) => cx > o.x0 + eps && cx < o.x1 - eps && cy > o.y0 + eps && cy < o.y1 - eps);
           if (inHole) continue;
-          parts.add('wall', 'plasterRed', box(T, { w: xs[i + 1] - xs[i], h: ys[j + 1] - ys[j], d: wallThick, x: cx, y: ys[j], z: -halfD + inset + wallThick / 2, tile }));
+          parts.add('wall', 'plasterRed', box(T, { w: xs[i + 1] - xs[i], h: ys[j + 1] - ys[j], d: wallThick, x: cx, y: ys[j], z: zCenter, tile }));
         }
       }
-    }
+    };
+    facadeWall(-1, frontOpenings);
+    facadeWall(1, backOpenings);
     const sideWallD = bodyD - inset * 2;
     parts.add('wall', 'plasterRed', box(T, { w: wallThick, h: wallH, d: sideWallD, x: halfW - inset - wallThick / 2, y: baseY, tile }));
     parts.add('wall', 'plasterRed', box(T, { w: wallThick, h: wallH, d: sideWallD, x: -halfW + inset + wallThick / 2, y: baseY, tile }));
@@ -682,6 +691,14 @@ export function buildBody(T, {
     const aboveH = h - (columnFootDiameter + doorHeight + lintelH);
     if (aboveH > 0.1) {
       parts.add('wall', 'plasterRed', box(T, { w: doorWidth * 1.14, h: aboveH, d: wallThick, z: -halfD + inset + wallThick / 2, y: baseY + columnFootDiameter + doorHeight + lintelH, tile }));
+    }
+    // t6：贯穿门洞的**背面门额 + 背面门上墙**（与正面同高、同宽；背面不设门扇与门钉）。
+    // 复用既有部位名（doorFrame / wall）⇒ 不新增合批桶，§8.2 分区绘制调用不变。
+    if (through) {
+      parts.add('doorFrame', 'timberLacquer', box(T, { w: doorWidth * 1.14, h: lintelH, d: leafT * 2, z: halfD - inset - leafT, y: baseY + columnFootDiameter + doorHeight, tile }));
+      if (aboveH > 0.1) {
+        parts.add('wall', 'plasterRed', box(T, { w: doorWidth * 1.14, h: aboveH, d: wallThick, z: halfD - inset - wallThick / 2, y: baseY + columnFootDiameter + doorHeight + lintelH, tile }));
+      }
     }
     if (detail === 'near' && grade >= 2 && leafW > 0.15) {
       const studR = Math.max(0.07, columnDiameter * 0.1);

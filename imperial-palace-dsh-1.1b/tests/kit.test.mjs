@@ -5,7 +5,7 @@
  * 覆盖 t3 验收的 7 条：
  *   1 工厂导出与参数契约  2 形制一致性（含屋顶几何特征）  3 识别特征与 LOD 三档
  *   4 材质令牌驱动 / 共享缓存 / dispose 边界  5 资产登记与许可  6 测试本身  7 无网络依赖
- * 另加：全 67 槽位扫描（与 layout 的 eaveHeight 交叉校验）、整城绘制调用/三角面预算、
+ * 另加：全 SLOTS 槽位扫描（与 layout 的 eaveHeight 交叉校验）、整城绘制调用/三角面预算、
  *       去内部面与合批/实例化的实测收益、以及 src/kit/ 源码纪律扫描（无硬编码色值）。
  *
  * 用法：node tests/kit.test.mjs   （失败非零退出；测试集由 tests/run.mjs 顺序调度）
@@ -635,7 +635,7 @@ startSection('9 合批/实例化确实降低绘制批次');
   const beforeAll = countDrawCalls(zoneRoot);
   const triBefore = countTriangles(zoneRoot);
   const merged = mergeZone(T, zoneRoot);
-  ok('整城 67 槽合批后绘制调用 ≤ 350（config.BUDGET.drawCalls.mainSceneMax）', merged.stats.after <= CONFIG.BUDGET.drawCalls.mainSceneMax, `${beforeAll} → ${merged.stats.after}`);
+  ok(`整城 ${layout.SLOTS.length} 槽合批后绘制调用 ≤ 350（config.BUDGET.drawCalls.mainSceneMax）`, merged.stats.after <= CONFIG.BUDGET.drawCalls.mainSceneMax, `${beforeAll} → ${merged.stats.after}`);
   ok('合批降幅 ≥ 90%', merged.stats.reduction >= 0.9, `${(merged.stats.reduction * 100).toFixed(1)}%`);
   eq('合批不改变三角面总数', countTriangles(zoneRoot), triBefore);
   ok('整城可见三角面 ≤ 150 万（config.BUDGET.triangles.visibleMax）', countTriangles(zoneRoot) <= CONFIG.BUDGET.triangles.visibleMax, String(countTriangles(zoneRoot)));
@@ -709,9 +709,13 @@ startSection('10 去不可见内部面（重合面 / 被遮挡面）');
 
 /* ================================================================== 11 全槽位扫描 */
 
-startSection('11 全 67 槽位扫描 + 与 layout.eaveHeight 交叉校验 + 预算');
+startSection(`11 全 ${layout.SLOTS.length} 槽位扫描 + 与 layout.eaveHeight 交叉校验 + 预算`);
 {
-  eq('layout 槽位数为 67', layout.SLOTS.length, 67);
+  /* t3：槽位基线由「67」改为「67 + layout.GARDEN_BULK_SLOTS.length」（LAYOUT_VERSION 1.1.21 起
+     御花园两侧批量装饰建筑 12 座进入 SLOTS，见 layout.js 版本注记）。判据**只增不减**：
+     仍是精确等式（不再是脆弱的魔法数），并追加 id 唯一性守卫。 */
+  eq('layout 槽位数 = 契约基线 67 + 批量装饰建筑 GARDEN_BULK_SLOTS', layout.SLOTS.length, 67 + layout.GARDEN_BULK_SLOTS.length);
+  eq('layout 槽位 id 唯一（不得用重复编号虚增建筑数）', new Set(layout.SLOTS.map((s) => s.id)).size, layout.SLOTS.length);
   const violations = [];
   const warnings = [];
   const rows = [];
@@ -759,7 +763,7 @@ startSection('11 全 67 槽位扫描 + 与 layout.eaveHeight 交叉校验 + 预�
   between('totalHeight（估值）偏差上限 ≤ 45%', worstTotal.totalDev, 0, 0.45);
   ok('单建筑近景三角面 ≤ 24000', maxBuilding <= CONFIG.BUDGET.triangles.perBuildingMax, String(maxBuilding));
   ok('全城近景三角面 ≤ 150 万', totalNear <= CONFIG.BUDGET.triangles.visibleMax, String(totalNear));
-  notes.push(`全 67 槽：近景三角面 ${totalNear}，中景 ${sumMid}，单栋最大 ${maxBuilding}`);
+  notes.push(`全 ${layout.SLOTS.length} 槽：近景三角面 ${totalNear}，中景 ${sumMid}，单栋最大 ${maxBuilding}`);
   notes.push(`totalHeight 偏差（kit 举架 vs layout 估值）：中位 ${(medianTotal * 100).toFixed(1)}%，最大 ${(worstTotal.totalDev * 100).toFixed(1)}% (${worstTotal.id})`);
   const ridgeFailures = rows.filter((r) => ['hip', 'doubleEaveHip', 'gableHip', 'gable'].includes(layout.SLOT_BY_ID[r.id].roofType) && r.ridge <= 0);
   eq('全部殿堂类槽位都有正脊', ridgeFailures.length, 0);
@@ -988,7 +992,7 @@ function probeDoorChannel(object, { samples = 201 } = {}) {
   const gate = kit.gateHall({ ...slot('F-gate-south'), lod: 'near', quality: 'medium' });
   ok('gateHall(F-gate-south, doubleEaveHip) 现在建成重檐庑殿', Boolean(findMesh(gate, 'lowerRoof')) && gate.userData.kit.metrics.upperEaveY > gate.userData.kit.metrics.eaveHeight);
 
-  // 全 67 槽：凡 layout 带 door 的槽位，净宽都必须够玩家通过
+  // 全 SLOTS 槽：凡 layout 带 door 的槽位，净宽都必须够玩家通过
   // 例外（t103 语义 + 能力边界）：**亭 pavilion 四面开敞、没有正面墙**，
   // 布局给它的 door 数据（hasDoor=true, width 8/10/16, blocks=exceptDoor）表达的是"可通行"，
   // 几何上因无墙而不存在"墙上门洞"（doorWidth=0）——故单独按可通行语义断言，不计入"必须有开口"。
@@ -1694,6 +1698,579 @@ startSection('20 正面门洞几何能力：殿/配殿按布局 door 真正开�
   eq('全部门洞开在布局 facing 侧（世界法线↔朝向）', facingMismatch.length, 0, facingMismatch.join(','));
   eq('布局 door.axis 与 facing 全部自洽（kit 不自行改轴）', axisConflict.length, 0, axisConflict.join(','));
   notes.push(`布局口径核对：${withDoor.length} 个带 door 槽位净宽/朝向/轴全部一致（axis/facing 冲突 0）`);
+}
+
+/* ================================================================== 21 内饰差异化（t170：≥8 主题 + 主房间签名互不相同） */
+
+startSection('21 内饰差异化：主题表 / 按 slotId 分配 / 陈设签名互不相同 / 无"几乎相同"对');
+
+{
+  const { INTERIOR_THEMES, themeFor, variantFor, interiorKindOf, INTERIOR_SLOT_IDS, INTERIOR_MIXES, INTERIOR_SIZE_STEPS } = interiorModule;
+
+  // 21.1 主题表：≥8 套、字段完备、只用既有材质令牌与既有部位词表
+  ok(`主题表 ≥8 套（实际 ${INTERIOR_THEMES.length}）`, INTERIOR_THEMES.length >= 8, INTERIOR_THEMES.map((t) => t.id).join(','));
+  eq('主题 id 唯一', new Set(INTERIOR_THEMES.map((t) => t.id)).size, INTERIOR_THEMES.length);
+  ok('每个主题都声明了适用的建筑类型', INTERIOR_THEMES.every((t) => Array.isArray(t.kinds) && t.kinds.length > 0 && t.kinds.every((k) => INTERIOR_KINDS.includes(k))));
+  const themeMaterials = new Set();
+  for (const t of INTERIOR_THEMES) {
+    for (const key of ['floorMat', 'screenMat', 'ceilingMat', 'furnitureMat']) if (t[key]) themeMaterials.add(t[key]);
+  }
+  ok('主题用到的材质键全部在既有白名单内（零新增令牌）', [...themeMaterials].every((m) => INTERIOR_MATERIALS.includes(m)), [...themeMaterials].join(','));
+  // 每类建筑都有 ≥2 个可选主题（否则"分配"退化为常量）
+  for (const k of INTERIOR_KINDS) {
+    const n = INTERIOR_THEMES.filter((t) => t.kinds.includes(k)).length;
+    ok(`类型 ${k} 可用主题 ≥2（实际 ${n}）`, n >= 2, String(n));
+  }
+  ok(`混搭 ≥2 型 / 尺步 ≥3 档`, INTERIOR_MIXES.length >= 2 && INTERIOR_SIZE_STEPS.length >= 3, `${INTERIOR_MIXES.length}/${INTERIOR_SIZE_STEPS.length}`);
+
+  // 21.2 分配确定性：同一 slotId 两次调用必须一致（且只由 slotId 决定）
+  const probeId = INTERIOR_SLOT_IDS[0];
+  eq('themeFor 由 slotId 决定（可重复）', themeFor(probeId).id, themeFor(probeId).id);
+  eq('variantFor 由 slotId 决定（可重复）', JSON.stringify(variantFor(probeId)), JSON.stringify(variantFor(probeId)));
+
+  // 21.3 逐栋构建 43 处内景，提取"陈设签名"
+  const KINDS = INTERIOR_KINDS;
+  const rows = [];
+  for (const wk of layout.WALKABLE.filter((w) => w.kind === 'interior')) {
+    const slotId = wk.id.replace(/^WK-/, '').replace(/-interior$/, '');
+    const sl = layout.SLOT_BY_ID[slotId] ?? null;
+    const bounds = wk.bounds ?? sl?.bounds;
+    if (!bounds) continue;
+    const groundY = wk.y ?? sl?.baseY ?? 0;
+    const kind = KINDS.includes(sl?.kind) ? sl.kind : 'sideHall';
+    const object = kit.interiorSet({
+      id: `${slotId}:int`,
+      kind,
+      grade: sl?.grade ?? 2,
+      bounds,
+      groundY,
+      ceilingY: groundY + (kind === 'hall' ? 4.6 : 3.6),
+      entrance: sl?.entrance ?? { x: (bounds.minX + bounds.maxX) / 2, z: bounds.minZ },
+    });
+    const parts = {}; const mats = {}; let tri = 0;
+    object.traverse((n) => {
+      if (!n.isMesh) return;
+      const t = Math.floor(n.geometry.attributes.position.count / 3);
+      parts[n.userData.part] = (parts[n.userData.part] ?? 0) + t;
+      mats[n.userData.materialKey] = (mats[n.userData.materialKey] ?? 0) + t;
+      tri += t;
+      ok(`[${slotId}] 构件 ${n.userData.part} 带 interior 标记`, n.userData.interior === true);
+    });
+    const meta = object.userData.kit.metrics;
+    rows.push({
+      slotId,
+      kind,
+      theme: meta.theme.id,
+      mix: meta.theme.variant.mix.id,
+      feature: meta.theme.variant.featureId,
+      sizeStep: meta.theme.variant.sizeStep,
+      parts: JSON.stringify(parts),
+      mats: JSON.stringify(mats),
+      items: [...meta.items].sort().join(','),
+      partSet: Object.keys(parts).sort().join(','),
+      tri,
+    });
+  }
+  eq(`内景总数 = 43（实测 ${rows.length}）`, rows.length, 43);
+
+  // 21.4 硬指标 ①：**全签名（主题+混搭+特征+尺步+逐部位三角面+材质+语义清单）互不相同**
+  const sigOf = (r) => [r.theme, r.mix, r.feature, r.sizeStep, r.parts, r.mats, r.items].join('|');
+  const groups = new Map();
+  for (const r of rows) groups.set(sigOf(r), [...(groups.get(sigOf(r)) ?? []), r.slotId]);
+  const dupSig = [...groups.values()].filter((v) => v.length > 1);
+  ok(`t170：${rows.length} 处内景的**陈设签名互不相同**（精确集合；失败打印冲突对）`, dupSig.length === 0, dupSig.map((v) => v.join(' = ')).join(' | '));
+
+  // 21.5 硬指标 ②：**"几乎相同"的对为 0**（阈值依据见 §21.6 注释）
+  const designOf = (r) => [r.theme, r.mix, r.feature, r.sizeStep, r.partSet, r.items].join('|');
+  const dGroups = new Map();
+  for (const r of rows) dGroups.set(designOf(r), [...(dGroups.get(designOf(r)) ?? []), r.slotId]);
+  const dupDesign = [...dGroups.values()].filter((v) => v.length > 1);
+  ok(`t170：不存在"几乎相同"的对（设计签名 = 主题+混搭+特征+尺步+部件集合+语义清单 相同者 0 对）`, dupDesign.length === 0, dupDesign.map((v) => v.join(' = ')).join(' | '));
+
+  // 21.6 连续指标（透明报告）：逐部位三角面 L1/总和 的最相似对
+  const dist = (a, b) => {
+    const A = JSON.parse(a.parts); const B = JSON.parse(b.parts);
+    const keys = new Set([...Object.keys(A), ...Object.keys(B)]);
+    let l1 = 0; let tot = 0;
+    for (const k of keys) { l1 += Math.abs((A[k] ?? 0) - (B[k] ?? 0)); tot += (A[k] ?? 0) + (B[k] ?? 0); }
+    return tot === 0 ? 0 : l1 / tot;
+  };
+  const pairs = [];
+  for (let i = 0; i < rows.length; i += 1) for (let j = i + 1; j < rows.length; j += 1) pairs.push({ d: dist(rows[i], rows[j]), a: rows[i].slotId, b: rows[j].slotId });
+  pairs.sort((x, y) => x.d - y.d);
+  const identical = pairs.filter((x) => x.d === 0).length;
+  eq('连续指标：逐部位三角面距离 = 0 的对为 0（无逐位相同）', identical, 0);
+  ok('连续指标：最相似对距离 > 0', pairs[0].d > 0, `${pairs[0].d.toFixed(4)} ${pairs[0].a}↔${pairs[0].b}`);
+  eq('主题覆盖：43 处至少用到 8 种主题', new Set(rows.map((r) => r.theme)).size >= 8, true);
+  const themeHist = rows.reduce((m, r) => { m[r.theme] = (m[r.theme] ?? 0) + 1; return m; }, {});
+  notes.push(`t170 内饰差异化：${rows.length} 处内景 · 主题 ${Object.keys(themeHist).length} 种（${Object.entries(themeHist).map(([k, v]) => k + '×' + v).join(' ')}）· 签名唯一 ${groups.size} 组 · 设计唯一 ${dGroups.size} 组 · 最相似对距离 ${pairs[0].d.toFixed(4)}`);
+
+  /* ---------------------------------------------------------------- 21.7 定量判据（t3 追加：四维"看得见的差异" + 阈值依据） */
+  //
+  // 口径（三要素：量 / 归一 / 比什么）——四项都在 [0,1]，独立可分：
+  //   · dTri ：逐部位**三角面数**向量的 L1 / 两侧之和（合批桶粒度的"构件多少"）
+  //   · dArea：逐部位**表面积**向量的 L1 / 两侧之和（尺码差异；`sizeStep` 只改盒体尺码、不改三角面数，
+  //             所以 dTri 对"同一套家具放大 25%"失明，必须并列面积）
+  //   · jItem：语义清单（metrics.items）Jaccard（构件种类差）
+  //   · jCell：部位 × **0.5m 局部坐标格** 占用集合的 Jaccard（**按镜像取优**：`min(J(a,b), J(a,mirrorX(b)))`
+  //             —— 左右翻转的房间是"同一套摆法"，不能被算成差异）
+  // 取样：`lod:'near'`，只量室内陈设本体（默认 `auto` 会把 LOD 的 near+mid 两档一起累计，口径不同 ⇒ 不可混用）。
+  //
+  // **阈值依据（τ = 0.05，"几乎相同" = 四项同时 < τ）**：
+  //   · dTri < 0.05：构件数量分布之差合计不到三角面总数的 5% —— 比"最小宫灯"在单间里的占比还小一半以上
+  //     （实测单间一盏宫灯占 8.9%（E-court2-hall）/ 中位 23.5%，即 0.05 ≈ 半盏灯）⇒ 看不出件数差别；
+  //   · dArea < 0.05：两侧逐部位表面积之差合计 < 总表面积的 5%（每侧 ≤2.5%），单间陈设总表面积中位 2158 m²
+  //     ⇒ 铺地/台座/家具尺码落在同一档（相当于整间按 <2.5% 缩放）；
+  //   · jItem < 0.05：清单 4–9 项，**最小非零 Jaccard 距离 = 1/9 ≈ 0.111 > 0.05** ⇒ 实等价于"清单完全相同"；
+  //   · jCell < 0.05：占用格差 <5%（镜像取优）⇒ 同一套摆法、同一面墙。
+  //   四项**同时**小才是"站在门口会认成同一间房"，故取 dVis = max(四项)，判据 = 「dVis < τ 的对 0 个」。
+  //   追加余量判据（更严）：最小对 ≥ 3τ = 0.15，避免下一次 hash 重排/新增槽位时贴线通过。
+  //   基线对照由 `node work/probe-interior-variety.mjs` 直接复算（它把 git HEAD 版 interiors.js 原样取出跑同一口径）。
+  const CELL = 0.5;
+  const cellKey = (part, geometry) => {
+    const pos = geometry?.attributes?.position;
+    const out = new Set();
+    if (!pos) return out;
+    for (let i = 0; i < pos.count; i += 1) {
+      out.add(`${part}|${Math.round(pos.getX(i) / CELL)}|${Math.round(pos.getY(i) / CELL)}|${Math.round(pos.getZ(i) / CELL)}`);
+    }
+    return out;
+  };
+  const mirrorCells = (cells) => new Set([...cells].map((c) => {
+    const [p, x, y, z] = c.split('|');
+    return `${p}|${-Number(x)}|${y}|${z}`;
+  }));
+  const jaccard = (A, B) => {
+    if (A.size === 0 && B.size === 0) return 0;
+    let inter = 0;
+    for (const v of A) if (B.has(v)) inter += 1;
+    const union = A.size + B.size - inter;
+    return union === 0 ? 0 : 1 - inter / union;
+  };
+  const l1Of = (A, B) => {
+    const keys = new Set([...Object.keys(A), ...Object.keys(B)]);
+    let l1 = 0; let tot = 0;
+    for (const k of keys) { l1 += Math.abs((A[k] ?? 0) - (B[k] ?? 0)); tot += (A[k] ?? 0) + (B[k] ?? 0); }
+    return tot === 0 ? 0 : l1 / tot;
+  };
+
+  const nearRows = [];
+  for (const wk of layout.WALKABLE.filter((w) => w.kind === 'interior')) {
+    const slotId = wk.id.replace(/^WK-/, '').replace(/-interior$/, '');
+    const sl = layout.SLOT_BY_ID[slotId] ?? null;
+    const bounds = wk.bounds ?? sl?.bounds;
+    if (!bounds) continue;
+    const groundY = wk.y ?? sl?.baseY ?? 0;
+    const kind = KINDS.includes(sl?.kind) ? sl.kind : 'sideHall';
+    const object = kit.interiorSet({
+      id: `${slotId}:int`,
+      kind,
+      grade: sl?.grade ?? 2,
+      bounds,
+      groundY,
+      ceilingY: groundY + (kind === 'hall' ? 4.6 : 3.6),
+      entrance: sl?.entrance ?? { x: (bounds.minX + bounds.maxX) / 2, z: bounds.minZ },
+      lod: 'near',
+    });
+    const parts = {}; const areas = {}; const cells = new Set();
+    let tri = 0;
+    object.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const t = Math.floor(mesh.geometry.attributes.position.count / 3);
+      parts[mesh.userData.part] = (parts[mesh.userData.part] ?? 0) + t;
+      for (const c of cellKey(mesh.userData.part, mesh.geometry)) cells.add(c);
+      tri += t;
+      // 表面积：三角形面积和（非索引几何，逐 3 顶点）
+      const pos = mesh.geometry.attributes.position;
+      let area = 0;
+      for (let i = 0; i + 2 < pos.count; i += 3) {
+        const ax = pos.getX(i); const ay = pos.getY(i); const az = pos.getZ(i);
+        const bx = pos.getX(i + 1); const by = pos.getY(i + 1); const bz = pos.getZ(i + 1);
+        const cx2 = pos.getX(i + 2); const cy = pos.getY(i + 2); const cz2 = pos.getZ(i + 2);
+        const ux = bx - ax; const uy = by - ay; const uz = bz - az;
+        const vx = cx2 - ax; const vy = cy - ay; const vz = cz2 - az;
+        const nx = uy * vz - uz * vy; const ny = uz * vx - ux * vz; const nz = ux * vy - uy * vx;
+        area += Math.sqrt(nx * nx + ny * ny + nz * nz) / 2;
+      }
+      areas[mesh.userData.part] = (areas[mesh.userData.part] ?? 0) + area;
+    });
+    nearRows.push({ slotId, kind, parts, areas, cells, items: [...new Set(object.userData.kit.metrics.items)].sort(), tri });
+  }
+  eq(`定量口径内景数 = 43（实测 ${nearRows.length}）`, nearRows.length, 43);
+
+  const TAU = 0.05;
+  const quant = [];
+  for (let i = 0; i < nearRows.length; i += 1) {
+    for (let j = i + 1; j < nearRows.length; j += 1) {
+      const a = nearRows[i]; const b = nearRows[j];
+      const dTri = l1Of(a.parts, b.parts);
+      const dArea = l1Of(a.areas, b.areas);
+      const jItem = jaccard(new Set(a.items), new Set(b.items));
+      const jCell = Math.min(jaccard(a.cells, b.cells), jaccard(a.cells, mirrorCells(b.cells)));
+      quant.push({ a: a.slotId, b: b.slotId, hall: a.kind === 'hall' && b.kind === 'hall', dTri, dArea, jItem, jCell, dVis: Math.max(dTri, dArea, jItem, jCell) });
+    }
+  }
+  const nearIdentical = quant.filter((p) => p.dTri < TAU && p.dArea < TAU && p.jItem < TAU && p.jCell < TAU);
+  const nearIdenticalHall = nearIdentical.filter((p) => p.hall);
+  quant.sort((x, y) => x.dVis - y.dVis);
+  const minPair = quant[0];
+  const minHall = quant.find((p) => p.hall);
+  const hallsOnly = nearRows.filter((r) => r.kind === 'hall');
+  const hallSigGroups = new Set(hallsOnly.map((r) => JSON.stringify(r.parts) + '|' + JSON.stringify(r.areas) + '|' + r.items.join(','))).size;
+
+  eq(`定量：43 处内景中"几乎相同"的对 = 0（判据：dTri/dArea/jItem/jCell 四者同时 < ${TAU}）`, nearIdentical.length, 0);
+  eq('定量：主房间（hall 类，共 13 间）中"几乎相同"的对 = 0', nearIdenticalHall.length, 0);
+  eq('定量：主房间 hall 的"构件数+表面积+语义清单"签名互不相同（13/13）', hallSigGroups, hallsOnly.length);
+  ok(`定量余量：全 903 对最小 dVis ≥ 3τ = 0.15（实测 ${minPair ? minPair.dVis.toFixed(4) : 'n/a'} ${minPair ? `${minPair.a}↔${minPair.b}` : ''}）`, !!minPair && minPair.dVis >= 0.15);
+  ok(`定量余量：主房间最小 dVis ≥ 3τ = 0.15（实测 ${minHall ? minHall.dVis.toFixed(4) : 'n/a'} ${minHall ? `${minHall.a}↔${minHall.b}` : ''}）`, !!minHall && minHall.dVis >= 0.15);
+  ok('定量：四项指标全部为有限数（无 NaN ⇒ 判据未被静默跳过）', quant.every((p) => [p.dTri, p.dArea, p.jItem, p.jCell].every((v) => Number.isFinite(v) && v >= 0 && v <= 1)));
+
+  // 21.8 预算守卫（§8.2 不得悄悄放宽）：内景只存在于 near 档（far 档空 ⇒ 全城视角零新增调用）
+  const nearTriSum = nearRows.reduce((s, r) => s + r.tri, 0);
+  const nearTriMax = Math.max(...nearRows.map((r) => r.tri));
+  ok(`内景近景三角面合计 ≤ 60000（实测 ${nearTriSum}）`, nearTriSum <= 60000, String(nearTriSum));
+  ok(`单间内景近景三角面 ≤ 9000（实测最大 ${nearTriMax}）`, nearTriMax <= 9000, String(nearTriMax));
+  const lodProbe = kit.interiorSet({
+    id: 'BUDGET-PROBE:int', kind: 'hall', grade: 3,
+    bounds: { minX: -30, maxX: 30, minZ: -20, maxZ: 20 }, groundY: 0, ceilingY: 4.6,
+  });
+  let farMeshes = 0;
+  lodProbe.levels[2].object.traverse((m) => { if (m.isMesh) farMeshes += 1; });
+  eq('内景 LOD 远景档为空（全城视角内景新增绘制调用 = 0）', farMeshes, 0);
+
+  notes.push(`t3 定量判据：dVis=max(dTri,dArea,jItem,jCell) · τ=${TAU} · "几乎相同"对 ${nearIdentical.length}/903（主房间 ${nearIdenticalHall.length}） · 最小对 ${minPair.dVis.toFixed(4)}（${minPair.a}↔${minPair.b}） · 主房间最小对 ${minHall.dVis.toFixed(4)}（${minHall.a}↔${minHall.b}） · 近景三角面合计 ${nearTriSum}/单间最大 ${nearTriMax}`);
+  notes.push('t3 阈值依据：τ=0.05 = "四项都小" —— ①dTri<0.05 小于最小宫灯占单间三角面的比例（实测 0.089/中位 0.235）的一半；②dArea<0.05 ⇒ 逐部位表面积差合计 <5%（每侧 ≤2.5%，单间总表面积中位 2158 m²）；③jItem<0.05 实等价于清单完全相同（清单 4–9 项，最小非零 Jaccard = 1/9≈0.111）；④jCell<0.05（镜像取优）⇒ 同一套摆法。余量判据 3τ=0.15 为追加硬化项。');
+  notes.push(`t3 基线（可复算：node work/probe-interior-variety.mjs，取 git HEAD 版 interiors.js 跑同一口径）：43 处仅 4 个签名组 / 3 种设计，设计签名重复对 369 对，dVis<0.05 的"几乎相同"对 25 对（最小 0）—— 现状 0 对、最小 ${minPair.dVis.toFixed(4)}。`);
+}
+
+/* ================================================================== 22 门洞两侧开口（t6：门类贯穿 / 非门类背面实心 / 屋顶形制不变 / 开口≠可穿墙） */
+
+startSection('22 门洞两侧开口：门类两面皆开（贯穿）/ 非门类背面实心 / 屋顶形制逐值不变 / 开口≠可穿墙');
+
+{
+  /**
+   * 口径（与 `work/probe-door-openings.mjs` **同源**，两处必须一起改）：
+   *   · 取 **near 档**（构件工厂默认返回 LOD；中/远档口径不同）；
+   *   · 只取 `part === 'wall'` 的三角形，按**世界法线**归到四面（south/north/west/east = ±z/±x）；
+   *   · 墙件全是轴对齐盒体 ⇒ 每个面的三角形 AABB **恰为该矩形**，覆盖判定精确（不是近似射线法）；
+   *   · 门带高度 = **门槛（`door.sillY`，世界坐标）+ 0.5m**（低于窗台，隔离 t33 的窗洞）；
+   *   · 扫描范围 = 该面墙自身的跨度（min u0 … max u1），避免把墙端之外的空气算成洞口；
+   *   · 连续未覆盖区间（≥0.2m）= 洞口净宽。
+   */
+  const DIRS = Object.freeze({
+    south: { axis: 'z', sign: -1 }, north: { axis: 'z', sign: 1 },
+    west: { axis: 'x', sign: -1 }, east: { axis: 'x', sign: 1 },
+  });
+  const OPPOSITE = Object.freeze({ south: 'north', north: 'south', east: 'west', west: 'east' });
+  const SCAN_STEP = 0.05;
+  const nearOf = (object) => (object.isLOD ? object.levels[0].object : object);
+
+  /** 每个面的墙覆盖矩形（世界坐标；u = 面内水平坐标，y = 世界高度）。 */
+  function wallRects(object, slot) {
+    object.updateMatrixWorld(true);
+    const group = nearOf(object);
+    const rects = { south: [], north: [], west: [], east: [] };
+    group.traverse((mesh) => {
+      if (!mesh.isMesh || mesh.userData.part !== 'wall') return;
+      const pos = mesh.geometry.attributes.position;
+      const e = mesh.matrixWorld.elements;
+      const wx = (i) => e[0] * pos.getX(i) + e[4] * pos.getY(i) + e[8] * pos.getZ(i) + e[12];
+      const wy = (i) => e[1] * pos.getX(i) + e[5] * pos.getY(i) + e[9] * pos.getZ(i) + e[13];
+      const wz = (i) => e[2] * pos.getX(i) + e[6] * pos.getY(i) + e[10] * pos.getZ(i) + e[14];
+      for (let i = 0; i + 2 < pos.count; i += 3) {
+        const ax = wx(i); const ay = wy(i); const az = wz(i);
+        const bx = wx(i + 1); const by = wy(i + 1); const bz = wz(i + 1);
+        const cx = wx(i + 2); const cy = wy(i + 2); const cz = wz(i + 2);
+        const ux = bx - ax; const uy = by - ay; const uz = bz - az;
+        const vx = cx - ax; const vy = cy - ay; const vz = cz - az;
+        let nx = uy * vz - uz * vy; let ny = uz * vx - ux * vz; let nz = ux * vy - uy * vx;
+        const len = Math.hypot(nx, ny, nz) || 1;
+        nx /= len; nz /= len;
+        const centroidZ = (az + bz + cz) / 3;
+        const centroidX = (ax + bx + cx) / 3;
+        const rect = {
+          u0: 0, u1: 0,
+          y0: Math.min(ay, by, cy), y1: Math.max(ay, by, cy),
+        };
+        if (Math.abs(nz) > 0.9 && Math.abs(nx) <= Math.abs(nz)) {
+          rect.u0 = Math.min(ax, bx, cx); rect.u1 = Math.max(ax, bx, cx);
+          rects[centroidZ < slot.z ? 'south' : 'north'].push(rect);
+        } else if (Math.abs(nx) > 0.9) {
+          rect.u0 = Math.min(az, bz, cz); rect.u1 = Math.max(az, bz, cz);
+          rects[centroidX < slot.x ? 'west' : 'east'].push(rect);
+        }
+      }
+    });
+    return rects;
+  }
+
+  /** 某面在门带高度的洞口（= 连续未覆盖区间），含净宽与面内中心。 */
+  function facadeSpans(object, slot, dir) {
+    const rects = wallRects(object, slot)[dir];
+    if (rects.length === 0) return [];
+    const y = (slot.door?.sillY ?? slot.baseY ?? 0) + 0.5;
+    const uMin = Math.min(...rects.map((r) => r.u0));
+    const uMax = Math.max(...rects.map((r) => r.u1));
+    const spans = [];
+    let start = null;
+    const steps = Math.max(1, Math.floor((uMax - uMin) / SCAN_STEP));
+    for (let k = 0; k <= steps; k += 1) {
+      const u = Math.min(uMax, uMin + k * SCAN_STEP);
+      const covered = rects.some((r) => u >= r.u0 - 1e-6 && u <= r.u1 + 1e-6 && y >= r.y0 - 1e-6 && y <= r.y1 + 1e-6);
+      if (!covered && start === null) start = u;
+      if ((covered || k === steps) && start !== null) {
+        const end = covered ? u - SCAN_STEP : u;
+        if (end - start >= 0.2) spans.push({ width: +(end - start).toFixed(2), center: +((start + end) / 2).toFixed(2) });
+        start = null;
+      }
+    }
+    return spans;
+  }
+
+  /** 逐部位三角面（近景档；用于"屋顶形制逐值不变"的对照）。 */
+  function partTriangles(object) {
+    const out = {};
+    nearOf(object).traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      out[mesh.userData.part] = (out[mesh.userData.part] ?? 0) + Math.floor(mesh.geometry.attributes.position.count / 3);
+    });
+    return out;
+  }
+
+  const build = (slot, extra = {}) => kit[slot.kind]({ ...slot, quality: 'medium', lod: 'near', ...extra });
+  const doorSlots = layout.SLOTS.filter((s) => s.door);
+  const gates = doorSlots.filter((s) => s.kind === 'gateHall' || s.kind === 'courtyardGate');
+  const rooms = doorSlots.filter((s) => s.kind === 'hall' || s.kind === 'sideHall');
+  const pavilions = doorSlots.filter((s) => s.kind === 'pavilion');
+  const playerClear = 2 * CONFIG.INTERACTION.player.radius;
+
+  eq(`带 door 槽位 = 53 门类/殿堂 + 10 亭（实测 ${doorSlots.length}）`, doorSlots.length, 63);
+  eq(`门类槽位（gateHall 6 + courtyardGate 10）`, gates.length, 16);
+  eq(`殿堂/配殿类带 door 槽位（hall 14 + sideHall 23）`, rooms.length, 37);
+  eq('亭类带 door 槽位', pavilions.length, 10);
+  // 派生守卫（不依赖魔法数，布局扩张时自动跟上）：①三类之和 = 全部带 door 槽位；②**凡 kind 是门/亭的槽位都不得丢登记**。
+  eq('三类（门类 + 殿堂配殿 + 亭）之和 = 全部带 door 槽位', gates.length + rooms.length + pavilions.length, doorSlots.length);
+  eq('所有 gateHall/courtyardGate 槽位都带 door 登记（门不得丢登记）', layout.SLOTS.filter((s) => s.kind === 'gateHall' || s.kind === 'courtyardGate').length, gates.length);
+  eq('所有 pavilion 槽位都带 door 登记（亭不得丢登记）', layout.SLOTS.filter((s) => s.kind === 'pavilion').length, pavilions.length);
+  ok('带 door 槽位数不少于契约基线 63（只增不减）', doorSlots.length >= 63, String(doorSlots.length));
+  notes.push('t6 登记口径：layout 每个槽位只登记**一个**门面（door.facade.outward），**没有** door.back / door.through 字段 ⇒ kit 由 door 镜像派生对面开口（同轴/同宽/同高/同门槛），不新增登记字段；对面开口的**存在性**由 kind 的通道语义决定（门殿/院门 = 通道口）。');
+
+  // 22.1 门类：两面皆开，且净宽 = 登记门宽（clamp 后），两面同宽、对轴
+  let gateOk = 0;
+  for (const slot of gates) {
+    const object = build(slot);
+    const meta = object.userData.kit.metrics;
+    const frontDir = slot.door.facade?.outward ?? slot.facing;
+    const backDir = OPPOSITE[frontDir];
+    const expect = Math.min(slot.door.width, meta.bodyW - 2);
+    ok(`[${slot.id}] 门类默认贯穿（through = true / hasBackOpening = true）`, meta.through === true && meta.hasBackOpening === true, JSON.stringify({ through: meta.through, hasBackOpening: meta.hasBackOpening }));
+    eq(`[${slot.id}] openingBack.width = 登记门宽（clamp 后）`, meta.openingBack?.width, expect, 1e-9);
+    eq(`[${slot.id}] openingBack.source = 'through'`, meta.openingBack?.source, 'through');
+    ok(`[${slot.id}] 背面开口净宽 ≥ 玩家净宽 ${playerClear}`, (meta.openingBack?.clearWidth ?? 0) >= playerClear, String(meta.openingBack?.clearWidth));
+    const fSpans = facadeSpans(object, slot, frontDir);
+    const bSpans = facadeSpans(object, slot, backDir);
+    const f = fSpans.reduce((a, b) => (b.width > a.width ? b : a), { width: 0, center: NaN });
+    const b = bSpans.reduce((a, c) => (c.width > a.width ? c : a), { width: 0, center: NaN });
+    ok(`[${slot.id}] 门面（${frontDir}）开口净宽 = 登记门宽 ±0.06`, Math.abs(f.width - expect) <= 0.06, `实测 ${f.width} vs 期望 ${expect}`);
+    ok(`[${slot.id}] 对侧面（${backDir}）开口净宽 = 登记门宽 ±0.06`, Math.abs(b.width - expect) <= 0.06, `实测 ${b.width} vs 期望 ${expect}`);
+    ok(`[${slot.id}] 两面净宽一致（|前−后| ≤ 0.06）`, Math.abs(f.width - b.width) <= 0.06, `${f.width} vs ${b.width}`);
+    // 面内切向坐标：法线 ±z 的面（南北）切向 = 世界 x；法线 ±x 的面（东西）切向 = 世界 z。
+    // （`door.axis` 是**贯穿轴**，与之垂直；这里比的是门宽中心在切向上的位置。）
+    const tangent = (frontDir === 'south' || frontDir === 'north') ? 'x' : 'z';
+    const doorCenter = slot.door.center?.[tangent] ?? (tangent === 'x' ? slot.x : slot.z);
+    ok(`[${slot.id}] 两面开口中心对轴（±0.08）`, Math.abs(f.center - doorCenter) <= 0.08 && Math.abs(b.center - doorCenter) <= 0.08, `前 ${f.center} / 后 ${b.center} vs 门中 ${doorCenter}`);
+    if (meta.through && b.width > playerClear) gateOk += 1;
+  }
+  eq(`门类 16 栋全部两面皆开且净宽可通行`, gateOk, gates.length);
+
+  // 22.2 非门类（殿堂/配殿）：背面必须保持实心（防"开口外溢"）
+  const roomLeaks = [];
+  for (const slot of rooms) {
+    const object = build(slot);
+    const meta = object.userData.kit.metrics;
+    const dir = slot.door.facade?.outward ?? slot.facing;
+    const backSpans = facadeSpans(object, slot, OPPOSITE[dir]);
+    const frontSpans = facadeSpans(object, slot, dir);
+    const widestBack = backSpans.reduce((a, b) => Math.max(a, b.width), 0);
+    const widestFront = frontSpans.reduce((a, b) => Math.max(a, b.width), 0);
+    if (meta.through !== false || meta.hasBackOpening !== false || widestBack >= 0.6) {
+      roomLeaks.push({ id: slot.id, through: meta.through, back: widestBack });
+    }
+    ok(`[${slot.id}] 殿堂/配殿默认不贯穿（through = false / 背面实心）`, meta.through === false && meta.hasBackOpening === false && widestBack < 0.6, `through=${meta.through} 背面最宽 ${widestBack}`);
+    ok(`[${slot.id}] 正面登记门仍然开洞（净宽 ≥ 玩家净宽）`, widestFront >= Math.min(slot.door.width, meta.bodyW - 2) - 0.06 && widestFront >= playerClear, `${widestFront}`);
+  }
+  eq('无"背面开口外溢"（殿堂/配殿逐栋背面实心）', roomLeaks.length, 0);
+
+  // 22.3 亭：四面无墙（门带高度无 wall 覆盖），故"两侧开口"由开敞本体承担
+  for (const slot of pavilions) {
+    const object = build(slot);
+    const meta = object.userData.kit.metrics;
+    const allDirs = Object.keys(DIRS).map((d) => facadeSpans(object, slot, d).length).reduce((a, b) => a + b, 0);
+    ok(`[${slot.id}] 亭无墙件（四面门带无覆盖）且无墙上门洞`, allDirs === 0 && meta.doorWidth === 0 && meta.through === false, `spans=${allDirs} doorWidth=${meta.doorWidth}`);
+  }
+
+  // 22.4 显式开关：through:true 让殿堂获得背面开口；through:false 让门类回到单面
+  {
+    const hallSlot = layout.SLOT_BY_ID['B-hall-main'];
+    const t = build(hallSlot, { through: true });
+    const tm = t.userData.kit.metrics;
+    const tb = facadeSpans(t, hallSlot, OPPOSITE['south']);
+    ok('显式 through:true → 殿堂也可贯穿（背面开口 = 登记门宽）', tm.through === true && Math.abs(tb.reduce((a, b) => Math.max(a, b.width), 0) - Math.min(hallSlot.door.width, tm.bodyW - 2)) <= 0.06, `背面最宽 ${tb.reduce((a, b) => Math.max(a, b.width), 0)}`);
+    const g = build(layout.SLOT_BY_ID['F-gate-south'], { through: false });
+    const gm = g.userData.kit.metrics;
+    const gb = facadeSpans(g, layout.SLOT_BY_ID['F-gate-south'], 'north');
+    ok('显式 through:false → 门类可强制单面（背面实心）', gm.through === false && gm.hasBackOpening === false && gb.reduce((a, b) => Math.max(a, b.width), 0) < 0.6, `背面最宽 ${gb.reduce((a, b) => Math.max(a, b.width), 0)}`);
+  }
+
+  // 22.4b **LOD 口径**：贯穿在 near / mid 两档都必须成立（墙体在两档都建；远景档由 LOD 策略决定）
+  {
+    const gateSlot = layout.SLOT_BY_ID['F-gate-south'];
+    const roomSlot = layout.SLOT_BY_ID['B-hall-main'];
+    for (const detail of ['near', 'mid']) {
+      const g = kit.gateHall({ ...gateSlot, quality: 'medium', lod: detail });
+      const gm = g.userData.kit.metrics;
+      const front = facadeSpans(g, gateSlot, 'south').reduce((a, b) => Math.max(a, b.width), 0);
+      const back = facadeSpans(g, gateSlot, 'north').reduce((a, b) => Math.max(a, b.width), 0);
+      ok(`[${detail}] 门类两面皆开且同宽（前 ${front} / 后 ${back}）`, gm.through === true && Math.abs(front - back) <= 0.06 && front >= playerClear && back >= playerClear, `${front}/${back}`);
+      const r = kit.hall({ ...roomSlot, quality: 'medium', lod: detail });
+      const rb = facadeSpans(r, roomSlot, 'north').reduce((a, b) => Math.max(a, b.width), 0);
+      ok(`[${detail}] 殿堂背面仍实心（${rb}）`, r.userData.kit.metrics.through === false && rb < 0.6, String(rb));
+    }
+  }
+
+  // 22.5 **不破屋顶形制**：贯穿只改 wall / doorFrame，其余部位三角面逐值相同
+  const ROOF_PARTS = ['roof', 'lowerRoof', 'eaveFascia', 'ridge', 'hipRidge', 'ridgeBeast', 'ridgeEnd', 'painting', 'giltLine', 'bracket', 'bracketTip', 'soffit', 'column', 'columnFoot', 'terrace', 'terraceCap', 'door', 'doorStud', 'stairs', 'imperialRamp', 'railing', 'railingPanel', 'window'];
+  const roofViolations = [];
+  let thruDeltaMax = 0;
+  for (const slot of gates) {
+    const on = build(slot);
+    const off = build(slot, { through: false });
+    const a = partTriangles(on);
+    const b = partTriangles(off);
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const key of keys) {
+      if (key === 'wall' || key === 'doorFrame') continue;
+      if ((a[key] ?? 0) !== (b[key] ?? 0)) roofViolations.push(`${slot.id}:${key} ${b[key] ?? 0}→${a[key] ?? 0}`);
+    }
+    const ma = on.userData.kit.metrics;
+    const mb = off.userData.kit.metrics;
+    for (const field of ['eaveHeight', 'eaveHeightAbsolute', 'upperEaveY', 'roofBaseY', 'roofRise', 'totalHeight', 'totalHeightAbsolute', 'bodyW', 'bodyD', 'plinth', 'baySpan']) {
+      if (ma[field] !== mb[field]) roofViolations.push(`${slot.id}:${field} ${mb[field]}→${ma[field]}`);
+    }
+    if (JSON.stringify(ma.ridge) !== JSON.stringify(mb.ridge)) roofViolations.push(`${slot.id}:ridge`);
+    if (JSON.stringify(ma.parts) !== JSON.stringify(mb.parts)) roofViolations.push(`${slot.id}:partBuckets ${JSON.stringify(mb.parts)}→${JSON.stringify(ma.parts)}`);
+    thruDeltaMax = Math.max(thruDeltaMax, (a.wall ?? 0) + (a.doorFrame ?? 0) - ((b.wall ?? 0) + (b.doorFrame ?? 0)));
+  }
+  eq('贯穿不破屋顶形制：屋顶/斗栱/额枋/台基等部位三角面与举架逐值不变；合批桶集合不变；只有 wall/doorFrame 变化', roofViolations.length, 0, roofViolations.slice(0, 6).join(' | '));
+  ok(`贯穿的几何增量有界（单栋新增 wall+doorFrame 三角面 = ${thruDeltaMax} ≤ 60，16 栋合计 ≤ 960）`, thruDeltaMax <= 60, String(thruDeltaMax));
+
+  // 22.6 **开口 ≠ 可穿墙**：kit 只写几何，不写/不改通行性与碰撞；passable 不是几何开关
+  {
+    const gateSlot = layout.SLOT_BY_ID['F-gate-south'];
+    const blockedSample = build(gateSlot, { door: { ...gateSlot.door, passable: false, blockedBy: 'SYNTHETIC' } });
+    const bm = blockedSample.userData.kit.metrics;
+    ok('几何开口与 door.passable 解耦：声明不可通行不改变洞口几何', bm.through === true && bm.hasBackOpening === true && bm.openingBack.width === bm.doorWidth);
+    const metaText = JSON.stringify(bm);
+    ok('kit 不冒充通行性/碰撞（metrics 无 passable/blockedBy/collider/obstacle/walkable 字段）', !/passable|blockedBy|collider|obstacle|walkable/i.test(metaText));
+  }
+
+  // 22.7 与只读探针逐值一致（同口径复算，供回执引用）
+  notes.push(`t6 贯穿（两侧开口）：门类 16 栋两面皆开、非门类 37 栋背面实心、亭 10 栋无墙；贯穿只动 wall/doorFrame（单栋新增 ≤ ${thruDeltaMax} 三角面）⇒ §8.2 分区绘制调用不变（合批桶集合逐值相同）。`);
+  notes.push('t6 登记缺失（交回 layout，不在 kit 范围）：①`door` 无对面锚点/`door.back`/`door.through` 字段（对面开口由 kit 镜像派生）；②可行走数据的门洞带 `insideObstacleDoor()` 对**整进深**豁免（`docs/report-airwall.md` §10.2 的"穿透体块"），使 37 栋非门类里另有 17 栋（hall 4 + sideHall 13）在数据侧"可穿到对面"而几何背面实心 —— 要么登记 `door.through`（kit 已支持 `through:true`），要么把豁免收窄到门洞+室内进深。');
+  notes.push(`t6 逐栋清单：${gates.map((s) => s.id).join(', ')}`);
+}
+
+/* ================================================================== 23 重檐脊饰归属（t27：下檐 lowerRidge） */
+
+startSection('23 重檐脊饰归属：下檐 lowerRidge（g1 §5.4）/ 零几何改动 / 中档预算守卫 / 单檐不得外溢');
+
+{
+  /**
+   * 背景（t27）：g1 判据 5.4 要求重檐建筑在近景档有 **≥2 类**"下檐部件"（`/lowerRoof|lowerRidge/`），
+   * 实测此前只有 `lowerRoof`。缺陷实为**归属**：下檐正脊（`ridge` 盒）与下檐垂脊（`hipRidge` 梁）
+   * 本来就在几何里，只是与**上层**同名构件合并进同一合批桶（`buildings.js` 的腰檐段）。
+   * 修法：近景档把腰檐的 `ridge`/`hipRidge` 改名为 `lowerRidge`（**只改归属、不动几何**）。
+   * 为何只在近景档：合批键 = `material.uuid|part`（`merge.js:557-563`）⇒ 新部位名必然新增 1 个绘制调用；
+   * B/F 两区按 `lod:'mid'` 单档建造（`forecourt.js:66` / `garden-boundary.js:506`）、F 区 80/80 无余量，
+   * 故中档改名会让 F 变 81 而超预算（实测）；近景档改名后 F 仍 80/80，仅 C（其 `C-hall-bed-main`
+   * 属 `NEAR_DETAIL_SLOTS` ⇒ 近档建造）55→56/60、主场景 341→342/350。
+   * 权威判据 `scripts/verify-g1-baseline.mjs` 的 5.4（显式 `lod:'near'`）据此由 FAIL 转 PASS。
+   */
+  const partTris = (slot, detail) => {
+    const object = kit[slot.kind]({ ...slot, quality: 'medium', lod: detail });
+    const group = object.isLOD ? object.levels[0].object : object;
+    const out = {};
+    let total = 0;
+    group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const t = Math.floor(mesh.geometry.attributes.position.count / 3);
+      out[mesh.userData.part] = (out[mesh.userData.part] ?? 0) + t;
+      total += t;
+    });
+    return { parts: out, total, metrics: object.userData.kit.metrics };
+  };
+  /** 双檐集合按**几何**判定（`upperEaveY > eaveHeight`）：2 殿 + 4 角楼（`isTower` 强制重檐）+ 2 城门。 */
+  const doubleEave = layout.SLOTS.filter((slot) => {
+    if (slot.kind === 'pavilion') return false;
+    const object = kit[slot.kind]({ ...slot, quality: 'medium', lod: 'near' });
+    const m = object.userData.kit.metrics;
+    return m.upperEaveY > m.eaveHeight;
+  });
+  eq(`重檐建筑 = 2 殿 + 4 角楼 + 2 城门（实测 ${doubleEave.length}）`, doubleEave.length, 8);
+
+  const lowerViolations = [];
+  const familyViolations = [];
+  for (const slot of doubleEave) {
+    const near = partTris(slot, 'near');
+    const hasLowerRoof = (near.parts.lowerRoof ?? 0) > 0;
+    const hasLowerRidge = (near.parts.lowerRidge ?? 0) > 0;
+    ok(`[${slot.id}] 近景档下檐有两类部件（lowerRoof ${near.parts.lowerRoof ?? 0} + lowerRidge ${near.parts.lowerRidge ?? 0}）—— 对应 g1 §5.4`, hasLowerRoof && hasLowerRidge, JSON.stringify({ lowerRoof: near.parts.lowerRoof, lowerRidge: near.parts.lowerRidge }));
+    // 归属守恒：脊饰族（ridge + hipRidge + lowerRidge）中"上层 ridge+hipRidge"与"下檐 lowerRidge"几何量相等，
+    // 且上层同名桶仍在（不丢类别）—— 这正是"只改归属、不改几何"的可机器复核形式。
+    const upper = (near.parts.ridge ?? 0) + (near.parts.hipRidge ?? 0);
+    const lower = near.parts.lowerRidge ?? 0;
+    if (!(upper > 0 && lower > 0 && lower === upper)) {
+      familyViolations.push(`${slot.id}: ridge=${near.parts.ridge ?? 0} hipRidge=${near.parts.hipRidge ?? 0} lowerRidge=${lower}`);
+    }
+    if (!(near.metrics.slopes === 4 && near.metrics.apronRise > 0 && near.metrics.ridge && near.metrics.ridge.length > 0)) {
+      lowerViolations.push(`${slot.id}: slopes=${near.metrics.slopes} apronRise=${near.metrics.apronRise}`);
+    }
+  }
+  eq('重檐形制完整：4 坡 + apronRise>0 + 上层非零正脊（等级-形制白名单未动）', lowerViolations.length, 0, lowerViolations.join(' | '));
+  eq('脊饰归属守恒：下檐 lowerRidge 与"上层 ridge+hipRidge"几何量相等（只改归属，不改几何）', familyViolations.length, 0, familyViolations.join(' | '));
+
+  // 零几何改动：逐档三角面 = 改前实测值（与回执 A/B 表同值）
+  const totalPins = {
+    'B-hall-main': { near: 11932, mid: 6828 }, 'C-hall-bed-main': { near: 9844, mid: 5532 },
+    'F-gate-south': { near: 7648, mid: 3360 }, 'F-gate-north': { near: 7648, mid: 3360 },
+    'F-tower-corner-nw': { near: 4232, mid: 2564 }, 'F-tower-corner-ne': { near: 4232, mid: 2564 },
+    'F-tower-corner-sw': { near: 4232, mid: 2564 }, 'F-tower-corner-se': { near: 4232, mid: 2564 },
+  };
+  const totalViolations = [];
+  for (const slot of doubleEave) {
+    for (const detail of ['near', 'mid']) {
+      const got = partTris(slot, detail).total;
+      const want = totalPins[slot.id]?.[detail];
+      if (want !== undefined && got !== want) totalViolations.push(`${slot.id}/${detail} ${want}→${got}`);
+    }
+  }
+  eq('零几何改动：重檐建筑逐档三角面 = 改前实测值（只改脊饰归属；与回执 A/B 表同值）', totalViolations.length, 0, totalViolations.join(' | '));
+
+  // 预算守卫：中档（B/F 单档建造所用档位）不得出现 lowerRidge，否则 F 区 80/80 会被顶穿
+  const midLeaks = doubleEave.filter((s) => (partTris(s, 'mid').parts.lowerRidge ?? 0) > 0).map((s) => s.id);
+  eq('中档无 lowerRidge（§8.2 守卫：B/F 按 mid 单档建造，F 区无余量；要统一归属需主理人裁定预算）', midLeaks.length, 0, midLeaks.join(','));
+
+  // 非重檐不得外溢：只有重檐（含角楼）才有 lowerRoof/lowerRidge
+  const nonDouble = layout.SLOTS.filter((s) => s.kind !== 'pavilion' && !doubleEave.includes(s));
+  const leaks = [];
+  for (const slot of nonDouble) {
+    const near = partTris(slot, 'near');
+    if ((near.parts.lowerRidge ?? 0) > 0 || (near.parts.lowerRoof ?? 0) > 0) leaks.push(slot.id);
+  }
+  eq(`非重檐 ${nonDouble.length} 槽位近景档不得出现 lowerRidge/lowerRoof（归属不外溢）`, leaks.length, 0, leaks.slice(0, 6).join(','));
+
+  const sample = doubleEave.map((s) => `${s.id}: ridge ${partTris(s, 'near').parts.ridge ?? 0} + hipRidge ${partTris(s, 'near').parts.hipRidge ?? 0} + lowerRidge ${partTris(s, 'near').parts.lowerRidge ?? 0}`);
+  notes.push(`t27 重檐脊饰：${doubleEave.length} 栋（${doubleEave.map((s) => s.id).join(', ')}）近景档 lowerRoof+lowerRidge 两类部件；${sample.join(' · ')}；中档无 lowerRidge ⇒ F 80/80 不变、主场景 341→342、C 55→56`);
 }
 
 /* ================================================================== 汇总 */

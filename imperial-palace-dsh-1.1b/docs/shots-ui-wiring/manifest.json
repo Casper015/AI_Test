@@ -1,10 +1,10 @@
 {
-  "at": "2026-09-26T21:37:53.498Z",
+  "at": "2026-09-27T17:39:52.482Z",
   "viewport": {
     "width": 1440,
     "height": 900
   },
-  "url": "http://127.0.0.1:64482/index.html",
+  "url": "http://127.0.0.1:64704/index.html",
   "browser": "/Users/casper/Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell",
   "checks": [
     {
@@ -27,69 +27,214 @@
       "detail": "styles=true tokens=true"
     },
     {
-      "name": "body 有可见文本（首屏不再是空白 DOM）",
+      "name": "首屏不是空白 DOM：可见文本非空 + 面板文本总量 ≥200 字（t7：折叠只改\"可见性\"，内容仍在 DOM）",
       "ok": true,
-      "detail": "innerText 长度=358"
+      "detail": "可见 innerText=75 字｜#palace-ui textContent=798 字｜可见折叠头=8"
     },
     {
-      "name": "面板齐备：HUD",
+      "name": "13 个 data-ui-panel 齐备（9 可折叠 + 4 非折叠件）",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"hud\"] → 命中 1"
+      "detail": "实际 13 个：brand,hud,info,views,zones,env,loading,help,minimap,tour,stuck,toast,labels"
     },
     {
-      "name": "面板齐备：八视角切换器",
+      "name": "相①默认折叠：hud",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"views\"] → 命中 1"
+      "detail": "collapsed=true bodyHidden=true aria-expanded=false controls→palace-panel-body-hud(palace-panel-body-hud) 折叠头可见=true"
     },
     {
-      "name": "面板齐备：分区跳转",
+      "name": "相①默认折叠：views",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"zones\"] → 命中 1"
+      "detail": "collapsed=true bodyHidden=true aria-expanded=false controls→palace-panel-body-views(palace-panel-body-views) 折叠头可见=true"
     },
     {
-      "name": "面板齐备：建筑信息面板",
+      "name": "相①默认折叠：zones",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"info\"] → 命中 1"
+      "detail": "collapsed=true bodyHidden=true aria-expanded=false controls→palace-panel-body-zones(palace-panel-body-zones) 折叠头可见=true"
     },
     {
-      "name": "面板齐备：导览控件",
+      "name": "相①默认折叠：env",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"tour\"] → 命中 1"
+      "detail": "collapsed=true bodyHidden=true aria-expanded=false controls→palace-panel-body-env(palace-panel-body-env) 折叠头可见=true"
     },
     {
-      "name": "面板齐备：小地图",
+      "name": "相①默认折叠：tour",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"minimap\"] → 命中 1"
+      "detail": "collapsed=true bodyHidden=true aria-expanded=false controls→palace-panel-body-tour(palace-panel-body-tour) 折叠头可见=true"
     },
     {
-      "name": "面板齐备：标签层",
+      "name": "相①默认折叠：minimap",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"labels\"] → 命中 1"
+      "detail": "collapsed=true bodyHidden=true aria-expanded=false controls→palace-panel-body-minimap(palace-panel-body-minimap) 折叠头可见=true"
     },
     {
-      "name": "面板齐备：时辰切换",
+      "name": "相①默认折叠：help",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"env\"] [data-time-preset] → 命中 3"
+      "detail": "collapsed=true bodyHidden=true aria-expanded=false controls→palace-panel-body-help(palace-panel-body-help) 折叠头可见=true"
     },
     {
-      "name": "面板齐备：质量档",
+      "name": "相①默认折叠：loading",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"env\"] [data-quality-tier] → 命中 3"
+      "detail": "collapsed=true bodyHidden=true aria-expanded=false controls→palace-panel-body-loading(palace-panel-body-loading) 折叠头可见=true"
     },
     {
-      "name": "面板齐备：回全城",
+      "name": "相①默认折叠：info",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"zones\"] [data-action=\"reset\"] → 命中 1"
+      "detail": "collapsed=true bodyHidden=true aria-expanded=false controls→palace-panel-body-info(palace-panel-body-info) 折叠头可见=true（info 未选中时整块不出现，此处只看折叠态）"
     },
     {
-      "name": "面板齐备：帮助",
+      "name": "非折叠件登记正确（无可折叠头）：brand",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"help\"] → 命中 1"
+      "detail": "hasToggle=false"
     },
     {
-      "name": "面板齐备：提示条",
+      "name": "非折叠件登记正确（无可折叠头）：labels",
       "ok": true,
-      "detail": "选择器 [data-ui-panel=\"toast\"] → 命中 1"
+      "detail": "hasToggle=false"
+    },
+    {
+      "name": "非折叠件登记正确（无可折叠头）：stuck",
+      "ok": true,
+      "detail": "hasToggle=false"
+    },
+    {
+      "name": "非折叠件登记正确（无可折叠头）：toast",
+      "ok": true,
+      "detail": "hasToggle=false"
+    },
+    {
+      "name": "默认态：**全部**可折叠面板都是折叠的（无例外）",
+      "ok": true,
+      "detail": "hud=true views=true zones=true env=true tour=true minimap=true help=true loading=true info=true"
+    },
+    {
+      "name": "折叠不遮挡：画面中心 elementFromPoint 命中 canvas（默认全折叠态）",
+      "ok": true,
+      "detail": "命中 CANVAS"
+    },
+    {
+      "name": "相②展开（CDP 真实点击折叠头）：hud",
+      "ok": true,
+      "detail": "aria=true 体可见=true 高度 43→160px 箭头=▾"
+    },
+    {
+      "name": "相②展开（CDP 真实点击折叠头）：views",
+      "ok": true,
+      "detail": "aria=true 体可见=true 高度 43→245px 箭头=▾"
+    },
+    {
+      "name": "相②展开（CDP 真实点击折叠头）：zones",
+      "ok": true,
+      "detail": "aria=true 体可见=true 高度 43→262px 箭头=▾"
+    },
+    {
+      "name": "相②展开（CDP 真实点击折叠头）：env",
+      "ok": true,
+      "detail": "aria=true 体可见=true 高度 43→170px 箭头=▾"
+    },
+    {
+      "name": "相②展开（CDP 真实点击折叠头）：tour",
+      "ok": true,
+      "detail": "aria=true 体可见=true 高度 43→159px 箭头=▾"
+    },
+    {
+      "name": "相②展开（CDP 真实点击折叠头）：minimap",
+      "ok": true,
+      "detail": "aria=true 体可见=true 高度 43→239px 箭头=▾"
+    },
+    {
+      "name": "相②展开（CDP 真实点击折叠头）：help",
+      "ok": true,
+      "detail": "aria=true 体可见=true 高度 43→697px 箭头=▾"
+    },
+    {
+      "name": "相②展开（CDP 真实点击折叠头）：loading",
+      "ok": true,
+      "detail": "aria=true 体可见=true 高度 43→92px 箭头=▾"
+    },
+    {
+      "name": "相②展开（CDP 真实点击折叠头）：info",
+      "ok": true,
+      "detail": "aria=true 体可见=true 高度 43→306px 箭头=▾"
+    },
+    {
+      "name": "展开后每个面板都变高（折叠确实在收敛高度，而不是只换 CSS 透明度）",
+      "ok": true,
+      "detail": "hud:43→160 views:43→245 zones:43→262 env:43→170 tour:43→159 minimap:43→239 help:43→697 loading:43→92 info:43→306"
+    },
+    {
+      "name": "相②展开态可见：HUD",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"hud\"] → **可见**命中 1"
+    },
+    {
+      "name": "相②展开态可见：八视角切换器",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"views\"] → **可见**命中 1"
+    },
+    {
+      "name": "相②展开态可见：分区跳转",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"zones\"] → **可见**命中 1"
+    },
+    {
+      "name": "相②展开态可见：建筑信息面板",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"info\"] → **可见**命中 1"
+    },
+    {
+      "name": "相②展开态可见：导览控件",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"tour\"] → **可见**命中 1"
+    },
+    {
+      "name": "相②展开态可见：小地图",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"minimap\"] → **可见**命中 1"
+    },
+    {
+      "name": "相②展开态可见：标签层",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"labels\"] → **可见**命中 1"
+    },
+    {
+      "name": "相②展开态可见：时辰切换",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"env\"] [data-time-preset] → **可见**命中 3"
+    },
+    {
+      "name": "相②展开态可见：质量档",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"env\"] [data-quality-tier] → **可见**命中 3"
+    },
+    {
+      "name": "相②展开态可见：回全城",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"zones\"] [data-action=\"reset\"] → **可见**命中 1"
+    },
+    {
+      "name": "相②展开态可见：帮助",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"help\"] → **可见**命中 1"
+    },
+    {
+      "name": "相②展开态可见：提示条",
+      "ok": true,
+      "detail": "选择器 [data-ui-panel=\"toast\"] → **可见**命中 1"
+    },
+    {
+      "name": "键盘可达：折叠头可聚焦（在 Tab 顺序内）",
+      "ok": true,
+      "detail": "focus 生效=true"
+    },
+    {
+      "name": "键盘可达：真实 Enter 恰好切换一次（views 由展开→折叠）",
+      "ok": true,
+      "detail": "0 → 1（aria=false）"
+    },
+    {
+      "name": "收尾状态确定：views 展开（供\"按钮 ≡ 键盘\"用真实点击），其余可折叠面板回到折叠",
+      "ok": true,
+      "detail": "hud=true views=false zones=true env=true tour=true minimap=true help=true loading=true info=true"
     },
     {
       "name": "UI 由 main.js 的唯一 rAF 循环驱动（mountInterface 的 recordFrame 包装层停用）",
@@ -99,12 +244,12 @@
     {
       "name": "每帧恰好推进一次（tick 增量 ≤ rAF 帧数 + 2，无第二套驱动）",
       "ok": true,
-      "detail": "rAF 60 帧 → interaction tick +60（区间 3→63）"
+      "detail": "rAF 60 帧 → interaction tick +60（区间 102→162）"
     },
     {
       "name": "找到「视角 2」按钮（data-view-index=2）",
       "ok": true,
-      "detail": "mode=iso label=\"2等距沙盘\" @(1350,79)"
+      "detail": "mode=iso label=\"2等距沙盘\" @(1357,83)"
     },
     {
       "name": "真实点击「视角 2」→ state.viewMode 生效",
@@ -122,19 +267,29 @@
       "detail": "click=iso(1 event) / key=iso(1 event)；事件负载样例={\"mode\":\"iso\",\"index\":2,\"source\":\"ui\"}"
     },
     {
+      "name": "截图 t7-01-panels-collapsed.png（1440×900）",
+      "ok": true,
+      "detail": "1440x900 · 602372 字节 · sha aa0ef8b3dadb"
+    },
+    {
+      "name": "截图 t7-02-panels-expanded.png（1440×900）",
+      "ok": true,
+      "detail": "1440x900 · 674634 字节 · sha 5cccd62c546e"
+    },
+    {
       "name": "截图 ui-01-overview.png（1440×900）",
       "ok": true,
-      "detail": "1440x900 · 323513 字节 · sha ac2a3282e213"
+      "detail": "1440x900 · 415077 字节 · sha d1531e516e59"
     },
     {
       "name": "截图 ui-02-tour.png（1440×900）",
       "ok": true,
-      "detail": "1440x900 · 498907 字节 · sha cc727a4677b8"
+      "detail": "1440x900 · 550236 字节 · sha 1739bc007dea"
     },
     {
       "name": "截图 ui-03-first-person.png（1440×900）",
       "ok": true,
-      "detail": "1440x900 · 224667 字节 · sha 8419d48e01b5"
+      "detail": "1440x900 · 268745 字节 · sha b21002a8a526"
     },
     {
       "name": "夜景截图前时辰已切到 moonlitNight",
@@ -144,12 +299,17 @@
     {
       "name": "截图 ui-04-night.png（1440×900）",
       "ok": true,
-      "detail": "1440x900 · 220878 字节 · sha 7268d4ac29ac"
+      "detail": "1440x900 · 265473 字节 · sha f1c01495c9d8"
     },
     {
       "name": "§11.3 隐藏义务：?ui=0&shot=1 下 UI 存在但不可见",
       "ok": true,
       "detail": "display=none size=0x0 visible=false forcedHidden=true"
+    },
+    {
+      "name": "§11.3 隐藏义务：?ui=0&shot=1 下**逐面板**都不可见（折叠头也不例外）",
+      "ok": true,
+      "detail": "面板 13 个，可见 0 个（）｜可见折叠头 0"
     },
     {
       "name": "页面无未捕获异常 / console.error",
@@ -161,72 +321,90 @@
     {
       "key": "HUD",
       "selector": "[data-ui-panel=\"hud\"]",
-      "hits": 1
+      "visibleHits": 1
     },
     {
       "key": "八视角切换器",
       "selector": "[data-ui-panel=\"views\"]",
-      "hits": 1
+      "visibleHits": 1
     },
     {
       "key": "分区跳转",
       "selector": "[data-ui-panel=\"zones\"]",
-      "hits": 1
+      "visibleHits": 1
     },
     {
       "key": "建筑信息面板",
       "selector": "[data-ui-panel=\"info\"]",
-      "hits": 1
+      "visibleHits": 1
     },
     {
       "key": "导览控件",
       "selector": "[data-ui-panel=\"tour\"]",
-      "hits": 1
+      "visibleHits": 1
     },
     {
       "key": "小地图",
       "selector": "[data-ui-panel=\"minimap\"]",
-      "hits": 1
+      "visibleHits": 1
     },
     {
       "key": "标签层",
       "selector": "[data-ui-panel=\"labels\"]",
-      "hits": 1
+      "visibleHits": 1
     },
     {
       "key": "时辰切换",
       "selector": "[data-ui-panel=\"env\"] [data-time-preset]",
-      "hits": 3
+      "visibleHits": 3
     },
     {
       "key": "质量档",
       "selector": "[data-ui-panel=\"env\"] [data-quality-tier]",
-      "hits": 3
+      "visibleHits": 3
     },
     {
       "key": "回全城",
       "selector": "[data-ui-panel=\"zones\"] [data-action=\"reset\"]",
-      "hits": 1
+      "visibleHits": 1
     },
     {
       "key": "帮助",
       "selector": "[data-ui-panel=\"help\"]",
-      "hits": 1
+      "visibleHits": 1
     },
     {
       "key": "提示条",
       "selector": "[data-ui-panel=\"toast\"]",
-      "hits": 1
+      "visibleHits": 1
     }
   ],
   "screenshots": [
+    {
+      "name": "t7-01-panels-collapsed.png",
+      "path": "docs/shots-ui-wiring/t7-01-panels-collapsed.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 602372,
+      "sha256_12": "aa0ef8b3dadb",
+      "note": "t7 默认全折叠：每个内容面板只留折叠头（标题 + 箭头）"
+    },
+    {
+      "name": "t7-02-panels-expanded.png",
+      "path": "docs/shots-ui-wiring/t7-02-panels-expanded.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 674634,
+      "sha256_12": "5cccd62c546e",
+      "note": "t7 全展开：内容与折叠前逐项一致（展开等价；不含未选中的 info）"
+    },
     {
       "name": "ui-01-overview.png",
       "path": "docs/shots-ui-wiring/ui-01-overview.png",
       "width": 1440,
       "height": 900,
-      "bytes": 323513,
-      "sha256_12": "ac2a3282e213",
+      "bytes": 415077,
+      "sha256_12": "d1531e516e59",
       "note": "首屏全城（默认视角 + UI 全可见）"
     },
     {
@@ -234,8 +412,8 @@
       "path": "docs/shots-ui-wiring/ui-02-tour.png",
       "width": 1440,
       "height": 900,
-      "bytes": 498907,
-      "sha256_12": "cc727a4677b8",
+      "bytes": 550236,
+      "sha256_12": "1739bc007dea",
       "note": "导览进行中（点击「开始」后）"
     },
     {
@@ -243,8 +421,8 @@
       "path": "docs/shots-ui-wiring/ui-03-first-person.png",
       "width": 1440,
       "height": 900,
-      "bytes": 224667,
-      "sha256_12": "8419d48e01b5",
+      "bytes": 268745,
+      "sha256_12": "b21002a8a526",
       "note": "第一人称（点击视角 fp）"
     },
     {
@@ -252,8 +430,8 @@
       "path": "docs/shots-ui-wiring/ui-04-night.png",
       "width": 1440,
       "height": 900,
-      "bytes": 220878,
-      "sha256_12": "7268d4ac29ac",
+      "bytes": 265473,
+      "sha256_12": "f1c01495c9d8",
       "note": "夜景（点击「夜晚」按钮，preset=[object Object]）"
     }
   ]

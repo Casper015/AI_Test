@@ -260,7 +260,17 @@ await runner.test('§3.3/§4/§5/§6/§8.3 全部字段通过，建筑/通道/�
   assertEqual(stats.obstacles, 12, '障碍数（12 栋建筑各一条）');
   // t62：layout 1.1.5 已为 10 栋 visitable 建筑注册内景（室内面 + 门洞通道面 + 机位）
   assertEqual(stats.walkable, zoneLayout.walkable.length, '可行走面数（应与切片一致）');
-  assertEqual(stats.walkable, 51, '可行走面数 = 8 原有 + 10 室内 + 10 门洞通道（t75）+ 22 B 区门外过渡台阶（t102）+ 2 亭入口门槛（t103）');
+  // t115：随 LAYOUT 1.1.20 同步（旧值 51 ⇒ 53）。组成 = 4 地面（广场/东西台基带/台北地面）+ 24 门外过渡台阶与门槛
+  // （t102 的 22 级 `-transition-N` + t103 的 2 条 `-threshold`）+ 5 台基面（tier1/tier2×3/tier3）+ 10 室内 + 10 门洞通道（t75）。
+  assertEqual(stats.walkable, 53, '可行走面数 = 4 地面 + 24 门外过渡台阶/门槛（t102 22 + t103 2）+ 5 台基面 + 10 室内 + 10 门洞通道（t75）');
+  // 结构锚定（不只钉总数）：kind 组成与过渡面计数逐条固定，任一来源变化都必须显式更新本条（防未来静默漂移）
+  const wkByKind = built.colliders.walkable.reduce((acc, w) => { acc[w.kind] = (acc[w.kind] ?? 0) + 1; return acc; }, {});
+  assertEqual(wkByKind.ground, 28, '地面类 28 = 4 原有地面 + 24 门外过渡台阶/门槛（t102/t103）');
+  assertEqual(wkByKind.terrace, 5, '台基类 5 = tier1 + tier2×3（南/北/中）+ tier3');
+  assertEqual(wkByKind.interior, 10, '室内类 10（每栋可进入建筑 1 个）');
+  assertEqual(wkByKind.passage, 10, '门洞通道类 10（t75）');
+  assertEqual(built.colliders.walkable.filter((w) => /-transition-\d+$/.test(w.id)).length, 22, 't102 门外过渡台阶 22 级');
+  assertEqual(built.colliders.walkable.filter((w) => /-threshold$/.test(w.id)).length, 2, 't103 亭入口门槛 2 条');
   assertEqual(stats.ramps, 8, '坡道/台阶数（= 本区 Δy ≠ 0 的道路段数）');
   assertEqual(stats.viewpoints, 4 + 9, "机位数 = 4 原有 + 9 内景机位（B-hall-main 复用既有 VP-B-interior 别名，故 10 栋对应 9 个新机位 + 1 个别名）");
   assertEqual(stats.lightAnchors, 24 + 20, '灯位数 = 24 中轴灯位 + 2×10 内景补光');
@@ -312,6 +322,80 @@ await runner.test('建筑世界坐标包围盒与 layout 槽位中心/占地一�
     assertClose(cz, slot.z, 6, `${slot.id} 中心 z 偏移过大`);
     assert(row.worldBounds.maxX - row.worldBounds.minX >= slot.w - 0.5, `${slot.id} 出檐后宽度不应小于槽位宽度`);
   }
+});
+
+/* ========================================================================== */
+runner.section('3b. 中轴体量分级（t38）：实测可见几何 ⇄ 登记口径**同轮**核对');
+/* ========================================================================== */
+
+await runner.test('t38：B 区中轴殿堂的**实测**可见高度序 = 登记 totalHeight 序（几何与登记同轮，无倒挂）', () => {
+  /* 口径三要素：
+     ① 口径：实测 = `built.stats.buildingMetrics[].worldBounds.maxY`（kit 真实几何包围盒，**不是**估值）；
+        登记 = `layout.slotVolumeCaliber().totalHeight`（layout 记录总高）。
+        注：`totalHeight` 是**已标注的估值口径**（verify-experience D1：取景/面板主路径一律用实测包围盒）
+        ⇒ 本断言只要求**序**一致（同轮不漂移），不要求数值相等。
+     ② 权威来源：`layout.AXIS_TIER_SPEC` / `axisTierRows()`（生产分级唯一权威源）+ 区域实测 metrics。
+     ③ 时点：`AXIS_TIER_SUMMARY.at` = LAYOUT_VERSION。 */
+  const ladder = LAYOUT.axisTierRows(undefined, { ladderOnly: true }).filter((r) => r.zone === ZONE);
+  assert(ladder.length >= 3, `B 区中轴殿堂应 ≥3 栋（实测 ${ladder.length}）`);
+  const measured = ladder.map((r) => {
+    const row = built.stats.buildingMetrics.find((m) => m.id === r.id);
+    assert(row, `${r.id} 缺实测 metrics`);
+    return { id: r.id, totalHeight: r.totalHeight, measuredMaxY: row.worldBounds.maxY, measuredEave: row.eaveHeightAbsolute, eaveAbs: r.eaveAbs };
+  });
+  const byReg = measured.slice().sort((a, b) => b.totalHeight - a.totalHeight).map((r) => r.id).join(',');
+  const byMeasured = measured.slice().sort((a, b) => b.measuredMaxY - a.measuredMaxY).map((r) => r.id).join(',');
+  assertEqual(byMeasured, byReg, `实测可见高度序必须与登记 totalHeight 序逐位一致（实测 ${byMeasured} vs 登记 ${byReg}）`);
+  /* 实测檐口高必须等于登记口径 eaveAbs（B 区地坪 = 0 ⇒ eaveAbs = eaveHeight）：把"几何 = 口径"钉死。 */
+  for (const r of measured) {
+    assertClose(r.measuredEave, r.eaveAbs, 0.006, `${r.id} 实测檐口高应 = 登记 eaveAbs（口径落地：几何与登记同源）`);
+  }
+  runner.info(`t38 实测序 ⇄ 登记序一致：${measured.slice().sort((a, b) => b.measuredMaxY - a.measuredMaxY).map((r) => `${r.id}(${r.measuredMaxY}/${r.totalHeight})`).join(' > ')}`);
+});
+
+await runner.test('t38：B 区主殿是**唯一**实测最高者且 ≥ 次高 × eaveMargin（最高档可见地压过次档）', () => {
+  const rows = built.stats.buildingMetrics.map((m) => ({ id: m.id, maxY: m.worldBounds.maxY }));
+  const sorted = rows.slice().sort((a, b) => b.maxY - a.maxY);
+  const top = sorted[0];
+  const runnerUp = sorted[1];
+  assertEqual(top.id, 'B-hall-main', `B 区实测最高者应为金銮殿（实测第一 = ${top.id}）`);
+  assert(sorted.filter((r) => r.maxY === top.maxY).length === 1, '实测最高者必须**唯一**（不得并列）');
+  const margin = LAYOUT.AXIS_TIER_SPEC.eaveMargin; // 下限取生产规格，不另写字面量
+  assert(top.maxY / runnerUp.maxY >= margin - 1e-9,
+    `主殿/次高 实测比 ${(top.maxY / runnerUp.maxY).toFixed(4)} 应 ≥ eaveMargin ${margin}（次高 = ${runnerUp.id}）`);
+  runner.info(`t38 B 区实测最高：${top.id} ${top.maxY}m / 次高 ${runnerUp.id} ${runnerUp.maxY}m = ${(top.maxY / runnerUp.maxY).toFixed(4)}（≥${margin}）`);
+});
+
+await runner.test('t38：主殿为 B 区**唯一**三层台基 + **唯一**重檐（檐数/台基层数由 grade 白名单与 TERRACES 派生）', () => {
+  const LADDER_B = LAYOUT.axisTierRows(undefined, { ladderOnly: true }).filter((r) => r.zone === ZONE);
+  const maxTiers = Math.max(...LADDER_B.map((r) => r.terraceTiers));
+  const tierHolders = LADDER_B.filter((r) => r.terraceTiers === maxTiers);
+  assertEqual(tierHolders.length, 1, `B 区台基层数最大者应唯一（实测 ${tierHolders.map((r) => r.id).join(',')}）`);
+  assertEqual(tierHolders[0].id, 'B-hall-main', '最大台基层数应归主殿');
+  assertEqual(maxTiers, Math.round(CONFIG.MODULES.terraceTotalHeight / CONFIG.MODULES.terraceTierHeight), '主殿台基层数 = 台基总高 / 每层高（令牌推导）');
+  const doubleEave = LADDER_B.filter((r) => r.eaves === 2);
+  assertEqual(doubleEave.length, 1, `B 区中轴殿堂重檐应唯一（实测 ${doubleEave.map((r) => r.id).join(',')}）`);
+  assertEqual(doubleEave[0].id, 'B-hall-main', '重檐应归主殿');
+  /* 与**实测几何**交叉核对：区域自报的台基段数（geometry 侧）与登记 TERRACES 段数一致，
+     且主殿实测檐口高 = 台基总高 + 檐高 × grade 因子（令牌推导，标定"几何 = 口径"）。 */
+  const terraceRecs = LAYOUT.TERRACES.filter((t) => t.zone === ZONE);
+  assertEqual(built.stats.terraces, terraceRecs.length, `区域台基段数应 = layout.TERRACES 的 B 区段数（实测 ${built.stats.terraces}）`);
+  assertEqual(terraceRecs.length, maxTiers, `登记台基段数应 = 主殿台基层数（实测 ${terraceRecs.length}）`);
+  assertEqual(terraceRecs.at(-1).y1, CONFIG.MODULES.terraceTotalHeight, '最上层台基顶 = MODULES.terraceTotalHeight');
+  const mainMetric = built.stats.buildingMetrics.find((m) => m.id === 'B-hall-main');
+  const expectEave = CONFIG.MODULES.terraceTotalHeight + CONFIG.MODULES.eaveHeight * CONFIG.GRADES[3].eaveHeightFactor;
+  assertClose(mainMetric.eaveHeightAbsolute, expectEave, 0.006, `主殿实测檐口高应 = 台基总高 + 檐高 × grade3 因子（${expectEave}）`);
+  runner.info(`t38 台基/檐数：主殿 ${maxTiers} 层台基（TERRACES ${terraceRecs.length} 段，区域实测 ${built.stats.terraces} 段）+ 重檐 ${doubleEave.length} 栋；实测檐口高 ${mainMetric.eaveHeightAbsolute} = ${CONFIG.MODULES.terraceTotalHeight} + ${CONFIG.MODULES.eaveHeight}×${CONFIG.GRADES[3].eaveHeightFactor}`);
+});
+
+await runner.test('t38：B 区**不得**出现「非 onWall 却实测高于主殿登记总高」的建筑（地上量级守卫）', () => {
+  const main = LAYOUT.slotVolumeCaliber(LAYOUT.SLOT_BY_ID['B-hall-main']);
+  const offenders = built.stats.buildingMetrics
+    .map((m) => ({ id: m.id, slot: LAYOUT.SLOT_BY_ID[m.id], maxY: m.worldBounds.maxY }))
+    .filter((r) => r.id !== 'B-hall-main' && r.slot && r.slot.onWall !== true && r.maxY > main.totalHeight)
+    .map((r) => `${r.id}(${r.maxY} > ${main.totalHeight})`);
+  assertEqual(offenders.length, 0, `B 区不得有地上建筑实测高过主殿登记总高：${offenders.join('、')}`);
+  runner.info(`t38 地上量级守卫：B 区 12 栋中实测高过主殿登记总高 ${main.totalHeight} 的地上建筑 0 栋`);
 });
 
 /* ========================================================================== */
@@ -650,7 +734,7 @@ const inRect = (b, x, z, pad = 0) => x >= b.minX - pad && x <= b.maxX + pad && z
  *     或者在数据侧统一由 UI「进入内景」直达（`interiorViewpointId` 路径，不依赖走查）。
  * 「可站立 / 不可穿墙 / 门洞通道可通行」三项对 10 栋一律要求通过（与是否有台明台阶无关）。
  */
-const WALK_IN_OK = new Set(['B-gate-front', 'B-hall-main']);
+// 旧下界口径的临时期望表已由下方『双向精确集合』取代（t115）；保留此注释说明历史，不再参与断言。
 
 await runner.test('可站立：每栋室内中心 probe().ok === true 且支撑高度 = 注册地坪（±0.05）', () => {
   for (const fact of interiorFacts) {
@@ -684,7 +768,15 @@ await runner.test('逐栋"能否从院落地坪走入门内"：实测记录 + �
   for (const b of blockedIn) {
     assert(Math.abs(b.step) > CONFIG.INTERACTION.step.maxStepHeight - 1e-6, `${b.id} 被挡但不是台明落差（step=${b.step}，reason=${b.reason}）`);
   }
-  assert(walkIn.length >= 4, `从地坪可走入门内至少应有 4 栋（实测 ${walkIn.length}）`);
+  // t115：把原来的下界（>=4）+ 单点断言收紧为**双向精确集合**（更强、非放宽）：
+  //   可走 7 栋（t102 的 22 级门外过渡台阶使 6 栋配殿 + 门殿均可从地坪走入）；
+  //   被挡 3 栋（金銮殿/中殿/后殿，台明 1.8~4.5m 且正面无注册台阶数据）—— 理由由上面"被挡必须是台基落差"与逐栋 step 断言给出。
+  // 该 2 栋 dual（B-side-west-main / B-side-east-main）在**本口径**（从院落地坪走入门内）下已可走；
+  // t65 的 41/43 是"登记入口外 1.2m"另一口径，两者不矛盾；生产 FP 口径由 t77 复判定。
+  const WALK_IN_EXPECTED = ['B-gate-front', 'B-side-west-south', 'B-side-east-south', 'B-side-west-main', 'B-side-east-main', 'B-side-west-rear', 'B-side-east-rear'];
+  const BLOCKED_EXPECTED = ['B-hall-main', 'B-hall-mid', 'B-hall-rear'];
+  assertEqual(walkIn.map((w) => w.id).sort().join(','), [...WALK_IN_EXPECTED].sort().join(','), `可走入门内的栋集必须精确等于预期（实测 ${walkIn.map((w) => w.id).join('/')}）`);
+  assertEqual(blockedIn.map((b) => b.id).sort().join(','), [...BLOCKED_EXPECTED].sort().join(','), `被挡栋集必须精确等于预期（实测 ${blockedIn.map((b) => b.id).join('/')}）`);
   assert(walkIn.some((w) => w.id === 'B-gate-front'), '门殿（门洞地面 0.45，落差 ≤0.5）必须可走入门内');
   runner.info(`从院落地坪走入门内：${walkIn.length}/10 可走（${walkIn.map((w) => `${w.id}(阶${w.step})`).join(' / ')}）；被台明落差挡住 ${blockedIn.length} 栋：${blockedIn.map((b) => `${b.id}(阶${b.step})`).join(' / ')} —— 台明正面无注册 ROAD（layout 侧缺口，与 verify-completeness §5.3 不连通清单同源）`);
 });

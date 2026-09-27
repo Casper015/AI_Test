@@ -1,0 +1,194 @@
+{
+ "protocol": {
+  "selectionAware": true,
+  "meaning": "修后：选中建筑就近落点优先",
+  "eyeHeight": 1.65,
+  "buildings": 79
+ },
+ "rows": [
+  {
+   "id": "B-hall-main",
+   "name": "金銮殿",
+   "spawnId": null,
+   "selectionLanding": {
+    "buildingId": "B-hall-main",
+    "kind": "facade",
+    "tier": 1
+   },
+   "selectionFallback": false,
+   "position": {
+    "x": 0,
+    "y": 6.15,
+    "z": -146
+   },
+   "mode": "fp",
+   "fp": true,
+   "anchorKind": "facade",
+   "distToFacade": 0,
+   "distToCenter": 30,
+   "judge": {
+    "surface": 4.5,
+    "blocked": false,
+    "inBounds": true,
+    "eyeOk": true,
+    "ok": true
+   },
+   "teleport": {
+    "buildingId": "B-hall-main",
+    "fallback": false,
+    "ok": true,
+    "kind": "facade",
+    "tier": 1,
+    "x": 0,
+    "y": 6.15,
+    "z": -146,
+    "surfaceY": 4.5,
+    "surfaceId": "WK-B-terrace-tier3",
+    "blockedBy": null,
+    "reasons": [],
+    "candidates": 1,
+    "slotName": "金銮殿"
+   },
+   "deterministic": true
+  },
+  {
+   "id": "C-hall-bed-main",
+   "name": "寝殿正殿",
+   "spawnId": null,
+   "selectionLanding": {
+    "buildingId": "C-hall-bed-main",
+    "kind": "facade",
+    "tier": 1
+   },
+   "selectionFallback": false,
+   "position": {
+    "x": 0,
+    "y": 4.05,
+    "z": 143
+   },
+   "mode": "fp",
+   "fp": true,
+   "anchorKind": "facade",
+   "distToFacade": 0,
+   "distToCenter": 25,
+   "judge": {
+    "surface": 2.4,
+    "blocked": false,
+    "inBounds": true,
+    "eyeOk": true,
+    "ok": true
+   },
+   "teleport": {
+    "buildingId": "C-hall-bed-main",
+    "fallback": false,
+    "ok": true,
+    "kind": "facade",
+    "tier": 1,
+    "x": 0,
+    "y": 4.05,
+    "z": 143,
+    "surfaceY": 2.4,
+    "surfaceId": "WK-C-bed-terrace-south",
+    "blockedBy": null,
+    "reasons": [],
+    "candidates": 1,
+    "slotName": "寝殿正殿"
+   },
+   "deterministic": true
+  },
+  {
+   "id": "C-gate-inner",
+   "name": "内廷门",
+   "spawnId": null,
+   "selectionLanding": {
+    "buildingId": "C-gate-inner",
+    "kind": "facade",
+    "tier": 1
+   },
+   "selectionFallback": false,
+   "position": {
+    "x": 0,
+    "y": 2.55,
+    "z": 76
+   },
+   "mode": "fp",
+   "fp": true,
+   "anchorKind": "facade",
+   "distToFacade": 0,
+   "distToCenter": 18,
+   "judge": {
+    "surface": 0.9,
+    "blocked": false,
+    "inBounds": true,
+    "eyeOk": true,
+    "ok": true
+   },
+   "teleport": {
+    "buildingId": "C-gate-inner",
+    "fallback": false,
+    "ok": true,
+    "kind": "facade",
+    "tier": 1,
+    "x": 0,
+    "y": 2.55,
+    "z": 76,
+    "surfaceY": 0.9,
+    "surfaceId": "WK-C-gate-inner-door-passage",
+    "blockedBy": null,
+    "reasons": [],
+    "candidates": 1,
+    "slotName": "内廷门"
+   },
+   "deterministic": true
+  },
+  {
+   "id": "F-tower-corner-nw",
+   "name": "西北角楼",
+   "spawnId": null,
+   "selectionLanding": {
+    "buildingId": "F-tower-corner-nw",
+    "kind": "entrance+0.9",
+    "tier": 2
+   },
+   "selectionFallback": false,
+   "position": {
+    "x": -304,
+    "y": 1.65,
+    "z": 467.9
+   },
+   "mode": "fp",
+   "fp": true,
+   "anchorKind": "entrance",
+   "distToFacade": 0.9,
+   "distToCenter": 13.9,
+   "judge": {
+    "surface": 0,
+    "blocked": false,
+    "inBounds": true,
+    "eyeOk": true,
+    "ok": true
+   },
+   "teleport": {
+    "buildingId": "F-tower-corner-nw",
+    "fallback": false,
+    "ok": true,
+    "kind": "entrance+0.9",
+    "tier": 2,
+    "x": -304,
+    "y": 1.65,
+    "z": 467.9,
+    "surfaceY": 0,
+    "surfaceId": "WK-F-berm-north",
+    "blockedBy": null,
+    "reasons": [],
+    "candidates": 2,
+    "slotName": "西北角楼"
+   },
+   "deterministic": true
+  }
+ ],
+ "maxFacade": 0.9,
+ "maxCenter": 30,
+ "allLegal": true,
+ "allDeterministic": true
+}

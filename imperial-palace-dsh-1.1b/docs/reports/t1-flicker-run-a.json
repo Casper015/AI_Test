@@ -1,0 +1,747 @@
+{
+ "protocol": {
+  "frames": 30,
+  "size": [
+   1440,
+   900
+  ],
+  "view": "oblique",
+  "quality": "medium",
+  "aa": "(档位默认)",
+  "ui": "1",
+  "phases": [
+   "live",
+   "nosmoke",
+   "smoke-lod",
+   "frame-60-lod"
+  ],
+  "drive": "页面自身 rAF + 每次捕获前 renderSystem.recordFrame(16)",
+  "metric": "unstablePixels = 相邻帧间发生过任何位差的**不同像素**数（阈值 0）"
+ },
+ "phases": [
+  {
+   "id": "live",
+   "candidate": "基线（现状，无任何干预）",
+   "setup": {},
+   "frames": 30,
+   "unstablePixels": 79,
+   "changedTotal": 1285,
+   "changedPerPair": [
+    44,
+    45,
+    45,
+    44,
+    43,
+    45,
+    46,
+    39,
+    49,
+    50,
+    41,
+    47,
+    44,
+    47,
+    48,
+    47,
+    41,
+    40,
+    43,
+    38,
+    41,
+    39,
+    45,
+    47,
+    48,
+    44,
+    44,
+    47,
+    44
+   ],
+   "changedMax": 50,
+   "maxChannelDelta": 232,
+   "pairsWithChange": 29,
+   "redChangedTotal": 448,
+   "cameraStable": true,
+   "envStable": false,
+   "elapsedDistinct": 30,
+   "elapsedSeries": [
+    0.55,
+    0.8833,
+    1.2167,
+    1.55,
+    1.8833,
+    2.2167,
+    2.55,
+    2.8833,
+    3.2167,
+    3.55,
+    3.8833,
+    4.2167,
+    4.55,
+    4.8833,
+    5.2167,
+    5.55,
+    5.8833,
+    6.2167,
+    6.55,
+    6.8833,
+    7.2167,
+    7.55,
+    7.8833,
+    8.2167,
+    8.55,
+    8.8833,
+    9.2167,
+    9.55,
+    9.8833,
+    10.2167
+   ],
+   "stepSeconds": null,
+   "mainFrames": [
+    10,
+    155
+   ],
+   "aa": {
+    "mode": "msaa",
+    "samples": 2,
+    "reason": "tier",
+    "contextFlagEffective": false
+   },
+   "smokeLodMaxPointPx": null,
+   "smokeVisibleEnd": true,
+   "camera": {
+    "x": 0,
+    "y": 520,
+    "z": -1180
+   },
+   "mode": "oblique",
+   "selectInfo": null,
+   "unstableTop": [
+    {
+     "x": 719,
+     "y": 402,
+     "count": 28,
+     "max": 122
+    },
+    {
+     "x": 719,
+     "y": 404,
+     "count": 28,
+     "max": 88
+    },
+    {
+     "x": 719,
+     "y": 500,
+     "count": 28,
+     "max": 94
+    },
+    {
+     "x": 719,
+     "y": 403,
+     "count": 27,
+     "max": 168
+    },
+    {
+     "x": 720,
+     "y": 403,
+     "count": 27,
+     "max": 136
+    },
+    {
+     "x": 720,
+     "y": 404,
+     "count": 27,
+     "max": 65
+    },
+    {
+     "x": 720,
+     "y": 421,
+     "count": 27,
+     "max": 89
+    },
+    {
+     "x": 719,
+     "y": 499,
+     "count": 27,
+     "max": 155
+    },
+    {
+     "x": 719,
+     "y": 635,
+     "count": 27,
+     "max": 179
+    },
+    {
+     "x": 720,
+     "y": 402,
+     "count": 27,
+     "max": 139
+    },
+    {
+     "x": 719,
+     "y": 422,
+     "count": 25,
+     "max": 103
+    },
+    {
+     "x": 719,
+     "y": 497,
+     "count": 25,
+     "max": 127
+    },
+    {
+     "x": 720,
+     "y": 498,
+     "count": 25,
+     "max": 139
+    },
+    {
+     "x": 719,
+     "y": 421,
+     "count": 24,
+     "max": 108
+    },
+    {
+     "x": 719,
+     "y": 498,
+     "count": 24,
+     "max": 232
+    },
+    {
+     "x": 720,
+     "y": 634,
+     "count": 24,
+     "max": 149
+    },
+    {
+     "x": 720,
+     "y": 635,
+     "count": 24,
+     "max": 149
+    },
+    {
+     "x": 720,
+     "y": 637,
+     "count": 24,
+     "max": 216
+    },
+    {
+     "x": 720,
+     "y": 499,
+     "count": 23,
+     "max": 153
+    },
+    {
+     "x": 720,
+     "y": 500,
+     "count": 23,
+     "max": 91
+    }
+   ],
+   "unstableByCol": {
+    "717": 4,
+    "718": 17,
+    "719": 20,
+    "720": 20,
+    "721": 17,
+    "722": 1
+   },
+   "samplePairs": [
+    {
+     "pair": "0->1",
+     "changed": 44,
+     "redChanged": 12,
+     "maxDelta": 138,
+     "bbox": {
+      "minX": 718,
+      "minY": 400,
+      "maxX": 721,
+      "maxY": 637
+     }
+    },
+    {
+     "pair": "1->2",
+     "changed": 45,
+     "redChanged": 17,
+     "maxDelta": 175,
+     "bbox": {
+      "minX": 718,
+      "minY": 400,
+      "maxX": 721,
+      "maxY": 637
+     }
+    },
+    {
+     "pair": "2->3",
+     "changed": 45,
+     "redChanged": 13,
+     "maxDelta": 194,
+     "bbox": {
+      "minX": 717,
+      "minY": 400,
+      "maxX": 721,
+      "maxY": 637
+     }
+    },
+    {
+     "pair": "3->4",
+     "changed": 44,
+     "redChanged": 15,
+     "maxDelta": 129,
+     "bbox": {
+      "minX": 717,
+      "minY": 400,
+      "maxX": 721,
+      "maxY": 637
+     }
+    }
+   ]
+  },
+  {
+   "id": "nosmoke",
+   "candidate": "香炉烟粒子（隐藏 environment-smoke）",
+   "setup": {
+    "hide": [
+     "environment-smoke"
+    ]
+   },
+   "frames": 30,
+   "unstablePixels": 0,
+   "changedTotal": 0,
+   "changedPerPair": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "changedMax": 0,
+   "maxChannelDelta": 0,
+   "pairsWithChange": 0,
+   "redChangedTotal": 0,
+   "cameraStable": true,
+   "envStable": false,
+   "elapsedDistinct": 30,
+   "elapsedSeries": [
+    11.15,
+    11.4833,
+    11.8167,
+    12.15,
+    12.4833,
+    12.8167,
+    13.15,
+    13.4833,
+    13.8167,
+    14.15,
+    14.4833,
+    14.8167,
+    15.15,
+    15.4833,
+    15.8167,
+    16.15,
+    16.4833,
+    16.8167,
+    17.15,
+    17.4833,
+    17.8167,
+    18.15,
+    18.4833,
+    18.8167,
+    19.15,
+    19.4833,
+    19.8167,
+    20.15,
+    20.4833,
+    20.8167
+   ],
+   "stepSeconds": null,
+   "mainFrames": [
+    169,
+    314
+   ],
+   "aa": {
+    "mode": "msaa",
+    "samples": 2,
+    "reason": "tier",
+    "contextFlagEffective": false
+   },
+   "smokeLodMaxPointPx": null,
+   "smokeVisibleEnd": false,
+   "camera": {
+    "x": 0,
+    "y": 520,
+    "z": -1180
+   },
+   "mode": "oblique",
+   "selectInfo": null,
+   "unstableTop": [],
+   "unstableByCol": {},
+   "samplePairs": [
+    {
+     "pair": "0->1",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "1->2",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "2->3",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "3->4",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    }
+   ]
+  },
+  {
+   "id": "smoke-lod",
+   "candidate": "最小修复：烟柱投影点径 <1px 时整柱不绘制（LOD 门限 1px）",
+   "setup": {
+    "lod": 1
+   },
+   "frames": 30,
+   "unstablePixels": 0,
+   "changedTotal": 0,
+   "changedPerPair": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "changedMax": 0,
+   "maxChannelDelta": 0,
+   "pairsWithChange": 0,
+   "redChangedTotal": 0,
+   "cameraStable": true,
+   "envStable": false,
+   "elapsedDistinct": 30,
+   "elapsedSeries": [
+    21.75,
+    22.0833,
+    22.4167,
+    22.75,
+    23.0833,
+    23.4167,
+    23.75,
+    24.0833,
+    24.4167,
+    24.75,
+    25.0833,
+    25.4167,
+    25.75,
+    26.0833,
+    26.4167,
+    26.75,
+    27.0833,
+    27.4167,
+    27.75,
+    28.0833,
+    28.4167,
+    28.75,
+    29.0833,
+    29.4167,
+    29.75,
+    30.0833,
+    30.4167,
+    30.75,
+    31.0833,
+    31.4167
+   ],
+   "stepSeconds": null,
+   "mainFrames": [
+    328,
+    473
+   ],
+   "aa": {
+    "mode": "msaa",
+    "samples": 2,
+    "reason": "tier",
+    "contextFlagEffective": false
+   },
+   "smokeLodMaxPointPx": 0.5295,
+   "smokeVisibleEnd": false,
+   "camera": {
+    "x": 0,
+    "y": 520,
+    "z": -1180
+   },
+   "mode": "oblique",
+   "selectInfo": null,
+   "unstableTop": [],
+   "unstableByCol": {},
+   "samplePairs": [
+    {
+     "pair": "0->1",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "1->2",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "2->3",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "3->4",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    }
+   ]
+  },
+  {
+   "id": "frame-60-lod",
+   "candidate": "最小修复 + 精确 1 帧 @60fps（判据相位）",
+   "setup": {
+    "control": 0.016666666666666666,
+    "lod": 1
+   },
+   "frames": 30,
+   "unstablePixels": 0,
+   "changedTotal": 0,
+   "changedPerPair": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "changedMax": 0,
+   "maxChannelDelta": 0,
+   "pairsWithChange": 0,
+   "redChangedTotal": 0,
+   "cameraStable": true,
+   "envStable": false,
+   "elapsedDistinct": 30,
+   "elapsedSeries": [
+    32.2833,
+    32.25,
+    32.2667,
+    32.2833,
+    32.3,
+    32.3167,
+    32.3333,
+    32.35,
+    32.3667,
+    32.3833,
+    32.4,
+    32.4167,
+    32.4333,
+    32.45,
+    32.4667,
+    32.4833,
+    32.5,
+    32.5167,
+    32.5333,
+    32.55,
+    32.5667,
+    32.5833,
+    32.6,
+    32.6167,
+    32.6333,
+    32.65,
+    32.6667,
+    32.6833,
+    32.7,
+    32.7167
+   ],
+   "stepSeconds": 0.016666666666666666,
+   "mainFrames": [
+    487,
+    516
+   ],
+   "aa": {
+    "mode": "msaa",
+    "samples": 2,
+    "reason": "tier",
+    "contextFlagEffective": false
+   },
+   "smokeLodMaxPointPx": 0.5296,
+   "smokeVisibleEnd": false,
+   "camera": {
+    "x": 0,
+    "y": 520,
+    "z": -1180
+   },
+   "mode": "oblique",
+   "selectInfo": null,
+   "unstableTop": [],
+   "unstableByCol": {},
+   "samplePairs": [
+    {
+     "pair": "0->1",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "1->2",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "2->3",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    },
+    {
+     "pair": "3->4",
+     "changed": 0,
+     "redChanged": 0,
+     "maxDelta": 0,
+     "bbox": null
+    }
+   ]
+  }
+ ],
+ "identify": null,
+ "pointLights": [
+  {
+   "visible": false,
+   "intensity": 0,
+   "base": null,
+   "pos": [
+    0,
+    0,
+    0
+   ],
+   "anchor": null
+  },
+  {
+   "visible": false,
+   "intensity": 0,
+   "base": null,
+   "pos": [
+    0,
+    0,
+    0
+   ],
+   "anchor": null
+  },
+  {
+   "visible": false,
+   "intensity": 0,
+   "base": null,
+   "pos": [
+    0,
+    0,
+    0
+   ],
+   "anchor": null
+  }
+ ],
+ "highlight": {
+  "children": 2,
+  "visible": [
+   false,
+   false
+  ],
+  "opacity": [
+   0.45,
+   0.95
+  ]
+ }
+}

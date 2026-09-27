@@ -221,13 +221,162 @@ const WIRED_FIELDS = Object.freeze({
   backgroundCandidates: 'candidates',
 });
 
+/**
+ * t29：**结构锚定**地取出某个函数的完整体（签名后的 `{` … 与之匹配的 `}`），替代旧的
+ * `main.slice(indexOf('function compactReport()'), +4000)` **固定字符窗口**。
+ *
+ * 为什么不能再用固定窗口（本工程同族问题已多次踩）：
+ *   · 断言若锚定"字符位置"，任何**与判据无关**的产品改动（在函数中间新增字段/注释/行）都会把
+ *     靠后的字段推出窗口 ⇒ 无谓弄红别人的护栏。实测：`backgroundCandidates` 已被推到第 4022 字符
+ *     （`src/main.js` 的 `compactReport()` 因他人在制改动增行），旧写法直接红。
+ *   · 反过来，它也会**静默漏判**：把窗口内的字段删掉但窗口外的函数主体仍在时，判据照旧通过；
+ *     窗口之外的字段（例如追加到末尾的 `antialias`）实际**从未**被这条断言覆盖。
+ * 因此断言锚定**结构**：函数体边界（或运行时 `api.stats()` / `<pre id="palace-stats-json">` 实读，
+ * 见本文件 CORE_STATS_LIVE 分支），与字段在源码中的偏移量无关。
+ *
+ * 扫描器口径（只做必要的词法状态，足以穿过 main.js 里的真实写法）：
+ *   · 跳过 `'…'`、`"…"`、`` `…` ``（含 `${…}` 嵌套表达式）内的所有括号/注释符；
+ *   · 跳过 `//…` 行注释与 `/ *…* /` 块注释；
+ *   · 跳过正则字面量（按前一个有效字符启发式判定，含字符类 `[…]`）；
+ *   · 只对**代码态**的花括号计深度，深度回到 0 即函数体结束。
+ * 返回 `{ start, braceStart, end, body }`；找不到签名/未闭合时返回 `null`（调用方必须断言非空）。
+ */
+function extractFunctionBody(source, signature) {
+  const start = source.indexOf(signature);
+  if (start < 0) return null;
+  const braceStart = source.indexOf('{', start + signature.length);
+  if (braceStart < 0) return null;
+  const isRegexStart = (i) => {
+    let j = i - 1;
+    while (j >= 0 && /\s/.test(source[j])) j -= 1;
+    if (j < 0) return true;
+    if ('([{,;:=!&|?+-*%~^<>'.includes(source[j])) return true;
+    // 关键字后的 `/` 也是正则（return /re/、typeof /re/ 等）
+    const before = source.slice(Math.max(0, j - 6), j + 1);
+    return /(?:^|[^\w$])(?:return|typeof|instanceof|case|in|of|new|delete|void|do|else|yield|await)$/.test(before);
+  };
+  const skipRegex = (i) => {
+    let j = i + 1;
+    let inClass = false;
+    for (; j < source.length; j += 1) {
+      const c = source[j];
+      if (c === '\\') { j += 1; continue; }
+      if (c === '[') inClass = true;
+      else if (c === ']') inClass = false;
+      else if (c === '/' && !inClass) return j;
+      else if (c === '\n') return i; // 不是正则（换行截断）⇒ 当作普通字符
+    }
+    return i;
+  };
+  let depth = 0;
+  const templateExpr = []; // 记录进入 `${` 时的深度
+  let mode = 'code';
+  for (let i = braceStart; i < source.length; i += 1) {
+    const c = source[i];
+    const c2 = source[i + 1];
+    if (mode === 'line') { if (c === '\n') mode = 'code'; continue; }
+    if (mode === 'block') { if (c === '*' && c2 === '/') { mode = 'code'; i += 1; } continue; }
+    if (mode === 'sq' || mode === 'dq') {
+      if (c === '\\') { i += 1; continue; }
+      if ((mode === 'sq' && c === "'") || (mode === 'dq' && c === '"')) mode = 'code';
+      continue;
+    }
+    if (mode === 'tpl') {
+      if (c === '\\') { i += 1; continue; }
+      if (c === '`') { mode = 'code'; continue; }
+      if (c === '$' && c2 === '{') { templateExpr.push(depth); depth += 1; mode = 'code'; i += 1; }
+      continue;
+    }
+    // mode === 'code'
+    if (c === '/' && c2 === '/') { mode = 'line'; i += 1; continue; }
+    if (c === '/' && c2 === '*') { mode = 'block'; i += 1; continue; }
+    if (c === "'") { mode = 'sq'; continue; }
+    if (c === '"') { mode = 'dq'; continue; }
+    if (c === '`') { mode = 'tpl'; continue; }
+    if (c === '/' && isRegexStart(i)) { i = skipRegex(i); continue; }
+    if (c === '{') { depth += 1; continue; }
+    if (c === '}') {
+      depth -= 1;
+      if (templateExpr.length > 0 && depth === templateExpr[templateExpr.length - 1]) {
+        templateExpr.pop();
+        mode = 'tpl';
+        continue;
+      }
+      if (depth <= 0) return { start, braceStart, end: i + 1, body: source.slice(braceStart, i + 1) };
+    }
+  }
+  return null;
+}
+
+/**
+ * 提取器自证（judge-the-judge）：用**合成的刁钻源码**证明括号配对不被字符串/模板/注释/正则里的
+ * 花括号带偏 —— 这条断言保证"结构锚定"本身可靠，而不是换了个更隐蔽的脆弱写法。
+ */
+await runner.test('t29 结构提取器自证：{ } 在字符串/模板/注释/正则里都不得影响函数体边界', () => {
+  const cases = [
+    {
+      label: '字符串内含 } 与 {',
+      src: "function f() {\n  const a = '}';\n  const b = \"{\";\n  return { x: a, y: b };\n}\nfunction g() { return 1; }\n",
+      expect: "{\n  const a = '}';\n  const b = \"{\";\n  return { x: a, y: b };\n}",
+    },
+    {
+      label: '模板字面量 + ${…} 嵌套表达式（含对象字面量）',
+      src: 'function f() {\n  const s = `a${ {k: "}"}.k }b`;\n  return { s };\n}\nconst after = 1;\n',
+      expect: '{\n  const s = `a${ {k: "}"}.k }b`;\n  return { s };\n}',
+    },
+    {
+      label: '行注释/块注释内含花括号',
+      src: 'function f() {\n  // } 不计入\n  /* { 也不算 */\n  return 1;\n}\n',
+      expect: '{\n  // } 不计入\n  /* { 也不算 */\n  return 1;\n}',
+    },
+    {
+      label: '正则字面量内含花括号与字符类',
+      src: 'function f() {\n  const re = /\\{[^}]*\\}/;\n  return re.test("{}");\n}\n',
+      expect: '{\n  const re = /\\{[^}]*\\}/;\n  return re.test("{}");\n}',
+    },
+    {
+      label: '转义引号后的括号不误判',
+      src: "function f() {\n  const a = '\\'}';\n  return { a };\n}\n",
+      expect: "{\n  const a = '\\'}';\n  return { a };\n}",
+    },
+    {
+      label: '嵌套对象/数组与三元表达式',
+      src: 'function f() {\n  return { a: { b: [1, 2, { c: 3 }] }, d: true ? { e: 1 } : {} };\n}\n',
+      expect: '{\n  return { a: { b: [1, 2, { c: 3 }] }, d: true ? { e: 1 } : {} };\n}',
+    },
+  ];
+  for (const c of cases) {
+    const got = extractFunctionBody(c.src, 'function f(');
+    assert(got, `[${c.label}] 应能定位函数体`);
+    assertEqual(got.body, c.expect, `[${c.label}] 切片应恰为函数体`);
+    assertEqual(got.end, got.braceStart + c.expect.length, `[${c.label}] end 应与函数体长度自洽`);
+    assertEqual(c.src[got.braceStart], '{', `[${c.label}] braceStart 应指向函数体起始花括号`);
+    assertEqual(c.src[got.end - 1], '}', `[${c.label}] end-1 应指向函数体闭合花括号`);
+  }
+  assertEqual(extractFunctionBody('const x = 1;', 'function f('), null, '签名不存在时应返回 null（调用方必须断言，不得静默通过）');
+
+  // 直接编码**本卡报告的失败模式**：字段落在第 4022 字符时，旧"前 4000 字符窗口"会红/漏判，
+  // 结构锚定不受偏移影响。合成源码：`tailField` 位于 offset > 4000。
+  const padding = '  // pad\n'.repeat(700);
+  const synthetic = `function f() {\n${padding}  return { tailField: env.background.x, tailTarget: renderSystem.describeOutputChain() };\n}\nfunction after() { return 1; }\n`;
+  const offset = synthetic.indexOf('tailField:') - synthetic.indexOf('function f(');
+  assert(offset > 4000, `[合成] 末尾字段应位于旧窗口之外（实测 offset=${offset}）`);
+  const extracted = extractFunctionBody(synthetic, 'function f(');
+  assert(extracted && extracted.body.includes('tailField:') && extracted.body.includes('tailTarget:'), '[合成] 结构锚定应覆盖窗口之外的末尾字段');
+  assert(!synthetic.slice(synthetic.indexOf('function f('), synthetic.indexOf('function f(') + 4000).includes('tailField:'), '[合成] 旧写法（固定 4000 窗口）确实覆盖不到该字段 —— 复现 t29 报告的失败模式');
+  runner.info(`结构提取器自证 ${cases.length} 例（字符串/模板+${'${}'}/注释/正则/转义/嵌套）+ 合成"offset=${offset} 越窗字段"1 例（旧窗口 miss / 结构锚定命中）`);
+});
+
 await runner.test('compactReport() 已接线 8 个背景/雾字段（?stats=1 的 DOM 报告）', () => {
   const mainPath = join(ROOT, 'src', 'main.js');
   assert(existsSync(mainPath), 'src/main.js 应存在');
   const main = readFileSync(mainPath, 'utf8');
-  const start = main.indexOf('function compactReport()');
-  assert(start >= 0, 'src/main.js 应包含 compactReport()');
-  const compact = main.slice(start, start + 4000);
+  const extracted = extractFunctionBody(main, 'function compactReport(');
+  assert(extracted, 'src/main.js 应包含 compactReport() 且花括号成对（结构锚定：不再用固定字符窗口）');
+  const compact = extracted.body;
+  // 结构自证：切片以 `}` 收尾（函数体闭合），且**包含签名之后到函数末尾的全部内容**
+  assert(/^\s*\{/.test(compact) && /\}\s*$/.test(compact), 'compactReport() 切片应为完整函数体（以 { 开头、以 } 收尾）');
+  runner.info(`compactReport() 函数体 ${compact.length} 字符（旧写法仅取前 4000 ⇒ 首尾字段偏移无关；本次修复动机见 t29）`);
   for (const [field, path] of Object.entries(WIRED_FIELDS)) {
     assert(new RegExp(`${field}\\s*:`).test(compact), `compactReport() 应包含字段 ${field}`);
     const fromEnv = new RegExp(`${field}\\s*:\\s*env\\.background`).test(compact);

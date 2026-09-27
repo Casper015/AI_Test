@@ -22,7 +22,7 @@
 
 import * as THREE from 'three';
 import { CONFIG, CAMERA, INTERACTION, ORIENTATION, EVENTS, QUALITY } from '../shared/config.js';
-import { ENVELOPE, TERRAIN_EXTENT, TOUR_POINTS, VIEWPOINTS, WALKABLE, OBSTACLES, floorYAt, walkableAt } from '../shared/layout.js';
+import { ENVELOPE, TERRAIN_EXTENT, TOUR_POINTS, VIEWPOINTS, WALKABLE, OBSTACLES, SLOT_BY_ID, floorYAt, walkableAt } from '../shared/layout.js';
 import {
   obstacleBlocksPoint,
   interiorRecordForViewpointId,
@@ -58,7 +58,7 @@ function orbitOffset({ distance, polar, azimuth }) {
 }
 
 /** 操作面（t9 的 UI 与 rig 共用同一套输入语义，避免第二套控制逻辑）。 */
-export const INPUT_KINDS = Object.freeze(['rotate', 'zoom', 'pan', 'reset']);
+export const INPUT_KINDS = Object.freeze(['rotate', 'zoom', 'pan', 'reset', 'jump']);
 
 /* -------------------------------------------------------------------------- */
 /*  默认机位（全部来自 layout/config，不写字面坐标）                            */
@@ -560,6 +560,8 @@ export function createFpSolver({ config = CONFIG } = {}) {
   function step1(from, dirX, dirZ, distance, options = {}) {
     const obstacles = options.obstacles ?? OBSTACLES;
     const feetY = (from.y ?? 0) - config.CAMERA.fpEyeHeight;
+    /** t2：滞空水平移动开关（见 tryMove 内注释）；默认 false ⇒ 既有步行语义逐字不变。 */
+    const airborne = options.airborne === true;
     let x = from.x;
     let z = from.z;
     const blocked = [];
@@ -583,15 +585,23 @@ export function createFpSolver({ config = CONFIG } = {}) {
         pushReason('noSurface');
         return false;
       }
-      // t142：按 CONTRACTS.md:638/:1018「上 ≤ maxStepHeight」——恰好等于阈值可跨，超阈才挡（去掉 1e-6 松弛）
-      if (surfaceY - feetY > step.maxStepHeight + BOUNDARY_EPS) {
-        pushReason('stepTooHigh');
-        return false;
-      }
-      // t142：按契约「下 ≤ snapDownDistance」——恰好等于阈值可跨，更深才挡（严格 < 改为 > 的等价含界形式）
-      if (feetY - surfaceY > step.snapDownDistance + BOUNDARY_EPS) {
-        pushReason('dropTooDeep');
-        return false;
+      /**
+       * t2：**滞空水平移动**（`options.airborne === true`）只用同一套水平约束
+       * （包络 / 可行走面存在 / 障碍盒含门洞 / 子步进防隧穿），**不**套用下面两条**步行**台阶阈值：
+       * 飞行中脚底本来就在地面上方，仍套用会被 `dropTooDeep` 全面拒绝（实测寸步难行）。
+       * 默认路径（非 airborne）逐字未变 —— 不是放宽既有判据，而是给"飞行"另一条语义。
+       */
+      if (!airborne) {
+        // t142：按 CONTRACTS.md:638/:1018「上 ≤ maxStepHeight」——恰好等于阈值可跨，超阈才挡（去掉 1e-6 松弛）
+        if (surfaceY - feetY > step.maxStepHeight + BOUNDARY_EPS) {
+          pushReason('stepTooHigh');
+          return false;
+        }
+        // t142：按契约「下 ≤ snapDownDistance」——恰好等于阈值可跨，更深才挡（严格 < 改为 > 的等价含界形式）
+        if (feetY - surfaceY > step.snapDownDistance + BOUNDARY_EPS) {
+          pushReason('dropTooDeep');
+          return false;
+        }
       }
       for (const obstacle of obstacles) {
         if (blocks(obstacle, nx, nz, feetY)) {
@@ -644,11 +654,49 @@ export function createFpSolver({ config = CONFIG } = {}) {
     }
 
     const surfaceY = floorYAt(x, z);
-    const y = (surfaceY === null ? from.y : surfaceY + config.CAMERA.fpEyeHeight);
-    return { x, z, y, blocked };
+    // t2：滞空时**不**把眼高吸附到地面（高度由跳跃内核逐帧积分），但把落脚面高一起上报
+    const y = airborne ? (from.y ?? 0) : (surfaceY === null ? from.y : surfaceY + config.CAMERA.fpEyeHeight);
+    return { x, z, y, surfaceY, blocked };
   }
 
   return { step: step1 };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  t15：选中建筑的「就近可站点」推导（**纯函数：只读 layout/registry，不改任何状态**） */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 候选点生成（**固定顺序 ⇒ 确定性**；顺序 = 由近及远，保证"落在选中物**旁**"）：
+ *   ① `door.facade`（门外锚点，CONTRACTS §4.1.1「贴门取地面一律用 facade」）沿 `outward` 法线外推 0/0.9/1.8/2.7/3.6 m；
+ *   ② 无门洞建筑用 `entrance` 作锚点、同一组外推（外法线取锚点相对足迹中心的**主轴**分量，不解析字符串）；
+ *   ③ 足迹四边中点外推 1.0/2.0/3.0 m（边序固定 −z → +z → −x → +x）。
+ */
+function fpLandingCandidates(slot) {
+  const out = [];
+  const bounds = slot.bounds;
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cz = (bounds.minZ + bounds.maxZ) / 2;
+  const push = (x, z, tier, kind) => out.push({ x, z, tier, kind });
+  const OFFSETS = [0, 0.9, 1.8, 2.7, 3.6];
+  const facade = slot.door?.facade ?? null;
+  if (facade) {
+    const v = ORIENTATION.facingVectors[facade.outward] ?? { x: 0, z: 0 };
+    for (const d of OFFSETS) push(facade.x + v.x * d, facade.z + v.z * d, 1, d === 0 ? 'facade' : `facade+${d}`);
+  }
+  const entrance = slot.entrance ?? null;
+  if (entrance) {
+    const dx = entrance.x - cx;
+    const dz = entrance.z - cz;
+    const v = Math.abs(dx) >= Math.abs(dz) ? { x: Math.sign(dx) || 1, z: 0 } : { x: 0, z: Math.sign(dz) || 1 };
+    for (const d of OFFSETS) push(entrance.x + v.x * d, entrance.z + v.z * d, 2, d === 0 ? 'entrance' : `entrance+${d}`);
+  }
+  for (const [sx, sz, side] of [[0, -1, '-z'], [0, 1, '+z'], [-1, 0, '-x'], [1, 0, '+x']]) {
+    const bx = sx === 0 ? cx : sx < 0 ? bounds.minX : bounds.maxX;
+    const bz = sz === 0 ? cz : sz < 0 ? bounds.minZ : bounds.maxZ;
+    for (const d of [1.0, 2.0, 3.0]) push(bx + sx * d, bz + sz * d, 3, `side${side}+${d}`);
+  }
+  return out;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -695,14 +743,18 @@ export function createCameraRig({
   let pitch = 0;
   let moving = false;
   let fpActive = false;
+  /** t15：最近一次"选中建筑就近落点"的推导读数（诊断/验收；**只读**，不影响任何判定） */
+  let lastSelectionLanding = null;
   let savedFp = null;
   let solver = collisionSolver ?? createFpSolver({ config });
   /** 最近一次应用的机位规格（判断"同模式换目标"用） */
   let appliedSpec = null;
   const keys = new Set();
-  const stats = { transitions: 0, settled: 0, fpEntries: 0, fpExits: 0, blockedMoves: 0, inputEvents: 0 };
+  const stats = { transitions: 0, settled: 0, fpEntries: 0, fpExits: 0, blockedMoves: 0, inputEvents: 0, fpJumps: 0 };
   const disposers = [];
   const smooth = { y: null, velocity: 0 };
+  /** t2：起跳冷却剩余（秒；由 updateFp 逐帧推进）。 */
+  let jumpCooldown = 0;
 
   const transition = {
     active: false,
@@ -893,16 +945,100 @@ export function createCameraRig({
     return spec;
   }
 
-  /** 第一人称进入：停在最近的有效可行走点（优先离当前机位最近的 fp-spawn），记录原机位（§5.4）。 */
-  function enterFp({ source = 'unknown', instant = false, spawnId = null, position: forced = null } = {}) {
+/**
+ * 单个落点合法性（口径与 t105 的 `judge` 一致，**未放宽**）：
+ *   可站立（有可行走面 ∧ `enterable !== false` ∧ 脚高处无任何障碍）∧ 包络内 ∧ 眼高逐值 `= 面高 + fpEyeHeight`。
+ * **只读**：不写 position/target/state。
+ */
+function validateFpLanding(x, z, { buildingId = null, tier = null, kind = null } = {}) {
+  const surfaceY = floorYAt(x, z);
+  const surfaces = surfaceY === null ? [] : walkableAt(x, z);
+  const surface = surfaces.find((s) => Math.abs((s.y ?? 0) - surfaceY) < 1e-9) ?? surfaces[0] ?? null;
+  const inEnvelope = x >= ENVELOPE.minX && x <= ENVELOPE.maxX && z >= ENVELOPE.minZ && z <= ENVELOPE.maxZ;
+  const inTerrain = x >= TERRAIN_EXTENT.minX && x <= TERRAIN_EXTENT.maxX && z >= TERRAIN_EXTENT.minZ && z <= TERRAIN_EXTENT.maxZ;
+  const enterable = surface ? surface.enterable !== false : false;
+  const obstacles = registry?.allObstacles ? registry.allObstacles() : OBSTACLES;
+  const height = config.INTERACTION.player.height;
+  const radius = config.INTERACTION.player.radius;
+  const blocker = surfaceY === null ? null : obstacles.find((o) => obstacleBlocksPoint(o, { x, z, feetY: surfaceY, height, radius })) ?? null;
+  const y = surfaceY === null ? null : surfaceY + cam.fpEyeHeight; // 逐值关系：由面高直接算，不留浮点漂移
+  const reasons = [];
+  if (surfaceY === null) reasons.push('noSurface');
+  if (!inTerrain) reasons.push('outsideTerrain');
+  if (!enterable) reasons.push('notEnterable');
+  if (blocker) reasons.push(blocker.buildingId ?? blocker.id ?? 'blocked');
+  return {
+    ok: reasons.length === 0,
+    x, z, y,
+    surfaceY,
+    surfaceId: surface?.id ?? null,
+    surfaceKind: surface?.kind ?? null,
+    inEnvelope,
+    inTerrain,
+    enterable,
+    blockedBy: blocker ? blocker.buildingId ?? blocker.id ?? 'blocked' : null,
+    reasons,
+    buildingId, tier, kind,
+  };
+}
+
+/**
+ * 选中建筑的落点推导（**纯函数**）：按固定候选顺序返回**第一个**合法点；全不合法则 `ok:false` + 逐候选原因。
+ * 返回对象含 `attempts`（每个候选的通过/失败原因）⇒ 失败可复核、可断言，不静默。
+ */
+function fpLandingForSelection(buildingId) {
+  const slot = buildingId ? SLOT_BY_ID?.[buildingId] ?? null : null;
+  if (!slot || !slot.bounds) return null;
+  const attempts = [];
+  for (const c of fpLandingCandidates(slot)) {
+    const v = validateFpLanding(c.x, c.z, { buildingId, tier: c.tier, kind: c.kind });
+    attempts.push({ x: c.x, z: c.z, tier: c.tier, kind: c.kind, ok: v.ok, reasons: v.reasons });
+    if (v.ok) {
+      const cx = (slot.bounds.minX + slot.bounds.maxX) / 2;
+      const cz = (slot.bounds.minZ + slot.bounds.maxZ) / 2;
+      return { ...v, attempts, aim: { x: cx, y: v.surfaceY ?? 0, z: cz }, slotName: slot.name ?? null };
+    }
+  }
+  return { ok: false, buildingId, x: null, y: null, z: null, surfaceY: null, surfaceId: null, reasons: ['noStandablePointNearSelection'], attempts, slotName: slot.name ?? null };
+}
+
+  /**
+   * 第一人称进入：**优先落在选中建筑旁**（t15），否则停在最近的有效可行走点（离当前机位最近的 fp-spawn），记录原机位（§5.4）。
+   *
+   * 落点优先级（`spawnId` / `position` 显式给出者一律**优先且不做任何推导**，保证既有流程零变化）：
+   *   ① `position`（强制落点，测试/脱困用）→ ② `spawnId`（已登记出生点）→ ③ **选中建筑的就近可站点**（t15）
+   *   → ④ 离当前机位最近的 `fp-spawn`（原行为，一字未改）。
+   * ③ 的推导是**纯函数**（`fpLandingForSelection`，只读 layout/registry）：先算后改 ⇒ 失败时**不会**产生半应用的位移。
+   * `selectionOnly: true` 时若选中建筑没有合法落点 ⇒ 直接返回 `null`（**不改动任何状态**，供需要严格语义的调用方使用）。
+   */
+  function enterFp({ source = 'unknown', instant = false, spawnId = null, position: forced = null, selectionAware = true, selectionOnly = false } = {}) {
     if (fpActive) return null;
+    const selectionId = !spawnId && !forced && selectionAware ? store?.state?.selectedBuildingId ?? null : null;
+    const landing = selectionId ? fpLandingForSelection(selectionId) : null;
+    lastSelectionLanding = {
+      buildingId: selectionId,
+      fallback: Boolean(selectionId) && !landing?.ok,
+      ok: Boolean(landing?.ok),
+      kind: landing?.kind ?? null,
+      tier: landing?.tier ?? null,
+      x: landing?.x ?? null,
+      y: landing?.y ?? null,
+      z: landing?.z ?? null,
+      surfaceY: landing?.surfaceY ?? null,
+      surfaceId: landing?.surfaceId ?? null,
+      blockedBy: landing?.blockedBy ?? null,
+      reasons: landing?.reasons ?? [],
+      candidates: landing?.attempts?.length ?? 0,
+      slotName: landing?.slotName ?? null,
+    };
+    if (selectionOnly && selectionId && !landing?.ok) return null;
     const near = spawnId
       ? { viewpoint: resolveViewpoint(spawnId, registry) }
       : registry?.nearestFpSpawn
         ? registry.nearestFpSpawn(position)
         : { viewpoint: resolveFpSpawn(position, registry) };
-    const spawn = near?.viewpoint ?? resolveFpSpawn(position, registry);
-    const p = forced ?? (spawn ? { ...spawn.position } : null);
+    const spawn = landing?.ok ? null : near?.viewpoint ?? resolveFpSpawn(position, registry);
+    const p = forced ?? (landing?.ok ? { x: landing.x, y: landing.y, z: landing.z } : spawn ? { ...spawn.position } : null);
     if (!p) {
       console.warn('[camera] 找不到 fp-spawn，第一人称无法进入');
       return null;
@@ -923,12 +1059,15 @@ export function createCameraRig({
     };
     fpActive = true;
     stats.fpEntries += 1;
+    jumpState.active = false;
+    jumpState.vy = 0;
+    jumpCooldown = 0;
     smooth.y = eyeY;
     currentMode = 'fp';
     projection = 'perspective';
     fov = spawn?.fov ?? 70;
     locked = {};
-    const spawnTarget = spawn?.target ?? { x: p.x, y: eyeY, z: p.z - 10 };
+    const spawnTarget = landing?.ok && landing.aim ? { ...landing.aim, y: eyeY } : spawn?.target ?? { x: p.x, y: eyeY, z: p.z - 10 };
     const dirX = spawnTarget.x - p.x;
     const dirZ = spawnTarget.z - p.z;
     yaw = Math.atan2(dirX, dirZ);
@@ -937,9 +1076,19 @@ export function createCameraRig({
     transition.active = false;
     // 方向落位统一由 syncFpOrientation() 写回（单一真相源：yaw/pitch → target → 相机矩阵）
     syncFpOrientation();
-    events.emit(EVENTS.fpEntered, { position: { x: position.x, y: position.y, z: position.z }, spawnId: spawn?.id ?? null, source });
+    events.emit(EVENTS.fpEntered, {
+      position: { x: position.x, y: position.y, z: position.z },
+      spawnId: spawn?.id ?? null,
+      source,
+      selectionLanding: landing?.ok ? { buildingId: selectionId, kind: landing.kind, tier: landing.tier } : null,
+    });
     if (!instant) emitSettled(source);
-    return { spawnId: spawn?.id ?? null, position: { x: position.x, y: position.y, z: position.z } };
+    return {
+      spawnId: spawn?.id ?? null,
+      position: { x: position.x, y: position.y, z: position.z },
+      selectionLanding: landing?.ok ? { buildingId: selectionId, kind: landing.kind, tier: landing.tier } : null,
+      selectionFallback: Boolean(selectionId) && !landing?.ok,
+    };
   }
 
   /** 第一人称退出：恢复进入前的模式与全部机位参数（静默 = 只恢复相机，不改 state）。 */
@@ -947,6 +1096,10 @@ export function createCameraRig({
     if (!fpActive) return null;
     fpActive = false;
     keys.clear();
+    // t2：退出时取消未完成的跳跃（否则残留 vy/高度会污染下一次进入）
+    jumpState.active = false;
+    jumpState.vy = 0;
+    jumpCooldown = 0;
     const saved = savedFp;
     savedFp = null;
     stats.fpExits += 1;
@@ -1110,6 +1263,7 @@ export function createCameraRig({
   function applyInput(kind, payload = {}) {
     if (!INPUT_KINDS.includes(kind)) throw new Error(`camera.applyInput: 未知输入 "${kind}"（合法：${INPUT_KINDS.join('/')}）`);
     stats.inputEvents += 1;
+    if (kind === 'jump') return jump(payload.source ?? 'input');
     if (kind === 'reset') {
       return reset({ source: payload.source ?? 'input' });
     }
@@ -1222,6 +1376,16 @@ export function createCameraRig({
         events.request(EVENTS.requestReset, { source: 'keyboard' });
         return;
       }
+      /**
+       * t2：第一人称下空格 = 跳跃（唯一内核）。
+       * 说明：生产路径上 G 的键盘层（capture）会先处理 Space 并 stopPropagation，因此这里主要覆盖
+       * "core 单独使用/测试"的路径；两处都会落到同一个 `jump()`，语义单一。
+       */
+      if (code === 'Space' && fpActive) {
+        event.preventDefault?.();
+        jump('keyboard:Space');
+        return;
+      }
       keys.add(code);
       if (fpActive && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(code)) {
         event.preventDefault?.();
@@ -1247,6 +1411,138 @@ export function createCameraRig({
 
   /* ----------------------------- 每帧更新 ----------------------------- */
 
+  /**
+   * t2：第一人称跳跃内核（唯一实现；移动/碰撞仍走 `solver`，不另建物理）。
+   *
+   * 语义（卡面逐条）：
+   *   · **顶点 ≤ `cam.fpJumpHeight`（1.0m 硬上限）**：逐帧积分后半隐式钳到 `起跳眼高 + fpJumpHeight`；
+   *   · **空中水平碰撞仍生效**：飞行中的水平位移仍调用 `solver.step(..., { airborne: true })`，
+   *     包络 / 可行走面 / 障碍盒（含门洞）/ 子步进防隧穿全部照旧 ⇒ 不越墙、不穿建筑；
+   *   · **落地必须可站立，否则回起跳点**：下落穿过落脚面时，用 `obstacleBlocksPoint`（唯一谓词层）
+   *     在**落地脚高**上重判一次；被挡 / 面高不存在 / 落差超过 `step.snapDownDistance` ⇒ 回起跳点；
+   *   · **落地 y 逐值 = surfaceY + fpEyeHeight**：落地时直接写 `floorYAt(x,z) + fpEyeHeight`，
+   *     且同步 `smooth.y`（否则台阶平滑会把逐值关系抹成插值）；
+   *   · 空中不允许再起跳；起跳有 `fpJumpCooldownSeconds` 冷却（连按不叠加）。
+   */
+  const jumpState = {
+    active: false, vy: 0, takeoff: null, apexEyeY: 0, peak: 0,
+    starts: 0, landings: 0, reverts: 0, refused: 0, lastReason: null, lastLanding: null, consecutive: 0,
+  };
+
+  /** 该点脚高是否**被障碍挡住**（true = 挡住）。命名与返回值同向，避免双重否定。 */
+  function blockedByObstaclesAt(x, z, feetY) {
+    const obstacles = registry?.allObstacles ? registry.allObstacles() : OBSTACLES;
+    return obstacleBlocksPoint_batch(obstacles, x, z, feetY);
+  }
+
+  /** 起跳（唯一入口；键盘 Space / `rig.jump()` / 测试共用）。 */
+  function jump(source = 'api') {
+    if (!fpActive) { jumpState.refused += 1; jumpState.lastReason = 'not-fp'; return { ok: false, reason: 'not-fp' }; }
+    if (config.INTERACTION.jump.enabled === false) { jumpState.refused += 1; jumpState.lastReason = 'disabled'; return { ok: false, reason: 'disabled' }; }
+    if (jumpState.active) { jumpState.refused += 1; jumpState.lastReason = 'airborne'; return { ok: false, reason: 'airborne' }; }
+    if (jumpCooldown > 0) { jumpState.refused += 1; jumpState.lastReason = 'cooldown'; return { ok: false, reason: 'cooldown' }; }
+    const jumpCfg = config.INTERACTION.jump;
+    const h = Math.max(0.05, Math.min(1.0, Number(jumpCfg.maxHeight) || 0.9)); // 1.0m 是硬上限：即使 config 被改大也不会越过
+    const g = Math.max(1e-3, Math.abs(Number(jumpCfg.gravity) || 18));
+    jumpState.active = true;
+    jumpState.vy = Math.sqrt(2 * g * h);
+    jumpState.apexEyeY = position.y + h;
+    jumpState.peak = 0;
+    jumpState.takeoff = { x: position.x, y: position.y, z: position.z, surfaceY: floorYAt(position.x, position.z) };
+    jumpState.starts += 1;
+    jumpState.lastReason = null;
+    stats.fpJumps += 1;
+    events.emit(EVENTS.fpJumped, { source, takeoff: { ...jumpState.takeoff }, height: h });
+    return { ok: true, source, takeoff: { ...jumpState.takeoff }, vy: jumpState.vy, height: h };
+  }
+
+  function integrateJump(dt, speed, forward, strafe, dirX, dirZ) {
+    const g = Math.max(1e-3, Math.abs(Number(config.INTERACTION.jump.gravity) || 18));
+    jumpState.vy -= g * dt;
+    let nextY = position.y + jumpState.vy * dt;
+    if (nextY > jumpState.apexEyeY) { nextY = jumpState.apexEyeY; if (jumpState.vy > 0) jumpState.vy = 0; }
+    jumpState.peak = Math.max(jumpState.peak, nextY - jumpState.takeoff.y);
+
+    // 空中水平位移：仍走同一求解器（airborne ⇒ 只用水平约束）
+    let x = position.x;
+    let z = position.z;
+    if (speed * dt > 0 && (forward !== 0 || strafe !== 0)) {
+      const result = solver.step(
+        { x: position.x, y: nextY, z: position.z },
+        dirX,
+        dirZ,
+        speed * dt,
+        { obstacles: registry?.allObstacles ? registry.allObstacles() : OBSTACLES, airborne: true },
+      );
+      if (result.blocked?.length > 0) {
+        stats.blockedMoves += 1;
+        const hit = result.blocked.find((b) => !['envelope', 'noSurface', 'stepTooHigh', 'dropTooDeep'].includes(b));
+        if (hit) events.emit(EVENTS.blockedByBuilding, { buildingId: hit, reason: 'fp-collision-airborne', source: 'fp' });
+      }
+      x = result.x;
+      z = result.z;
+    }
+    const surfaceY = floorYAt(x, z);
+    const descending = jumpState.vy <= 0;
+    /**
+     * 防守：滞空期间脚下若**没有可行走面**（求解器本应禁止进入，这里是兜底）⇒ 立刻回起跳点，
+     * 绝不允许"无限悬停"（否则既失去落地逐值关系，也再也落不了地）。
+     */
+    if (surfaceY === null) {
+      const t0 = jumpState.takeoff;
+      position.x = t0.x;
+      position.z = t0.z;
+      position.y = t0.y;
+      smooth.y = t0.y;
+      jumpState.active = false;
+      jumpState.vy = 0;
+      jumpCooldown = Math.max(0, Number(config.INTERACTION.jump.cooldownSeconds) || 0);
+      jumpState.reverts += 1;
+      jumpState.lastLanding = { kind: 'reverted', reason: 'noSurface', x, z, surfaceY: null, drop: null, peak: +jumpState.peak.toFixed(6), back: { x: t0.x, y: t0.y, z: t0.z } };
+      events.emit(EVENTS.fpLanded, { ...jumpState.lastLanding });
+      syncFpOrientation();
+      return true;
+    }
+    if (descending && nextY <= surfaceY + cam.fpEyeHeight + EPS) {
+      // ---- 落地判定：必须"可站立"，否则回起跳点 ----
+      const drop = (jumpState.takeoff.surfaceY ?? surfaceY) - surfaceY;
+      const blockedAtFeet = blockedByObstaclesAt(x, z, surfaceY);
+      const tooDeep = drop > config.INTERACTION.step.snapDownDistance + 1e-9;
+      const standable = surfaceY !== null && !blockedAtFeet && !tooDeep;
+      if (standable) {
+        position.x = x;
+        position.z = z;
+        position.y = surfaceY + cam.fpEyeHeight; // 逐值关系：落地眼高 ≡ 面高 + fpEyeHeight
+        smooth.y = position.y;
+        jumpState.landings += 1;
+        jumpState.lastLanding = { kind: 'ground', x, z, surfaceY, y: position.y, drop: +drop.toFixed(6), peak: +jumpState.peak.toFixed(6) };
+      } else {
+        const t = jumpState.takeoff;
+        position.x = t.x;
+        position.z = t.z;
+        position.y = t.y;
+        smooth.y = t.y;
+        jumpState.reverts += 1;
+        jumpState.lastLanding = {
+          kind: 'reverted',
+          reason: surfaceY === null ? 'noSurface' : `notStandable:${blockedAtFeet ? 'blockedAtFeet' : 'dropTooDeep'}`,
+          x, z, surfaceY, drop: +drop.toFixed(6), peak: +jumpState.peak.toFixed(6), back: { x: t.x, y: t.y, z: t.z },
+        };
+      }
+      jumpState.active = false;
+      jumpState.vy = 0;
+      jumpCooldown = Math.max(0, Number(config.INTERACTION.jump.cooldownSeconds) || 0);
+      events.emit(EVENTS.fpLanded, { ...jumpState.lastLanding });
+      syncFpOrientation();
+      return true;
+    }
+    position.x = x;
+    position.z = z;
+    position.y = nextY;
+    smooth.y = nextY;
+    return false;
+  }
+
   function updateFp(dt) {
     const run = keys.has('ShiftLeft') || keys.has('ShiftRight');
     const speed = cam.fpMoveSpeed * (run ? cam.fpRunMultiplier : 1);
@@ -1257,16 +1553,30 @@ export function createCameraRig({
     if (keys.has('KeyD') || keys.has('ArrowRight')) strafe += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) strafe -= 1;
     moving = forward !== 0 || strafe !== 0;
+    jumpCooldown = Math.max(0, jumpCooldown - Math.max(0, dt));
 
     if (moving) {
       const sin = Math.sin(yaw);
       const cos = Math.cos(yaw);
-      let dirX = sin * forward + cos * strafe;
-      let dirZ = cos * forward - sin * strafe;
+      /**
+       * t2 修复（原实现 A/D 反号）：相机 right 向量（three 右手系，up=+Y，forward=视线方向 f）为
+       *   r = (-cos yaw, 0, sin yaw)（= -(u × f)）
+       * 旧实现 `dirX = sin·forward + cos·strafe; dirZ = cos·forward - sin·strafe` 的 strafe 项
+       * 恰是 `-r` ⇒ 按 D（strafe=+1）往**左**走（真实浏览器实测：D 的位移点乘 right = −5.2 m，
+       * A = +5.2 m）。现改为 `-cos·strafe / +sin·strafe`，D 沿 +right、A 沿 −right。
+       */
+      let dirX = sin * forward - cos * strafe;
+      let dirZ = cos * forward + sin * strafe;
       const len = Math.hypot(dirX, dirZ);
       if (len > EPS) {
         dirX /= len;
         dirZ /= len;
+      }
+      if (jumpState.active) {
+        jumpState.consecutive += 1;
+        integrateJump(dt, speed, forward, strafe, dirX, dirZ);
+        syncFpOrientation();
+        return;
       }
       const result = solver.step(
         { x: position.x, y: position.y, z: position.z },
@@ -1288,9 +1598,24 @@ export function createCameraRig({
       const k = dt / Math.max(1e-3, config.INTERACTION.step.smoothSeconds);
       smooth.y = smooth.y === null ? result.y : smooth.y + (result.y - smooth.y) * clamp(k, 0, 1);
       position.y = smooth.y;
+    } else if (jumpState.active) {
+      // 原地跳（不按方向键）：仍需逐帧积分，否则会悬停
+      jumpState.consecutive += 1;
+      integrateJump(dt, speed, 0, 0, 0, 0);
+      syncFpOrientation();
+      return;
     }
 
     syncFpOrientation();
+  }
+
+  /** 批量障碍判定（唯一谓词层 `obstacleBlocksPoint`）：落地可站立性检查用。 */
+  function obstacleBlocksPoint_batch(obstacles, x, z, feetY) {
+    const playerCfg = config.INTERACTION.player;
+    for (const obstacle of obstacles) {
+      if (obstacleBlocksPoint(obstacle, { x, z, feetY, height: playerCfg.height, radius: playerCfg.radius })) return true;
+    }
+    return false;
   }
 
   /**
@@ -1379,6 +1704,24 @@ export function createCameraRig({
       locked: { ...locked },
       axisIndex,
       fpActive,
+      /** t15：最近一次"选中建筑就近落点"推导读数（只读诊断；`fallback:true` ⇒ 该栋没有合法就近点） */
+      fpSelectionLanding: lastSelectionLanding ? { ...lastSelectionLanding } : null,
+      /** t2：第一人称跳跃读数（诊断/验收：空中态、顶点、最近一次落地/回退） */
+      fpJumping: jumpState.active,
+      fpJump: {
+        enabled: config.INTERACTION.jump.enabled !== false,
+        maxHeight: Math.min(1.0, Number(config.INTERACTION.jump.maxHeight) || 0.9),
+        active: jumpState.active,
+        vy: +jumpState.vy.toFixed(4),
+        peak: +jumpState.peak.toFixed(6),
+        starts: jumpState.starts,
+        landings: jumpState.landings,
+        reverts: jumpState.reverts,
+        refused: jumpState.refused,
+        lastReason: jumpState.lastReason,
+        lastLanding: jumpState.lastLanding,
+        cooldown: +jumpCooldown.toFixed(4),
+      },
       interiorBox,
       /** t65：interior 模式实际使用的机位与解析来源（一区多内景时用于断言"用的是哪一个"） */
       interiorViewpointId: interiorAddressing.viewpointId,
@@ -1443,6 +1786,12 @@ export function createCameraRig({
     stats,
     // 契约方法
     update,
+    jump,
+    /** t15：选中建筑的就近落点推导（**纯函数**，供 UI/测试/探针先算后决定；不改变任何状态） */
+    fpLandingFor: (buildingId) => fpLandingForSelection(buildingId),
+    get isAirborne() {
+      return jumpState.active;
+    },
     setViewportSize,
     applyMode,
     applyInput,

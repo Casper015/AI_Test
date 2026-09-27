@@ -52,6 +52,8 @@ const GROUND_Y = CONFIG.TERRAIN.sideCourtY; // 0.4
 const PLAYER = CONFIG.INTERACTION.player;
 const STEP = CONFIG.INTERACTION.step;
 const POND = LAYOUT.WATER_BODIES.find((w) => w.owner === ZONE);
+/** t13：汀步走廊唯一权威源（`layout.STONE_STEP_LANES`）—— 测试不另写第二份字面量。 */
+const STONE_STEP_LANES = LAYOUT.STONE_STEP_LANES;
 
 /* -------------------------------------------------------------------------- */
 /* 共用工具                                                                    */
@@ -93,7 +95,10 @@ function boxOf(object, THREEImpl) {
 
 /**
  * 玩家（脚在 y、身高 1.8、半径 0.35）在 (x,z) 是否被某障碍挡住。
- * `blocks='exceptDoor'` 的条目按 CONTRACTS §6.3 只在门洞净宽之外阻挡（门轴 'x' → 门洞是 x 方向的一段）。
+ * `blocks='exceptDoor'` 的条目按 CONTRACTS §6.3 只在门洞净宽之外阻挡。
+ * 门洞的**横轴**（净宽所在轴）按 `layout-slice` 的 canonical 语义取：`door.lateralAxis` 优先，
+ *   退化时由 `door.axis`（面法线轴）翻转 —— 与生产谓词层 `insideObstacleDoor` 同源；
+ *   否则测试与生产会出现两套"门轴字段"口径（t13 实测：水中亭的汀步走廊把水体开槽后暴露）。
  */
 function blockedAt(obstacles, x, z, feetY) {
   for (const o of obstacles) {
@@ -104,8 +109,8 @@ function blockedAt(obstacles, x, z, feetY) {
     if (feetY > o.y1 - 1e-6) continue;
     if (o.blocks === 'exceptDoor' && o.door) {
       const half = o.door.width / 2;
-      const axis = o.door.axis ?? 'x';
-      const inDoor = axis === 'x'
+      const lateral = o.door.lateralAxis ?? (o.door.axis === 'z' ? 'x' : 'z');
+      const inDoor = lateral === 'x'
         ? Math.abs(x - o.door.center.x) <= half
         : Math.abs(z - o.door.center.z) <= half;
       if (inDoor) continue;
@@ -176,7 +181,9 @@ await runner.test('§3.3/§4/§5/§6/§8.3 全部字段通过；数量与 layout
   assertEqual(contract.stats.buildings, 14, '建筑数量必须等于 layout 分配数（14）');
   assertEqual(contract.stats.connectors, 2, '本人 owner 的通道数');
   assertEqual(contract.stats.walkable, zoneLayout.walkable.length, '可行走面数（应与切片一致）');
-  assertEqual(contract.stats.walkable, 25, '可行走面数 = 1 地面 + 8 室内 + 8 门洞通道（t62/t75）+ 8 D 区门外过渡台阶（t102）');
+  /* t13：原 25 = 1 地面 + 8 室内 + 8 门洞通道 + 8 门外过渡台阶；本卡在 layout 侧新增 D 池 2 面汀步
+     （`WK-D-pond-step-{1,2}`，E 池的 2 面属 E 区），故 25 → 27。判据强度不变：仍与切片逐值相等。 */
+  assertEqual(contract.stats.walkable, 27, '可行走面数 = 1 地面 + 8 室内 + 8 门洞通道（t62/t75）+ 8 D 区门外过渡台阶（t102）+ 2 汀步（t13）');
   assertEqual(contract.stats.ramps, 1, '坡道数（RD-D-garden-ramp 的 Δy）');
   assertEqual(contract.stats.viewpoints, 3 + 8, '机位数 = 3 原有 + 8 内景机位');
   runner.info(`D 区：${contract.stats.meshes} 网格 / ${contract.stats.triangles} 三角面 / ${drawCallCount(built.root)} 绘制批次（≤${BUDGET.drawCalls.perZone.D}）`);
@@ -381,7 +388,7 @@ await runner.test('水体与 layout.WATER_BODIES 一致；池底/水面/池岸/�
   runner.info(`荷池 ${POND.bounds.maxX - POND.bounds.minX}×${POND.bounds.maxZ - POND.bounds.minZ}m，水面 ${POND.y}m，池岸 ${facts.rim} 段 / 石栏 ${facts.railings} 段 / 拦阻 ${facts.guard.length} 段`);
 });
 
-await runner.test('池心岛含亭、汀步接到岛边（D 独有：池心亭可走到，E 的水榭为纯观赏）', () => {
+await runner.test('池心岛含亭、两级汀步（t13 可达）接到岛边（D 独有：池心亭可走到，E 的水榭为纯观赏）', () => {
   const facts = built.stats.water;
   const pavilion = zoneLayout.slots.find((s) => s.id === 'D-court3-pavilion');
   assert(facts.island, '缺少池心岛事实');
@@ -389,14 +396,53 @@ await runner.test('池心岛含亭、汀步接到岛边（D 独有：池心亭�
   assertClose(facts.island.z, pavilion.z, 0.01, '池心岛应对准池上小亭 z');
   assert(facts.island.half * 2 > 14, '池心岛应大于亭的占地（14×14）');
   assert(facts.walkway, '缺少汀步石桥');
+  const lane = STONE_STEP_LANES.find((l) => l.id === 'D-court3-pavilion');
+  assert(lane, 'layout.STONE_STEP_LANES 应登记 D 池汀步走廊');
   assertClose(facts.walkway.x, (POND.bounds.minX + POND.bounds.maxX) / 2, 0.01, '汀步应自池南岸居中进入');
   assert(facts.walkway.half * 2 >= 4, `汀步净宽应 ≥4m（实测 ${facts.walkway.half * 2}）`);
   assert(facts.walkway.fromZ <= POND.bounds.minZ + 0.01, '汀步应自池南岸起');
   assert(facts.walkway.toZ >= POND.bounds.minZ + 8, '汀步应伸入池面 ≥8m');
-  assertClose(facts.walkway.toZ, facts.island.z - facts.island.half, 0.01, '汀步终点应正好接在池心岛南沿（不重叠、不留缝）');
-  // 对应的可见几何：池心岛与汀步各成节点
+  /* t13 口径更新（**判据只增不减**）：原断言"汀步终点 = 池心岛南沿"随两级汀步改造失效 ——
+     权威几何改由 `layout.STONE_STEP_LANES` 表达；此处逐值对齐登记，并**新增**更强判据：
+     ① 恰好 2 级汀步且逐跳 ≥0.20 且 ≤0.25（禁 0.50 等值，§12.1.4.5）；
+     ② 下石南沿接池南岸、上石北沿 ≥ 岛南沿（覆盖池心，不虚接）；
+     ③ 三级链（区域地坪 → 下石 → 上石/亭地面）**逐跳双向可跨**（用求解器生产口径）。 */
+  assertEqual(facts.walkway.steps.length, 2, `D 池应恰 2 级汀步（实测 ${facts.walkway.steps.length}）`);
+  const steps = lane.steps;
+  const chain = [GROUND_Y, ...steps.map((s) => s.y)];
+  const jumps = chain.slice(1).map((y, i) => +(y - chain[i]).toFixed(6));
+  assert(jumps.every((d) => d >= 0.2 - 1e-9 && d <= 0.25 + 1e-9), `逐跳应 ∈ [0.20, 0.25]（禁 0.50 等值）：${JSON.stringify(jumps)}`);
+  assertClose(steps[0].minZ, POND.bounds.minZ, 0.01, '下石南沿应贴池南岸（岸 → 下石为一步）');
+  assert(steps[1].maxZ >= facts.island.z - facts.island.half, `上石北沿应覆盖池心岛南沿（实测 ${steps[1].maxZ}）`);
+  /* 对应的可见几何：池心岛节点 + **逐级可见石件**（与可行走面同轮落地）。
+     量测口径：`kit.mergeZone(root)` 会把本区所有网格合批并**清空原 Group 的子节点**
+     （`scene graph` 上只剩合批节点 `D:batch`），因此"逐个 getObjectByName 量包围盒"在合批后必然读到空组
+     （实测 Box3 = ±Infinity）⇒ 改为**由区域在合批前记录石件世界包围盒**（`stats.water.walkway.steps[].bounds`），
+     测试据此逐面核对；同时断言合批节点确实存在几何（防止"记录是数据、几何根本没建"）。 */
   assert(built.root.getObjectByName('D-pond-island'), '缺少池心岛几何');
-  assert(built.root.getObjectByName('D-pond-walkway'), '缺少汀步几何');
+  const merged = built.root.getObjectByName('D:batch');
+  assert(merged && merged.children.length > 0, '合批节点 D:batch 应存在且含几何');
+  const mergedMeshes = [];
+  merged.traverse((n) => { if (n.isMesh) mergedMeshes.push(n); });
+  assert(mergedMeshes.length > 0, '合批节点内应至少含 1 个网格');
+  assertEqual(facts.walkway.steps.length, steps.length, '可见石件记录数应 = 汀步级数');
+  for (const s of steps) {
+    const walk = LAYOUT.WALKABLE.find((w) => w.id === s.id);
+    assert(walk, `layout 应登记可行走面 ${s.id}`);
+    const rec = facts.walkway.steps.find((x) => x.id === s.id);
+    assert(rec, `缺少可见石件记录 ${s.id}`);
+    assertEqual(rec.node, `${s.id}-visible`, `${s.id} 可见石件节点名`);
+    /* 判据硬化：空节点/空几何会让 Box3 给出 ±Infinity，`toFixed` 会把它变成 null ⇒ 先断言六个数有限，
+       否则 "记录 = 有限数" 这一条把"几何根本没建"的情形挡在门外。 */
+    assert(Object.values(rec.bounds).every((v) => typeof v === 'number' && Number.isFinite(v)),
+      `${s.id} 可见石件包围盒必须是有限数（实测 ${JSON.stringify(rec.bounds)}）`);
+    /* 石件顶面 = 登记面高（**精确**：登记者就是石件顶）；平面范围 = 登记面 ± 台明压顶外挑（≤6cm）。 */
+    assertClose(rec.bounds.maxY, walk.y, 0.01, `${s.id} 可见石件顶面应 = 登记面高 ${walk.y}`);
+    assertClose(rec.bounds.minX, walk.bounds.minX, 0.06, `${s.id} 可见石件西界应 ≈ 登记面西界`);
+    assertClose(rec.bounds.maxX, walk.bounds.maxX, 0.06, `${s.id} 可见石件东界应 ≈ 登记面东界`);
+    assertClose(rec.bounds.minZ, walk.bounds.minZ, 0.06, `${s.id} 可见石件南界应 ≈ 登记面南界`);
+  }
+  runner.info(`D 池汀步：${steps.length} 级（${chain.join(' → ')}，逐跳 ${jumps.join('/')}）· 可见石件 ${steps.length}/2 · 下石贴岸 ${steps[0].minZ} / 上石覆盖岛沿 ${steps[1].maxZ}`);
 });
 
 /* ========================================================================== */
@@ -485,17 +531,18 @@ await runner.test('不可进入建筑 visitable=false → blocks="all"；院门 
   }
 });
 
-await runner.test('真实走查探针：池面阻挡 / 汀步可通 / 院墙阻挡 / 院门可通（D 独有池心路径）', () => {
+await runner.test('真实走查探针：池面阻挡 / 两级汀步可通 / 院墙阻挡 / 院门可通（D 独有池心路径）', () => {
   const feet = GROUND_Y;
-  // 反例 1：池面（汀步之外）必须被挡住
+  // 反例 1：池面（汀步走廊之外）必须被挡住 —— 开槽是**有界**的，其余水面逐点仍拦
   const waterProbe = { x: POND.bounds.maxX - 8, z: (POND.bounds.minZ + POND.bounds.maxZ) / 2 };
   assert(blockedAt(obstacles, waterProbe.x, waterProbe.z, feet), `池面 (${waterProbe.x},${waterProbe.z}) 未被拦阻`);
-  // 正例 1：汀步中心线必须可通（拦阻盒在汀步处留缺口）
-  const walk = built.stats.water.walkway;
-  for (const t of [0.2, 0.5, 0.8]) {
-    const z = walk.fromZ + (walk.toZ - walk.fromZ) * t;
-    const hit = blockedAt(obstacles, walk.x, z, feet);
-    assert(!hit, `汀步 (${walk.x},${z}) 被 ${hit?.id} 挡住，池心亭不可达`);
+  /* t13：走廊开槽的**反例集**（只增不减）—— 走廊外 1m（东西两侧）在同一 z 上必须仍被水体拦住：
+     只开一条 8m 宽的走廊，绝不放行整池。 */
+  const corridor = STONE_STEP_LANES.find((l) => l.id === 'D-court3-pavilion').corridor;
+  for (const dx of [-1, 1]) {
+    const x = dx < 0 ? corridor.minX - 1 : corridor.maxX + 1;
+    const z = (corridor.minZ + corridor.maxZ) / 2;
+    assert(blockedAt(obstacles, x, z, feet), `走廊外 (${x},${z}) 必须仍被水体拦住（开槽越界）`);
   }
   // 反例 2：院墙墙身必须被挡住
   const courtyard = zoneLayout.courtyards[0];
@@ -514,13 +561,73 @@ await runner.test('真实走查探针：池面阻挡 / 汀步可通 / 院墙阻�
   assert(blockedAt(obstacles, wallLineX, gate.z + gateObstacle.door.width, feet), '门洞之外仍应被墙挡住');
   // 正例 3：院门本体的门洞内（门中心）不被自身障碍阻挡
   assert(!blockedAt(obstacles, gate.x, gate.z, feet), '院门门洞中心不应被院门自身挡住');
-  // 正例 4：池心岛台面（亭之外）可走
-  const island = built.stats.water.island;
-  for (const [dx, dz] of [[-(island.half - 1), 0], [island.half - 1, 0], [0, -(island.half - 1)]]) {
-    const hit = blockedAt(obstacles, island.x + dx, island.z + dz, feet);
-    assert(!hit, `池心岛 (${island.x + dx},${island.z + dz}) 被 ${hit?.id} 挡住，亭台不可站`);
+  /* 正例 4（t13 口径更新 + **判据只增不减**）：
+     原断言"池心岛台面（亭之外）三处可走"随 t13 的拦阻盒重构而失效 —— 原因是**水面不可站**优先：
+     池心岛只有**走廊宽度**是真的可走（岛东西两条 2m 环台被水体拦阻盒覆盖），而这一点旧断言从未覆盖。
+     现改为两条**更强**的断言：
+       ① 覆盖不变量（逐点）：水面 \ 汀步走廊 ⊆ 拦阻盒（旧实现的两个"护不到的口袋"即在此报红）；
+       ② 正例：走廊内（汀步中心线 + 两级石件中心）逐点可走。
+     注：本文件的 `obstacles` 是**区域自报清单**，其中水体盒仍是 layout 原始值（顶面 0.05 < 脚高 0.4）
+     ⇒ 水面阻挡在区域单测里全部靠拦阻盒体现，这正是①要守的东西。 */
+  const laneD = STONE_STEP_LANES.find((l) => l.id === 'D-court3-pavilion');
+  const corridorD = laneD.corridor;
+  const holes = [];
+  let waterSamples = 0;
+  for (let x = POND.bounds.minX + 1; x <= POND.bounds.maxX - 1; x += 2) {
+    for (let z = POND.bounds.minZ + 1; z <= POND.bounds.maxZ - 1; z += 2) {
+      if (x >= corridorD.minX && x <= corridorD.maxX) continue; // 走廊内的水面由石件顶替（登记面可走）
+      waterSamples += 1;
+      if (!blockedAt(obstacles, x, z, feet)) holes.push(`(${x},${z})`);
+    }
   }
-  runner.info(`走查探针：池面阻挡 ✓ / 汀步 ${(walk.toZ - walk.fromZ).toFixed(0)}m 可通 ✓ / 院墙阻挡 ✓ / 院门 ${gateObstacle.door.width}m 门洞可通 ✓`);
+  assert(holes.length === 0,
+    `t13：水面 \\ 汀步走廊 ⊆ 拦阻盒（逐 2m 采样 ${waterSamples} 点，${holes.length} 处漏护）：${holes.slice(0, 6).join('、')}`);
+  const walkPoints = [];
+  for (const t of [0.15, 0.4, 0.65, 0.9]) {
+    walkPoints.push({ x: (corridorD.minX + corridorD.maxX) / 2, z: corridorD.minZ + (corridorD.maxZ - corridorD.minZ) * t, tag: `走廊 ${t}` });
+  }
+  for (const rec of built.stats.water.walkway.steps) {
+    walkPoints.push({ x: (rec.bounds.minX + rec.bounds.maxX) / 2, z: (rec.bounds.minZ + rec.bounds.maxZ) / 2, tag: `石件 ${rec.id}` });
+  }
+  for (const p of walkPoints) {
+    const hit = blockedAt(obstacles, p.x, p.z, feet);
+    assert(!hit, `${p.tag} (${p.x},${p.z}) 被 ${hit?.id} 挡住，汀步/亭台不可站`);
+  }
+  const island = built.stats.water.island;
+  runner.info(`走查探针：水面采样 ${waterSamples} 点全部被拦（0 漏护）· 走廊/石件 ${walkPoints.length} 点可走 · 池心岛顶 ${island.top}m（可走宽度 = 走廊 ${corridorD.maxX - corridorD.minX}m）`);
+  runner.info(`走查探针：池面阻挡 ✓ / 走廊外 ${corridorD.minX - 1}、${corridorD.maxX + 1} 仍拦 ✓ / 院墙阻挡 ✓ / 院门 ${gateObstacle.door.width}m 门洞可通 ✓`);
+});
+
+await runner.test('t13：D 池亭在**生产求解器 + 真实建图**下双向可达（岸 → 下石 → 上石/亭地面）', async () => {
+  const { createWalkSolver } = await loadModule('src/interaction/walk-solver.js');
+  const { createWalkGraph } = await loadModule('src/interaction/walk-graph.js');
+  /* 口径三要素：
+     ① 求解器/建图 = 生产模块（`createWalkSolver` + `createWalkGraph`），障碍 = **本区 colliders + layout 基线**
+        （区域单测做不到整城 registry，故把基线并进来；这与"只测本区障碍"相比是**加严**而非放宽）；
+     ② 图 = 池区局部窗 `x∈[-200,-110]、z∈[0,80]`、`cellSize:1`（t121 的同口径网格）；
+     ③ 判据 = **双向** `path()` 均 `ok`（岸→亭、亭→岸），且逐跳 |Δ| ≤ 0.25。 */
+  const L = LAYOUT;
+  const merged = new Map();
+  for (const o of L.OBSTACLES) merged.set(o.id, o);
+  for (const o of obstacles) merged.set(o.id, o);
+  const solver = createWalkSolver({ layout: L, obstacles: [...merged.values()] });
+  const graph = createWalkGraph(solver, {
+    layout: L, config: CONFIG, cellSize: 1, maxCells: 3_000_000,
+    bounds: { minX: -200, maxX: -110, minZ: 0, maxZ: 80 },
+  });
+  const pavilion = zoneLayout.slots.find((s) => s.id === 'D-court3-pavilion');
+  const laneD = STONE_STEP_LANES.find((l) => l.id === 'D-court3-pavilion');
+  const bank = { x: (laneD.corridor.minX + laneD.corridor.maxX) / 2, z: POND.bounds.minZ - 3 };
+  const inside = { x: pavilion.x, z: pavilion.z };
+  const there = graph.path(bank, inside);
+  const back = graph.path(inside, bank);
+  assert(there.ok, `岸 → 亭不可达（reason=${there.reason}）`);
+  assert(back.ok, `亭 → 岸不可达（reason=${back.reason}）`);
+  for (const [p, label] of [[bank, '岸'], [inside, '亭中心']]) {
+    const probe = solver.probe(p.x, p.z, null);
+    assert(probe.ok, `${label} (${p.x},${p.z}) 应可站立（reasons=${JSON.stringify(probe.reasons)}）`);
+  }
+  runner.info(`D 池可达（双向）：岸(${bank.x},${bank.z}) ⇄ 亭(${inside.x},${inside.z}) · 去程 ${there.cells} 格 / 回程 ${back.cells} 格 · 亭面 ${solver.probe(inside.x, inside.z, null).surfaceY}m`);
 });
 
 /* ========================================================================== */

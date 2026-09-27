@@ -112,6 +112,77 @@
   padding: var(--palace-space-xs) var(--palace-space-sm);
 }
 
+/* ------------------------------------------------- t7 可折叠面板（默认折叠 + 箭头）
+   要点：
+     · 折叠头是原生 <button>（Tab 可达 / Enter·Space 激活），命中区 ≥ 触控最小尺寸；
+     · 内容体用 `hidden`（display:none）⇒ 折叠后**不参与布局、不遮挡画布、不截获指针**；
+     · 折叠态只留折叠头（标题 + 箭头），面板高度收敛到一行；
+     · 焦点可见环（键盘可达的可见反馈），与面板配色一致。                            */
+#palace-ui .palace-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--palace-space-xs);
+  width: 100%;
+  min-height: var(--palace-touch-target);
+  margin: 0;
+  padding: var(--palace-space-xxs) var(--palace-space-xs);
+  background: transparent;
+  border: 0;
+  border-radius: var(--palace-radius);
+  color: var(--palace-title-color);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--palace-transition) ease;
+}
+
+#palace-ui .palace-panel__toggle:hover {
+  background: rgba(240, 236, 225, 0.06);
+}
+
+#palace-ui .palace-panel__toggle:focus-visible {
+  outline: 2px solid var(--palace-accent);
+  outline-offset: 1px;
+}
+
+#palace-ui .palace-panel__arrow {
+  flex: 0 0 auto;
+  width: 1em;
+  color: var(--palace-accent);
+  font-size: var(--palace-font-caption-size);
+  line-height: 1;
+  transition: transform var(--palace-transition) ease;
+}
+
+/* 展开态：箭头指下（▾）；折叠态为 ▸（字形由 dom.js 写入，CSS 只做旋转兜底） */
+#palace-ui .palace-panel__toggle[aria-expanded="true"] .palace-panel__arrow {
+  transform: rotate(90deg);
+}
+
+#palace-ui .palace-panel__body {
+  display: block;
+  padding-top: var(--palace-space-xxs);
+}
+
+/* 折叠时内容体彻底不占位（属性 + 样式双保险），且不截获指针 */
+#palace-ui .palace-panel[data-collapsed="1"] .palace-panel__body,
+#palace-ui .palace-panel__body[hidden] {
+  display: none !important;
+}
+
+#palace-ui .palace-panel[data-collapsed="1"] {
+  padding: var(--palace-space-xxs) var(--palace-space-xs) var(--palace-space-xxs) var(--palace-space-xxs);
+}
+
+/* 折叠态不留半截分隔线（分隔线属于内容区） */
+#palace-ui .palace-panel[data-collapsed="1"] .palace-panel__title::after {
+  display: none;
+}
+
+#palace-ui .palace-panel__toggle .palace-panel__title {
+  margin: 0;
+}
+
 #palace-ui .palace-panel__title {
   display: flex;
   align-items: center;
@@ -301,7 +372,8 @@
 #palace-ui .palace-info__name {
   font-family: var(--palace-font-title);
   font-size: var(--palace-font-section-size);
-  margin: 0 0 var(--palace-space-xxs);
+  /* t7：本元素现在位于折叠头内（折叠头标题）⇒ 不再自带下边距，行内与箭头同排 */
+  margin: 0;
 }
 
 #palace-ui .palace-info__tag {

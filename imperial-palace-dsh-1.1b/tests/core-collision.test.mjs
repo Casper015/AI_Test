@@ -25,6 +25,7 @@ import {
 } from './harness.mjs';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { assembleCity } from '../scripts/verify-walk.mjs';
 
 const runner = createTestRunner('core-collision.test.mjs · 碰撞语义（y0 下钳 / 水体不站立 / 基线图层 / door 轴）');
 
@@ -350,12 +351,21 @@ await runner.test('t86：全部 43 栋可进入建筑逐栋验证 —— 门洞�
     assert(door, `${slotId} 为可进入建筑，应有门规格`);
     const b = entry.bounds;
     const axis = door.axis === 'x' ? 'x' : 'z';
-    const edge = axis === 'z' ? b.maxZ : b.maxX;
+    /**
+     * t22：**门侧外沿**必须由 `door.facade.outward` 解析，不能固定取 `max` 边。
+     * 旧写法 `edge = axis==='z' ? b.maxZ : b.maxX` 对 31/43 栋取到的是**背面**（门在 min 侧、或门法线轴为 x）；
+     * 收窄豁免后 2 栋「深后墙」建筑（B-hall-main 后墙 6.0m、C-hall-bed-main 5.0m）在该点被判挡
+     * ⇒ 旧写法**探针点本身取错**。判据强度不变（仍是"门洞通道中轴必须放行 43/43"），只把点放到**真实门侧**。
+     */
+    const ovec = CONFIG.ORIENTATION.facingVectors[door.facade?.outward ?? 'south'];
+    const doorSign = (axis === 'z' ? ovec.z : ovec.x) > 0 ? 1 : -1;
+    const edge = doorSign > 0 ? (axis === 'z' ? b.maxZ : b.maxX) : (axis === 'z' ? b.minZ : b.minX);
     const perpSpan = axis === 'z' ? b.maxX - b.minX : b.maxZ - b.minZ;
     const cx = (b.minX + b.maxX) / 2;
     const cz = (b.minZ + b.maxZ) / 2;
-    // ① 门洞通道：中轴线上（体块内 1m 处）谓词层必须放行
-    const doorPoint = axis === 'z' ? { x: door.center.x, z: edge - 1 } : { x: edge - 1, z: door.center.z };
+    // ① 门洞通道：中轴线**自门侧向内 1m**（谓词层必须放行）
+    const inward = edge - doorSign * 1;
+    const doorPoint = axis === 'z' ? { x: door.center.x, z: inward } : { x: inward, z: door.center.z };
     const feetAtDoor = LAYOUT.floorYAt(doorPoint.x, doorPoint.z) ?? entry.y0;
     if (obstacleBlocksPoint(entry, { x: doorPoint.x, z: doorPoint.z, feetY: feetAtDoor })) {
       notPassable.push(`${slotId}(门洞中轴被墙盒挡住 @${doorPoint.x},${doorPoint.z})`);
@@ -970,6 +980,374 @@ await runner.test('内景不可穿墙、不掉出：以真实碰撞数据四向�
   assert(exits >= 0, '越界处必须全部经门洞通过');
   settle(0.2);
   runner.info(`B-hall-mid 内景四向各 40 步（共 160 步）：掉出 0 次；经门洞越出 ${exits} 个采样点（其余被墙拦住）`);
+});
+
+/* ==========================================================================
+ * 7. t22：门洞贯穿语义 —— `door.through` / `door.back` 逐栋台账（**只登记断言；本卡不改谓词行为**）
+ * ========================================================================== */
+
+/** t22：贯穿类 = 两面皆开（门类 16 座 + 开敞亭 10 座）；其余 = 只有正立面开门、背面实心后墙。 */
+const THROUGH_KINDS_EXPECTED = Object.freeze(['gateHall', 'courtyardGate', 'pavilion']);
+
+runner.section('7. t22 门洞贯穿语义登记（door.through / door.back）');
+
+await runner.test('t22①：全部建筑门**逐栋**登记布尔 `door.through` 与镜像锚点 `door.back`（63 条，不多不少）', () => {
+  const doors = LAYOUT.SLOTS.filter((s) => s.door);
+  assert(doors.length > 0, '应有建筑门');
+  const missing = [];
+  const badBack = [];
+  const rows = [];
+  for (const s of doors) {
+    const d = s.door;
+    if (typeof d.through !== 'boolean') missing.push(`${s.id}(through=${JSON.stringify(d.through)})`);
+    const back = d.back;
+    if (!back || !Number.isFinite(back.x) || !Number.isFinite(back.z) || !Number.isFinite(back.y) || !Number.isFinite(back.width)) {
+      badBack.push(`${s.id}(back 字段缺失)`);
+      continue;
+    }
+    // 镜像口径：outward 与 facade 互为对侧、同宽同 y；且 back 锚点在**对侧**外墙之外 6.0m
+    const opp = { south: 'north', north: 'south', east: 'west', west: 'east' }[d.facade.outward];
+    if (back.outward !== opp) badBack.push(`${s.id}(back.outward=${back.outward} ≠ 对侧 ${opp})`);
+    if (back.width !== d.width) badBack.push(`${s.id}(back.width=${back.width} ≠ door.width=${d.width})`);
+    if (back.y !== d.facade.y) badBack.push(`${s.id}(back.y=${back.y} ≠ facade.y=${d.facade.y})`);
+    const b = s.bounds;
+    const vec = CONFIG.ORIENTATION.facingVectors[back.outward];
+    const expectX = +(s.x + vec.x * (s.w / 2 + 6.0)).toFixed(2);
+    const expectZ = +(s.z + vec.z * (s.d / 2 + 6.0)).toFixed(2);
+    if (Math.abs(back.x - expectX) > 1e-9 || Math.abs(back.z - expectZ) > 1e-9) {
+      badBack.push(`${s.id}(back=(${back.x},${back.z}) ≠ 镜像期望 (${expectX},${expectZ}))`);
+    }
+    // back 必须在 AABB 之外（真"外侧"），facade 亦然
+    const outsideBack = back.x < b.minX - 5.9 || back.x > b.maxX + 5.9 || back.z < b.minZ - 5.9 || back.z > b.maxZ + 5.9;
+    if (!outsideBack) badBack.push(`${s.id}(back 锚点落在 AABB 内或贴边：(${back.x},${back.z}))`);
+    rows.push({ id: s.id, kind: s.kind, through: d.through, width: d.width, back: `${back.outward}@(${back.x},${back.z},y${back.y})` });
+  }
+  assertEqual(missing.length, 0, `全部建筑门必须登记布尔 through（缺 ${missing.length}）：${missing.slice(0, 6).join('；')}`);
+  assertEqual(badBack.length, 0, `door.back 必须与 facade 互为镜像（异常 ${badBack.length}）：${badBack.slice(0, 6).join('；')}`);
+  const through = rows.filter((r) => r.through);
+  const narrow = rows.filter((r) => !r.through);
+  const byKind = {};
+  for (const r of through) byKind[r.kind] = (byKind[r.kind] ?? 0) + 1;
+  // 贯穿类构成精确锁定（判据只增不减：新增/减少贯穿类即红）
+  assertEqual(byKind.gateHall, 6, `贯穿类里 gateHall 应恰为 6（实际 ${byKind.gateHall}）`);
+  assertEqual(byKind.courtyardGate, 10, `贯穿类里 courtyardGate 应恰为 10（实际 ${byKind.courtyardGate}）`);
+  assertEqual(byKind.pavilion, 10, `贯穿类里开敞亭应恰为 10（t103 语义：亭无墙、四面皆通）`);
+  assertEqual(through.length, 26, `贯穿类应恰为 26 座（实际 ${through.length}）`);
+  assertEqual(narrow.length, rows.length - 26, `非贯穿类应恰为 ${rows.length - 26} 座（实际 ${narrow.length}）`);
+  for (const r of rows) {
+    assertEqual(r.through, THROUGH_KINDS_EXPECTED.includes(r.kind), `${r.id}（${r.kind}）的 through 必须等于"是否贯穿类"`);
+  }
+  runner.info(`t22 台账：建筑门 ${rows.length} 条｜贯穿 ${through.length}（${Object.entries(byKind).map(([k, v]) => `${k}×${v}`).join(' + ')}）｜收窄候选 ${narrow.length}（hall/sideHall）`);
+});
+
+await runner.test('t22②：**未登记 `through` 的 door 语义不变**——水体桥面/汀步走廊仍按整进深放行（本卡零行为改动）', () => {
+  const baseline = assembleBaselineObstacles();
+  const waterDoors = baseline.list.filter((o) => o.sourceType === 'water' && o.door);
+  assert(waterDoors.length > 0, '应有水体门洞（桥面/汀步走廊）');
+  const leaked = waterDoors.filter((o) => o.door.through !== undefined);
+  assertEqual(leaked.length, 0, `水体门洞**不得**被登记 through（实际 ${leaked.map((o) => o.id).join(',')}）`);
+  // 未登记 through ⇒ 谓词层必须仍按"整进深"放行（沿法线轴从一端到另一端都算通道内）
+  const checked = [];
+  for (const o of waterDoors) {
+    const d = o.door; const b = o.bounds;
+    const lateralAxis = d.lateralAxis ?? ((b.maxX - b.minX) >= (b.maxZ - b.minZ) ? 'x' : 'z');
+    const normalAxis = lateralAxis === 'x' ? 'z' : 'x';
+    const lo = normalAxis === 'z' ? b.minZ : b.minX;
+    const hi = normalAxis === 'z' ? b.maxZ : b.maxX;
+    const mid = (lo + hi) / 2;
+    const pt = normalAxis === 'z' ? { x: d.center.x, z: mid } : { x: mid, z: d.center.z };
+    assert(insideObstacleDoor(d, b, pt.x, pt.z), `${o.id} 未登记 through ⇒ 进深中点仍应在通道内（语义不变）`);
+    checked.push(o.id);
+  }
+  runner.info(`未登记 through 的水体门洞 ${checked.length} 条（${checked.join(', ')}）：进深中点仍在通道内 ✓（豁免语义未被本卡改动）`);
+});
+
+await runner.test('t22③：生产装配下 `obstacleBlocksPoint` 逐栋消费——贯穿类两面门带放行、非贯穿类门侧放行（回归锚点）', () => {
+  const registry = makeRegistry();
+  const obstacles = registry.allObstacles();
+  const byId = new Map(obstacles.map((o) => [o.id, o]));
+  const doors = LAYOUT.SLOTS.filter((s) => s.door);
+  const fails = [];
+  for (const s of doors) {
+    const entry = byId.get(`OB-${s.id}`);
+    if (!entry) continue;
+    const d = entry.door; const b = entry.bounds;
+    const lateralAxis = d.lateralAxis ?? ((b.maxX - b.minX) >= (b.maxZ - b.minZ) ? 'x' : 'z');
+    const normalAxis = lateralAxis === 'x' ? 'z' : 'x';
+    const vec = CONFIG.ORIENTATION.facingVectors[d.facade?.outward ?? 'south'];
+    const sign = (normalAxis === 'z' ? vec.z : vec.x) > 0 ? 1 : -1;
+    const doorSide = sign > 0 ? (normalAxis === 'z' ? b.maxZ : b.maxX) : (normalAxis === 'z' ? b.minZ : b.minX);
+    // 门侧向内 1m：任何建筑（贯穿/非贯穿）都必须放行
+    const coord = doorSide - sign * 1;
+    const pt = normalAxis === 'z' ? { x: d.center.x, z: coord } : { x: coord, z: d.center.z };
+    const feet = LAYOUT.floorYAt(pt.x, pt.z) ?? entry.y0;
+    if (obstacleBlocksPoint(entry, { x: pt.x, z: pt.z, feetY: feet })) fails.push(`${s.id}(门侧内 1m 被挡 @${pt.x},${pt.z})`);
+  }
+  assertEqual(fails.length, 0, `全部门洞的门侧内 1m 必须放行（失败 ${fails.length}）：${fails.slice(0, 6).join('；')}`);
+  runner.info(`生产装配逐栋：${doors.length} 条建筑门的门侧内 1m 全部放行 ✓（贯穿类与收窄候选同口径）`);
+});
+
+/* ==========================================================================
+ * 8. t35：收窄 `insideObstacleDoor` —— `through === false` 的门，豁免**止于后墙**
+ * --------------------------------------------------------------------------
+ * 缺陷（t22 只读定位 / t31 三证 / 本卡落地）：收窄前门洞豁免沿进深轴一律 `[lo−r, hi+r]` = **整进深**，
+ * 于是 37 栋非贯穿建筑（hall 14 + sideHall 23，背面实心后墙）在碰撞层被开了一条"从后墙穿出"的
+ * **幻影走廊**（`camera.js` / `registry.js` / `walk-solver.js` 三个消费方共用同一个谓词 ⇒ 玩家真能穿出）。
+ * 收窄后：门侧端**保持原样**（外墙外沿 ± radius），远端收到**室内面远边**（= 后墙内侧）。
+ * ========================================================================== */
+
+/** t35：收窄前的"整进深"门带（内联复刻）——仅作**突变对照**，证明收窄确实改变了判定（断言不恒真）。 */
+function legacyFullDepthDoorBand(door, bounds, x, z) {
+  if (!door || !bounds) return false;
+  const lateralAxis = door.lateralAxis ?? ((bounds.maxX - bounds.minX) >= (bounds.maxZ - bounds.minZ) ? 'x' : 'z');
+  const halfWidth = Math.max(0, (door.width ?? 0) / 2 - INTERACTION.player.radius);
+  if (lateralAxis === 'x') {
+    return Math.abs(x - (door.center?.x ?? 0)) <= halfWidth
+      && z >= bounds.minZ - INTERACTION.player.radius && z <= bounds.maxZ + INTERACTION.player.radius;
+  }
+  return Math.abs(z - (door.center?.z ?? 0)) <= halfWidth
+    && x >= bounds.minX - INTERACTION.player.radius && x <= bounds.maxX + INTERACTION.player.radius;
+}
+
+/** t35：门洞带几何（canonical）——法线轴 / 门外朝向符号 / 门侧外沿 / 对面外墙外沿。 */
+function t35DoorGeometry(entry) {
+  const bounds = entry.bounds;
+  const door = entry.door;
+  const lateralAxis = door.lateralAxis ?? ((bounds.maxX - bounds.minX) >= (bounds.maxZ - bounds.minZ) ? 'x' : 'z');
+  const normalAxis = lateralAxis === 'x' ? 'z' : 'x';
+  // 派生门（水体桥面/汀步走廊、宫墙城门）没有 `facade`：只有 `through === false` 的建筑门才需要朝向，
+  // 这里对缺字段**不猜**（sign = 0 ⇒ 调用方只可能用它做"整进深"采样）。
+  const vector = door.facade ? CONFIG.ORIENTATION.facingVectors[door.facade.outward] : null;
+  const sign = vector ? ((normalAxis === 'z' ? vector.z : vector.x) > 0 ? 1 : -1) : 0;
+  const lo = normalAxis === 'z' ? bounds.minZ : bounds.minX;
+  const hi = normalAxis === 'z' ? bounds.maxZ : bounds.maxX;
+  return {
+    bounds, door, lateralAxis, normalAxis, sign, lo, hi,
+    doorSide: sign > 0 ? hi : lo,
+    farFace: sign > 0 ? lo : hi,
+    halfDepth: (hi - lo) / 2,
+    at: (coord) => (normalAxis === 'z' ? { x: door.center.x, z: coord } : { x: coord, z: door.center.z }),
+  };
+}
+
+/** t35：室内面远边（沿法线轴、离门侧最远的那条边）。 */
+function t35InteriorFarEdge(slotId, geometry) {
+  const record = LAYOUT.INTERIOR_BY_SLOT[slotId];
+  const rect = record ? LAYOUT.WALKABLE.find((w) => w.id === record.walkableId) : null;
+  if (!rect) return null;
+  const { normalAxis, sign } = geometry;
+  if (normalAxis === 'z') return sign > 0 ? rect.bounds.minZ : rect.bounds.maxZ;
+  return sign > 0 ? rect.bounds.minX : rect.bounds.maxX;
+}
+
+/** t35：生产装配 + **细口径图**（cellSize:1，显式提额）只建一次，t35②/④/⑤ 共用（口径三要素写在各断言里）。 */
+let t35AssemblyCache = null;
+async function t35Assembly() {
+  if (t35AssemblyCache) return t35AssemblyCache;
+  const { createWalkGraph } = await loadModule('src/interaction/walk-graph.js');
+  const city = await assembleCity();
+  const graph = createWalkGraph(city.solver, { cellSize: 1, maxCells: 3_000_000 });
+  const entries = new Map(slice.assembleBaselineObstacles().list.map((o) => [o.id, o]));
+  const anchor = graph.componentOf(T35_ANCHOR.x, T35_ANCHOR.z);
+  t35AssemblyCache = { city, graph, solver: city.solver, entries, anchor };
+  return t35AssemblyCache;
+}
+
+/** 锚点 = `verify-walk` 的 FP_ROUTE[0] 南桥外（与 walk-reachability / core-precision 同锚点）。 */
+const T35_ANCHOR = { x: 0, z: -480 };
+
+runner.section('8. t35 门洞豁免收窄（through===false ⇒ 止于后墙；幻影通道消灭）');
+
+await runner.test('t35①：进深登记逐栋 —— 37 座非贯穿类解析出**有限进深**（且 > 半进深），其余 38 条门保持整进深且判定逐点不变', () => {
+  const list = baseline.list.filter((o) => o.door);
+  const narrow = list.filter((o) => o.door.through === false);
+  const full = list.filter((o) => o.door.through !== false);
+  assertEqual(list.length, 75, `带 door 的障碍条目应为 75 条（63 建筑门 + 8 水体门 + 4 宫墙城门；实际 ${list.length}）`);
+  assertEqual(narrow.length, 37, `非贯穿类（hall/sideHall）应恰为 37 座（实际 ${narrow.length}）`);
+  assertEqual(full.length, 38, `贯穿类 26 + 未登记 through 12 应恰为 38 条（实际 ${full.length}）`);
+  const problems = [];
+  const rows = [];
+  for (const o of narrow) {
+    const geometry = t35DoorGeometry(o);
+    const depth = slice.doorBandDepthOf(o.door, geometry.bounds);
+    if (!(typeof depth === 'number' && depth > 0)) {
+      problems.push(`${o.id}: 进深未解析（${depth}）`);
+    } else if (!(depth > geometry.halfDepth)) {
+      // 进深必须 > 半进深 ⇒ 建筑中心仍在带内 ⇒ `probeDoorClearance` 的取样平面口径不变
+      problems.push(`${o.id}: 进深 ${depth} ≤ 半进深 ${geometry.halfDepth}（会动到净宽探针的取样平面）`);
+    }
+    // 后墙（室内面远边）必须在带**外**：远端必须严格收到室内面远边
+    const farEdge = t35InteriorFarEdge(o.id.replace(/^OB-/, ''), geometry);
+    if (farEdge === null) problems.push(`${o.id}: 解析不到已登记室内面（进深无权威几何）`);
+    else if (depth !== null && Math.abs(Math.abs(geometry.doorSide - farEdge) - depth) > 1e-6) {
+      problems.push(`${o.id}: 进深 ${depth} ≠ |门侧外沿 − 室内面远边| ${Math.abs(geometry.doorSide - farEdge)}`);
+    }
+    rows.push(`${o.id.slice(3)}=${depth}`);
+  }
+  // 语义不变的反证：38 条整进深门在**门带全深 × 横向 ±(半宽+1m)** 上逐 0.5m 采样，新谓词 ≡ 内联"整进深"复刻
+  let sampled = 0;
+  for (const o of full) {
+    const d = slice.doorBandDepthOf(o.door, o.bounds);
+    if (d !== null) problems.push(`${o.id}: through=${String(o.door.through)} 应保持整进深（实际进深 ${d}）`);
+    const geometry = t35DoorGeometry(o);
+    const reach = Math.max(0, o.door.width / 2) + 1;
+    for (let u = -reach; u <= reach; u += 0.5) {
+      for (let v = geometry.lo - 2; v <= geometry.hi + 2; v += 0.5) {
+        const x = geometry.normalAxis === 'z' ? o.door.center.x + u : v;
+        const z = geometry.normalAxis === 'z' ? v : o.door.center.z + u;
+        sampled += 1;
+        if (slice.insideObstacleDoor(o.door, o.bounds, x, z) !== legacyFullDepthDoorBand(o.door, o.bounds, x, z)) {
+          problems.push(`${o.id}: 整进深条目在 (${x},${z}) 判定被本卡改动（应逐点不变）`);
+        }
+      }
+    }
+  }
+  assertEqual(problems.length, 0, `进深登记必须逐栋可解析、且整进深条目判定逐点不变（${problems.slice(0, 5).join('；')}）`);
+  runner.info(`进深登记：37 座非贯穿类全部解析出进深（均 > 半进深）｜38 条整进深门 ${sampled} 个采样点判定**逐点未变**｜进深表 ${rows.slice(0, 8).join(' ')} …`);
+});
+
+await runner.test('t35②：26 座贯穿类**两侧皆可走**（生产装配 + cellSize:1 + 锚点 (0,−480) + 逐栋格对，判据 .ok）', async () => {
+  const { graph, solver, entries, anchor } = await t35Assembly();
+  assert(anchor.ok === true, `锚点 (0,−480) 必须在可行走主分量内（实际 ${JSON.stringify(anchor)}）`);
+  const slots = LAYOUT.SLOTS.filter((s) => s.door && s.door.through === true);
+  assertEqual(slots.length, 26, `贯穿类应恰为 26 座（实际 ${slots.length}）`);
+  const failures = [];
+  const rows = [];
+  for (const slot of slots) {
+    const entry = entries.get(`OB-${slot.id}`);
+    assert(entry, `${slot.id} 应在生产装配的障碍集合里`);
+    const geometry = t35DoorGeometry(entry);
+    const near = geometry.at(geometry.doorSide - geometry.sign * 1); // 门侧内 1m
+    const far = geometry.at(geometry.farFace + geometry.sign * 1);  // 背面内 1m（贯穿的另一侧）
+    const readouts = [];
+    for (const [tag, point] of [['门侧', near], ['背面', far]]) {
+      const probed = solver.probe(point.x, point.z, null);
+      const component = graph.componentOf(point.x, point.z);
+      const blocked = slice.obstacleBlocksPoint(entry, { x: point.x, z: point.z, feetY: probed.surfaceY ?? entry.y0 });
+      readouts.push(`${tag}(${point.x},${point.z}) probe=${probed.ok ? 'ok' : 'fail'} 分量=${component.ok ? 'ok' : 'fail'} 谓词阻挡=${blocked}`);
+      if (probed.ok !== true) failures.push(`${slot.id} ${tag} 不可站立（reasons=${JSON.stringify(probed.reasons.slice(0, 2))}）`);
+      if (component.ok !== true) failures.push(`${slot.id} ${tag} 与锚点不同分量`);
+      if (blocked !== false) failures.push(`${slot.id} ${tag} 被本栋门洞盒阻挡`);
+    }
+    rows.push(`${slot.id}｜${readouts.join('｜')}`);
+  }
+  assertEqual(failures.length, 0, `贯穿类两侧必须皆可走（失败 ${failures.length}）：${failures.slice(0, 5).join('；')}`);
+  runner.info(`贯穿类 26 座 × 两侧：可站立 + 与锚点同分量 + 门洞盒放行 = 全部 .ok｜样例 ${rows[0]}｜${rows[25]}`);
+});
+
+await runner.test('t35③：37 座非贯穿类 —— **后墙中线必须被挡**（突变对照：旧整进深谓词不挡）+ 门侧内 1m 仍放行 + 自室内中心向后墙走穿不过', async () => {
+  const { solver, entries } = await t35Assembly();
+  const slots = LAYOUT.SLOTS.filter((s) => s.door && s.door.through === false);
+  assertEqual(slots.length, 37, `非贯穿类应恰为 37 座（实际 ${slots.length}）`);
+  const failures = [];
+  const rows = [];
+  for (const slot of slots) {
+    const entry = entries.get(`OB-${slot.id}`);
+    assert(entry, `${slot.id} 应在生产装配的障碍集合里`);
+    const geometry = t35DoorGeometry(entry);
+    const farEdge = t35InteriorFarEdge(slot.id, geometry);
+    assert(farEdge !== null, `${slot.id} 应有已登记室内面（进深权威几何）`);
+    // 后墙中线 = 法线坐标 (室内面远边 + 该侧外墙外沿) / 2、横向 = 门洞中心
+    const midCoord = (farEdge + geometry.farFace) / 2;
+    const mid = geometry.at(midCoord);
+    const blockedNow = slice.obstacleBlocksPoint(entry, { x: mid.x, z: mid.z, feetY: entry.y0 });
+    const exemptOld = legacyFullDepthDoorBand(entry.door, entry.bounds, mid.x, mid.z);
+    // 门侧内 1m：收窄不得影响进门
+    const near = geometry.at(geometry.doorSide - geometry.sign * 1);
+    const blockedNear = slice.obstacleBlocksPoint(entry, { x: near.x, z: near.z, feetY: entry.y0 });
+    // 真实行走：自室内中心以 0.25m 小步朝后墙走，终点不得越出室内面远边
+    const record = LAYOUT.INTERIOR_BY_SLOT[slot.id];
+    const rect = LAYOUT.WALKABLE.find((w) => w.id === record.walkableId);
+    const cx = (rect.bounds.minX + rect.bounds.maxX) / 2;
+    const cz = (rect.bounds.minZ + rect.bounds.maxZ) / 2;
+    const span = Math.abs(farEdge - (geometry.normalAxis === 'z' ? cz : cx)) + 6;
+    const dir = geometry.normalAxis === 'z' ? [0, -geometry.sign] : [-geometry.sign, 0];
+    let px = cx;
+    let pz = cz;
+    for (let i = 0; i < Math.ceil(span / 0.25); i += 1) {
+      const r = solver.step({ x: px, y: rect.y, z: pz }, dir[0], dir[1], 0.25, {});
+      px = r.x;
+      pz = r.z;
+    }
+    const reached = geometry.normalAxis === 'z' ? pz : px;
+    const walkedPast = geometry.sign > 0 ? reached < farEdge - 1e-6 : reached > farEdge + 1e-6;
+    rows.push(`${slot.id}: 后墙中线(${mid.x},${mid.z}) 挡=${blockedNow}（旧谓词放行=${exemptOld}）｜门侧内 1m 挡=${blockedNear}｜走到 ${reached.toFixed(2)} vs 室内远边 ${farEdge}`);
+    if (blockedNow !== true) failures.push(`${slot.id} 后墙中线未被挡（幻影通道仍在）`);
+    if (exemptOld !== true) failures.push(`${slot.id} 突变对照失效：旧谓词本就挡住该点（断言恒真）`);
+    if (blockedNear !== false) failures.push(`${slot.id} 门侧内 1m 被挡（收窄误伤进门）`);
+    if (walkedPast) failures.push(`${slot.id} 真实行走走穿后墙（到 ${reached.toFixed(2)}，室内面远边 ${farEdge}）`);
+  }
+  assertEqual(failures.length, 0, `37 座后墙必须不可穿（失败 ${failures.length}）：${failures.slice(0, 5).join('；')}`);
+  runner.info(`非贯穿类 37 座：后墙中线 **全部被挡**（且旧整进深谓词在该点全部放行 ⇒ 突变对照有效）｜门侧内 1m 全部放行｜自室内中心 0.25m 小步走出全部止于室内面远边｜样例 ${rows[0]}`);
+});
+
+await runner.test('t35④：43 栋内景**仍可达**（生产装配 + cellSize:1 + 锚点 (0,−480)，判据 .ok）', async () => {
+  const { graph, anchor } = await t35Assembly();
+  const interiors = LAYOUT.WALKABLE.filter((w) => w.kind === 'interior');
+  assertEqual(interiors.length, 43, `可进入内景应为 43 栋（实际 ${interiors.length}）`);
+  const unreachable = [];
+  for (const surface of interiors) {
+    const cx = (surface.bounds.minX + surface.bounds.maxX) / 2;
+    const cz = (surface.bounds.minZ + surface.bounds.maxZ) / 2;
+    const component = graph.componentOf(cx, cz);
+    if (component.ok !== true) unreachable.push(`${surface.id}(${cx},${cz})`);
+  }
+  assertEqual(unreachable.length, 0, `43 栋内景必须与锚点同分量（细口径；失败 ${unreachable.length}）：${unreachable.slice(0, 5).join('；')}`);
+  runner.info(`内景 43/43 与锚点同分量（细口径 cellSize:1，分量规模 ${anchor.size} 格）｜t10/t13/t17 成果未回退`);
+});
+
+await runner.test('t35⑤：失去的 1m 可走格**逐格归因** —— 恰 1025 格，全部在已登记室内面**之外**（室内面内 0 格）', async () => {
+  const { solver, entries } = await t35Assembly();
+  const slots = LAYOUT.SLOTS.filter((s) => s.door);
+  const narrowSlots35 = LAYOUT.SLOTS.filter((s) => s.door && s.door.through === false);
+  const interiorRects = LAYOUT.WALKABLE.filter((w) => w.kind === 'interior');
+  const inSomeInterior = (x, z) => interiorRects.some((r) => x > r.bounds.minX && x < r.bounds.maxX && z > r.bounds.minZ && z < r.bounds.maxZ);
+  const lost = [];
+  for (const slot of slots) {
+    const entry = entries.get(`OB-${slot.id}`);
+    const b = entry.bounds;
+    for (let x = Math.floor(b.minX - 3); x <= Math.ceil(b.maxX + 3); x += 1) {
+      for (let z = Math.floor(b.minZ - 3); z <= Math.ceil(b.maxZ + 3); z += 1) {
+        const probed = solver.probe(x, z, null);
+        if (probed.ok || !Number.isFinite(probed.surfaceY)) continue;
+        // 唯一阻挡原因 = 本栋门洞盒（否则旧树里本就不可走）∧ 旧整进深谓词会放行 ⇒ 旧树里它是可走格
+        if (probed.reasons.length !== 1 || probed.reasons[0] !== entry.id) continue;
+        if (!legacyFullDepthDoorBand(entry.door, b, x, z)) continue;
+        lost.push({ id: slot.id, x, z, insideInterior: inSomeInterior(x, z) });
+      }
+    }
+  }
+
+  const inside = lost.filter((q) => q.insideInterior);
+  const byKind = new Map();
+  for (const q of lost) byKind.set(q.id, (byKind.get(q.id) ?? 0) + 1);
+  /**
+   * t35：失去格 = **收窄的量化代价**，必须**逐格可归因**：
+   *   · 全部落在**已登记室内面之外**（室内地面一格未失 ⇒ 43 栋内景不因收窄缩水）；
+   *   · 总数恰 = 细口径可走格 726,806（t31 后）− 725,781（本卡后）= **1,025**（与 `REGISTERED.walkable` 的
+   *     差值逐值对齐；两池走廊带来的 +2,325 仍原样保留）。
+   */
+  assertEqual(lost.length, 1025, `失去的 1m 可走格应恰为 1025（实际 ${lost.length}）`);
+  assertEqual(inside.length, 0, `失去格**不得**落在已登记室内面内（实际 ${inside.length}：${inside.slice(0, 5).map((q) => `${q.id}(${q.x},${q.z})`).join('；')}）`);
+  const withLoss = [...byKind.entries()];
+  // 37 座非贯穿类里，只有 `B-hall-mid` 失去格数为 0：它的进深 27.4 / 总深 28.0 ⇒ 后墙带只剩 0.6m < 1m 格距
+  // （没有 1m 格心落在带内）——这不是"漏记"，下面把这条**显式点名**，防止将来悄悄多出一栋零失去。
+  const zeroLoss = narrowSlots35.filter((s) => !byKind.has(s.id)).map((s) => s.id);
+  assertEqual(zeroLoss.join(','), 'B-hall-mid', `零失去的非贯穿建筑应恰为 B-hall-mid（实际 ${zeroLoss.join(',') || '无'}）`);
+  const midGeometry = t35DoorGeometry(entries.get('OB-B-hall-mid'));
+  const midFarEdge = t35InteriorFarEdge('B-hall-mid', midGeometry);
+  assert(
+    Math.abs(midGeometry.farFace - midFarEdge) < 1,
+    `B-hall-mid 的后墙带应 < 1m（实际 ${Math.abs(midGeometry.farFace - midFarEdge).toFixed(2)}m）⇒ 无 1m 格心落入`,
+  );
+  assertEqual(withLoss.length, 36, `有失去格的建筑应恰为 36 座（37 座非贯穿类 − B-hall-mid；实际 ${withLoss.length}）`);
+  for (const [id, n] of withLoss) {
+    const slot = LAYOUT.SLOT_BY_ID[id] ?? LAYOUT.SLOTS.find((s) => s.id === id);
+    assertEqual(slot?.door?.through, false, `${id} 有失去格 ⇒ 必须是 through===false（实际 through=${String(slot?.door?.through)}）`);
+    assert(n > 0, `${id} 的失去格数应为正（实际 ${n}）`);
+  }
+  const sample = lost.slice(0, 3).map((q) => `${q.id}(${q.x},${q.z})`).join(' ');
+  runner.info(`失去格 ${lost.length} 格，全部在室内面之外（室内面内 ${inside.length}）｜逐栋 ${withLoss.length} 座｜样例 ${sample}｜与 REGISTERED.walkable 差 726806−725781=1025 逐值对齐`);
 });
 
 /* ========================================================================== */

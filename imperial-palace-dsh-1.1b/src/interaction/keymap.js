@@ -15,7 +15,7 @@
  *   有选中建筑 → 取消选中 > 其余 → 无操作。
  */
 
-import { EVENTS } from '../shared/config.js';
+import { CONFIG, EVENTS } from '../shared/config.js';
 import { TIME_PRESETS, QUALITY_ORDER, VIEW_MODE_BY_INDEX, nextInCycle } from './requests.js';
 
 /** 移动键（由 core 相机装置的第一人称内核消费，G 不重复实现移动）。 */
@@ -41,6 +41,7 @@ export const KEY_KINDS = Object.freeze([
   'reset',
   'selection',
   'pointerlock',
+  'jump',
   'help',
   'minimap',
 ]);
@@ -72,11 +73,26 @@ export function resolveKey(code, ctx = {}) {
   }
 
   if (code === 'KeyF') {
-    // F 的三条语义（t59，按优先级）：
-    //   ① 已在某建筑内景 → 返回进入前的模式与机位；
-    //   ② 有选中建筑 → visitable 则进入该建筑内景（机位由 catalog 从区/布局数据推导），
-    //      否则只给"不可进入"提示、不改视角；
-    //   ③ 无选中 → 第一人称切换（原语义：已在 FP 时再请求 fp，由 core 恢复进入前的模式与机位）。
+    /**
+     * F 的语义（t59 定序 + **t2 修优先级**）：
+     *   ⓪ **已在第一人称 → 再按一次退出第一人称**（恢复进入前的模式与机位）。
+     *      —— 必须排在"选中建筑 → 进内景"之前：否则在第一人称里若有选中建筑，
+     *      按 F 会被判成「进入内景」，用户按不出"退出"（t2 真机实测：fp → interior，浏览器读数见回执）。
+     *   ① 已在某建筑内景 → 返回进入前的模式与机位；
+     *   ② 有选中建筑 → visitable 则进入该建筑内景（机位由 catalog 从区/布局数据推导），
+     *      否则只给"不可进入"提示、不改视角；
+     *   ③ 其余 → 进入第一人称。
+     */
+    if (fpActive) {
+      return {
+        code,
+        kind: 'view',
+        label: '退出第一人称',
+        owned: true,
+        request: { type: EVENTS.requestViewMode, payload: { mode: 'fp' } },
+        local: null,
+      };
+    }
     if (viewMode === 'interior') {
       return { code, kind: 'interior', label: '返回进入内景前的视角', owned: true, request: null, local: 'exitInterior' };
     }
@@ -140,6 +156,15 @@ export function resolveKey(code, ctx = {}) {
   }
 
   if (code === 'Space') {
+    /**
+     * t2：第一人称下空格 = **跳跃**（由 core 的第一人称跳跃内核执行，不另建物理）；
+     * 非第一人称保持原语义（开始/退出中轴导览）。
+     * 之所以在键位层分流而不是"两边都处理"：本层对 owned 键 `stopPropagation()`，
+     * core 的键盘监听器收不到该事件 ⇒ 必须在这里给出唯一语义，避免同键双解。
+     */
+    if (fpActive) {
+      return { code, kind: 'jump', label: '跳跃', owned: true, request: null, local: 'jump' };
+    }
     return {
       code,
       kind: 'tour',
@@ -176,7 +201,7 @@ export function helpKeyList() {
     const resolved = resolveKey(`Digit${index}`, {});
     if (resolved) rows.push({ code: String(index), label: `视角 ${index}` });
   }
-  rows.push({ code: 'F', label: '选中建筑：进入其内景 / 再按返回；未选中：进入或退出第一人称' });
+  rows.push({ code: 'F', label: '第一人称中：再按一次即「退出第一人称」（优先于选中）；内景中：返回；否则：有选中则进入其内景，无选中则进入第一人称' });
   rows.push({ code: '点击建筑', label: '左上角显示该建筑详情（空白处或「关闭」取消选中）' });
   rows.push({ code: 'Esc', label: '释放指针锁（留在第一人称）/ 暂停导览' });
   rows.push({ code: 'W A S D', label: '第一人称移动（↑↓←→ 同义）' });
@@ -184,7 +209,7 @@ export function helpKeyList() {
   rows.push({ code: 'Shift', label: '第一人称加速' });
   rows.push({ code: '拖动 / 滚轮', label: '转视角 / 推拉镜头' });
   rows.push({ code: 'T / Y', label: '切换时辰 / 质量档' });
-  rows.push({ code: 'Space', label: '开始 / 退出中轴导览' });
+  rows.push({ code: 'Space', label: `第一人称：跳跃（顶点 ≤${CONFIG.INTERACTION.jump.maxHeight}m，落点须可站立）｜其他视角：开始 / 退出中轴导览` });
   rows.push({ code: 'R', label: '回到全城（复位）' });
   rows.push({ code: 'H / M', label: '操作提示 / 小地图' });
   return rows;
@@ -193,6 +218,6 @@ export function helpKeyList() {
 /** 触屏支持范围（§6.2 末条：必须明确说明漫游的支持范围）。 */
 export const TOUCH_SUPPORT_NOTE =
   '触屏支持：单指拖动转视角、双指捏合缩放、点按建筑查看信息、点按分区按钮跳转、鸟瞰/分区/内景视角切换；' +
-  '第一人称键盘漫游（WASD/Shift）与鼠标指针锁定仅在桌面浏览器可用，触屏下不提供（可点「分区」按钮用鸟瞰视角浏览全城）。';
+  '第一人称键盘漫游（WASD/Shift + 空格跳跃）与鼠标指针锁定仅在桌面浏览器可用，触屏下不提供（可点「分区」按钮用鸟瞰视角浏览全城）。';
 
 export default resolveKey;

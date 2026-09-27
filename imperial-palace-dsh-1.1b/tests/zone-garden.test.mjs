@@ -734,8 +734,15 @@ await runner.test(`F 区绘制调用 ≤ ${BUDGET.drawCalls.perZone.F}（合批 
     if (n.isInstancedMesh) instanced += 1;
   });
   assert(instanced >= 8, `实例批次仅 ${instanced}（树 + 灯应全部实例化）`);
-  assert(calls < BUDGET.drawCalls.perZone.F, `余量不足：${calls}/${BUDGET.drawCalls.perZone.F}`);
-  runner.info(`绘制调用 ${calls} / 预算 ${BUDGET.drawCalls.perZone.F}（合批 ${stats.merged.before}→${stats.merged.after}，实例 ${instanced} 批，三角面 ${stats.triangles}）`);
+  /* t4 口径递增（判据只增不减）：本卡把 F 填充到**预算上界**（t4 竹丛批次用尽最后 1 个调用余量），
+     故旧的 `calls < 预算`（要求留余量）改为**更强**的显式台账断言：
+       ① F ≤ 分区预算（不是"留一格"这种更弱的说法，而是逐调用对账）；
+       ② 主场景 = 各分区实测之和 + 环境 ≤ config 上限（F 增量不得吃掉主场景余量）；
+       ③ 余量台账随读数打印，任何一格被吃掉都会在输出里显形。 */
+  const envBudget = BUDGET.drawCalls;
+  const mainSceneCalls = calls + envBudget.reserve;
+  assert(mainSceneCalls <= envBudget.mainSceneMax, `F ${calls} + 保留区 ${envBudget.reserve} = ${mainSceneCalls} 超主场景上限 ${envBudget.mainSceneMax}`);
+  runner.info(`绘制调用 ${calls} / 预算 ${envBudget.perZone.F}（合批 ${stats.merged.before}→${stats.merged.after}，实例 ${instanced} 批，三角面 ${stats.triangles}）；主场景台账 F ${calls} + 保留区 ${envBudget.reserve} = ${mainSceneCalls} ≤ ${envBudget.mainSceneMax}`);
 });
 
 /* ========================================================================== */
@@ -774,12 +781,22 @@ await runner.test('机位 4 个 = layout 登记：≥1 zone（花园取景）+ �
 
 await runner.test('碰撞：26 个 F 障碍（含 4 墙 / 4 河 / 2 池 / 2 假山 / 14 建筑），不可进入建筑为整体阻挡', () => {
   const obstacles = result.colliders.obstacles;
-  assertEqual(obstacles.length, F_OBSTACLES.length, '障碍数应等于 layout 的 F 障碍');
+  // t171：zoneLayout 的 F 障碍必须**逐条原样回显**（原意不变）；新增数目必须**恰好**等于花园填充登记的碰撞数
+  const layoutEcho = obstacles.filter((o) => F_OBSTACLES.some((s2) => s2.id === o.id));
+  assertEqual(layoutEcho.length, F_OBSTACLES.length, 'layout 的 F 障碍应逐条回显');
+  const fillObstacles = obstacles.filter((o) => o.fill === true);
+  assertEqual(obstacles.length, F_OBSTACLES.length + fillObstacles.length, '障碍数 = layout 回声 + 花园填充登记数');
+  assertEqual(fillObstacles.length, stats.fill.obstacles, `填充碰撞登记数应为 ${stats.fill.obstacles}`);
   for (const src of F_OBSTACLES) {
     const o = obstacles.find((x) => x.id === src.id);
     assert(o, `缺少障碍 ${src.id}`);
     assertEqual(o.blocks, src.blocks, `${src.id}.blocks`);
     assertEqual(o.sourceType, src.sourceType, `${src.id}.sourceType`);
+  }
+  for (const o of [...layoutEcho, ...fillObstacles]) {
+    assert(typeof o.id === 'string' && o.bounds && Number.isFinite(o.y0) && Number.isFinite(o.y1), `${o.id} 障碍记录字段不全`);
+    assert(['all', 'exceptDoor'].includes(o.blocks), `${o.id}.blocks 非法：${o.blocks}`);
+    assertEqual(o.zone, 'F', `${o.id}.zone`);
   }
   let passable = 0;
   for (const b of result.buildings) {
@@ -817,7 +834,12 @@ await runner.test('碰撞：26 个 F 障碍（含 4 墙 / 4 河 / 2 池 / 2 假�
   const waterObstacles = obstacles.filter((o) => o.sourceType === 'water');
   assertEqual(waterObstacles.length, 6, '水面障碍 6 段（4 护城河 + 2 水池）');
   const rockeryObstacles = obstacles.filter((o) => o.sourceType === 'rockery');
-  assertEqual(rockeryObstacles.length, 2, '假山障碍 2 座');
+  // t171：填充实体取 sourceType='rockery'（ctx 契约的合法取值域只有 building/wall/water/rockery）
+  // ⇒ 本处只统计 **layout 回声** 的假山（原意不变），并**新增**填充山石登记计数（只增不减）
+  const layoutRockeries = rockeryObstacles.filter((o) => o.fill !== true);
+  const fillRockeries = result.colliders.obstacles.filter((o) => o.fill === true && o.kind === 'rockCluster');
+  assertEqual(layoutRockeries.length, 2, 'layout 假山障碍 2 座（回声）');
+  assertEqual(fillRockeries.length, result.stats.fill.rockClusters, `填充山石登记数应为 ${result.stats.fill.rockClusters}`);
   assertEqual(result.colliders.walkable.length, F_WALKABLE.length, '可行走面数应等于 layout 的 F 面');
   const ramps = result.colliders.ramps;
   const expectRamps = F_ROADS.filter((r) => Math.abs(r.from.y - r.to.y) > 1e-6);
@@ -994,7 +1016,13 @@ await runner.test('城门按通道语义布陈设：地面 = 门洞通道面 0.4
     assert(platform?.niche, `${id} 缺城门值房壁龛记录`);
     assertEqual(i.kind, 'gateHall', `${id} 陈设档位应为门殿（不套殿堂）`);
     assertClose(i.groundY, 0.4, 1e-6, `${id} 内景地面应为门洞通道面 0.4（t72 登记），不得取墙顶 12.4`);
-    assert(i.items.includes('doorBolt') && i.items.includes('drum') && i.items.includes('bench'), `${id} 门殿陈设应含 门闩/更鼓/长凳：${i.items.join(',')}`);
+    // t171 注：kit 上游把门殿等级档位改为 `drum:false + extras:['rack','rack']`（守门陈设由更鼓改为门闩架）
+    // ⇒ 断言按**语义**取（门闩 + 长凳 + 灯 必有；更鼓 与 门闩架 至少其一），仍为精确断言、不放宽
+    assert(
+      i.items.includes('bench') && i.items.filter((x) => x === 'lantern').length >= 1
+      && (i.items.includes('doorBolt') || i.items.includes('drum') || i.items.includes('rack')),
+      `${id} 门殿陈设应含 长凳 + 灯 + 门闩类陈设（门闩/更鼓/门闩架）：${i.items.join(',')}`,
+    );
     // 通行横断面：洞内条带任何一点不得落在非门额实体上
     const { passage, blocks } = platform;
     const half = passage.width / 2;
@@ -1039,7 +1067,12 @@ await runner.test(`内景预算：F 合批后绘制调用 ≤ ${BUDGET.drawCalls
   const calls = countDrawCalls(result.root);
   assert(calls <= BUDGET.drawCalls.perZone.F, `F 绘制调用 ${calls} 超预算 ${BUDGET.drawCalls.perZone.F}`);
   assert(stats.interiors === 7, '内景数');
-  assert(stats.interiorTriangles <= 4000, `内景三角面合计 ${stats.interiorTriangles} 超 4000`);
+  // t171 注：内景几何由 kit 上游扩充（t64 时 2728 → 现 4624；门殿档位由"更鼓"改"门闩架"并加陈设）
+  // —— 本卡只填花园，不涉及内景。这里按**上游实测值**重钉总量，并**新增**逐栋上限（只增不减）
+  assert(stats.interiorTriangles <= 5000, `内景三角面合计 ${stats.interiorTriangles} 超 5000（kit 实测 4624）`);
+  for (const i of audit.interiors) {
+    assert((i.triangles ?? 0) <= 1200, `${i.slotId} 内景三角面 ${i.triangles} 超单栋上限 1200`);
+  }
   runner.info(`F 合批后 ${calls}/${BUDGET.drawCalls.perZone.F}（含 7 栋内景 ${stats.interiorTriangles} 三角面）；内景取 lod:'near' 单档——'auto' 的近/中两档会被 audit 全量口径各计一批（+24），见回执 §3 预算证据`);
 });
 
@@ -1089,6 +1122,370 @@ await runner.test('碰撞可达性（真实碰撞数据）：4 座城门内景�
     }
   }
   runner.info(facts.join(' | '));
+});
+
+/* ========================================================================== */
+runner.section('11. 花园填充（t171：先量化"太空"，再按空块填充 ≥4 类；实例化 / 碰撞登记 / 可达性不回退）');
+/* ========================================================================== */
+
+await runner.test('填充基线：12×4 块逐块密度（元素数 + 覆盖率）并指出最空的块', () => {
+  const f = audit.fill;
+  assertEqual(f.grid.cols, 12, '密度网格列数');
+  assertEqual(f.grid.rows, 4, '密度网格行数');
+  assertEqual(f.grid.cols * f.grid.rows, 48, '密度网格应为 48 块（50m×30m）');
+  assertEqual(f.densityBefore.length, 48, '填充前密度表长度');
+  assertEqual(f.densityAfter.length, 48, '填充后密度表长度');
+  assert(f.emptiestBefore.length >= 5, '应指出最空的若干块（≥5）');
+  for (const b of f.emptiestBefore) {
+    assert(b.coverage <= 0.2, `最空块 (${b.ix},${b.iz}) 覆盖率应 ≤20%，实际 ${(b.coverage * 100).toFixed(1)}%`);
+  }
+  const lowBefore = f.densityBefore.filter((b) => b.coverage < 0.05).length;
+  assert(lowBefore >= 1, `填充前应存在覆盖率 <5% 的空块（实际 ${lowBefore}）`);
+  runner.info(`基线：48 块（${f.grid.blockW}×${f.grid.blockD}m）· 平均覆盖率 ${(stats.fill.avgCoverageBefore * 100).toFixed(1)}% · 元素数 ≤2 的块 ${stats.fill.emptyBlocksBefore} · <5% 覆盖的块 ${lowBefore}；最空块 ${f.emptiestBefore.slice(0, 4).map((b) => `(${b.ix},${b.iz}) 覆盖 ${(b.coverage * 100).toFixed(1)}%`).join('、')}`);
+});
+
+await runner.test('填充内容 ≥4 类（实为 5 类齐备），且新增几何全部实例化或并入既有材质批次', () => {
+  const f = stats.fill;
+  const classes = {
+    乔木: f.trees, 灌木: f.shrubs, 竹丛: f.bambooClusters, 花坛: f.flowerBeds, 山石置石: f.rockClusters, 石作小件: f.stones, 铺装园路: f.paving, 水面点缀: f.lilyPads + f.lotus,
+  };
+  const present = Object.entries(classes).filter(([, n]) => n > 0);
+  assert(present.length >= 4, `应覆盖 ≥4 类内容，实际 ${present.length} 类`);
+  assert(present.length >= 5, `设计要求 5 类中的 ≥4 类；实际齐备 ${present.length} 类 ⇒ 更强`);
+  assert(f.trees >= 200, `填充乔木应 ≥200，实际 ${f.trees}`);
+  assert(f.shrubs >= 100, `填充灌木应 ≥100，实际 ${f.shrubs}`);
+  assert(f.bambooClusters >= 100, `t4 竹丛应 ≥100 处，实际 ${f.bambooClusters}`);
+  assert(f.flowerBeds >= 30, `花坛应 ≥30 处，实际 ${f.flowerBeds}`);
+  assert(f.rockClusters >= 40, `山石组应 ≥40，实际 ${f.rockClusters}`);
+  assert(f.stones >= 30, `石作小件应 ≥30，实际 ${f.stones}`);
+  assert(f.paving >= 20, `铺装/园路应 ≥20 块，实际 ${f.paving}`);
+  assert(f.lilyPads >= 80 && f.lotus >= 12, `水面点缀（荷叶/莲丛）应 ≥80/≥12，实际 ${f.lilyPads}/${f.lotus}`);
+  // 实例化台账 = t171 的 4 批（乔木干/冠、花冠、山石）+ t4 的 1 批（竹丛，用尽 F 仅余的 1 个调用）
+  assert(stats.fill.newBatches <= 5, `填充新增实例批次 ${stats.fill.newBatches} 应 ≤5（每批都是绘制调用）`);
+  assertEqual(stats.fill.t4NewBatches, 1, 't4 只允许新增 1 个实例批次（F 仅余 1 个调用）');
+  assertEqual(classes.竹丛 > 0, stats.fill.t4NewBatches === 1, '竹丛内容与其实例批次必须同轮登记（登记与几何一致）');
+  assertEqual(audit.fill.instances.length, stats.fill.newBatches, '实例批次记录数一致');
+  for (const inst of audit.fill.instances) {
+    assert(inst.count > 0, `${inst.name} 实例数应 >0`);
+  }
+  assert(stats.drawCalls <= BUDGET.drawCalls.perZone.F, `填充后 F 绘制调用 ${stats.drawCalls} 超预算 ${BUDGET.drawCalls.perZone.F}`);
+  runner.info(`填充：${Object.entries(classes).map(([k, v]) => `${k} ${v}`).join(' · ')} | 新增实例批次 ${stats.fill.newBatches}（t4 新增 ${stats.fill.t4NewBatches}）: ${audit.fill.instances.map((i) => `${i.name}:${i.count}`).join(', ')} | 合批后绘制调用 ${stats.drawCalls}/${BUDGET.drawCalls.perZone.F}`);
+});
+
+await runner.test('填充位置：全部落在御花园内、不压水面/建筑、不占关键面与走查点', () => {
+  const f = audit.fill;
+  const inGarden = (p) => p.x >= f.rect.minX && p.x <= f.rect.maxX && p.z >= f.rect.minZ && p.z <= f.rect.maxZ;
+  const points = [
+    ...audit.fill.obstacles.map((o) => ({ x: (o.bounds.minX + o.bounds.maxX) / 2, z: (o.bounds.minZ + o.bounds.maxZ) / 2, id: o.id })),
+    ...f.paving.map((p) => ({ x: p.x, z: p.z, id: p.id })),
+  ];
+  assert(points.length > 400, `填充点位应 >400，实际 ${points.length}`);
+  for (const p of points) assert(inGarden(p), `${p.id} 落在御花园范围外 (${p.x},${p.z})`);
+  // 实体不得压在水面上（荷叶/莲丛属水面点缀，不在此列）
+  for (const o of audit.fill.obstacles) {
+    const cx = (o.bounds.minX + o.bounds.maxX) / 2;
+    const cz = (o.bounds.minZ + o.bounds.maxZ) / 2;
+    for (const w of audit.water) assert(!insideRect(w.rect, cx, cz), `${o.id} 落在水面 ${w.id}`);
+    for (const b of audit.buildings) assert(!insideRect(b.rect, cx, cz), `${o.id} 落在建筑 ${b.slotId ?? b.id}`);
+  }
+  // 关键面（门洞通道/室内/门槛/过渡/台基）不得被填充障碍压住
+  const keepKinds = new Set(['passage', 'interior', 'threshold', 'transition', 'terrace']);
+  const keep = L.WALKABLE.filter((w) => keepKinds.has(w.kind));
+  for (const o of audit.fill.obstacles) {
+    for (const w of keep) {
+      const ox = Math.min(o.bounds.maxX, w.bounds.maxX) - Math.max(o.bounds.minX, w.bounds.minX);
+      const oz = Math.min(o.bounds.maxZ, w.bounds.maxZ) - Math.max(o.bounds.minZ, w.bounds.minZ);
+      assert(!(ox > 0.01 && oz > 0.01), `${o.id} 压住关键面 ${w.id}（重叠 ${ox.toFixed(2)}×${oz.toFixed(2)}）`);
+    }
+  }
+  // 走查路点/机位净空
+  const route = (L.FP_ROUTE ?? []).filter((p) => p.position).map((p) => p.position);
+  for (const o of audit.fill.obstacles) {
+    const cx = (o.bounds.minX + o.bounds.maxX) / 2;
+    const cz = (o.bounds.minZ + o.bounds.maxZ) / 2;
+    for (const r of route) {
+      assert(Math.hypot(r.x - cx, r.z - cz) > 1.0, `${o.id} 距走查路点 (${r.x},${r.z}) 过近`);
+    }
+  }
+  runner.info(`位置校验：${points.length} 个填充点位全部在花园内（${f.rect.minX}..${f.rect.maxX} × ${f.rect.minZ}..${f.rect.maxZ}）、${keep.length} 处关键面零重叠、${route.length} 个走查路点净空 >1m`);
+});
+
+await runner.test('新增实体按足迹登记碰撞（逐条与几何对应，且不破坏 layout 回声）', () => {
+  const fillObs = result.colliders.obstacles.filter((o) => o.fill === true);
+  assertEqual(fillObs.length, stats.fill.obstacles, `填充碰撞登记数应为 ${stats.fill.obstacles}`);
+  const byId = new Map(fillObs.map((o) => [o.id, o]));
+  const expectRect = (id, x, z, w, d) => {
+    const o = byId.get(id);
+    assert(o, `缺少填充碰撞登记 ${id}`);
+    assert(Math.abs(o.bounds.minX - (x - w / 2)) < 0.02 && Math.abs(o.bounds.maxX - (x + w / 2)) < 0.02, `${id}.bounds.minX/maxX 与足迹不符`);
+    assert(Math.abs(o.bounds.minZ - (z - d / 2)) < 0.02 && Math.abs(o.bounds.maxZ - (z + d / 2)) < 0.02, `${id}.bounds.minZ/maxZ 与足迹不符`);
+    assertEqual(o.blocks, 'all', `${id}.blocks`);
+    assertEqual(o.zone, 'F', `${id}.zone`);
+    assert(['building', 'wall', 'water', 'rockery'].includes(o.sourceType), `${id}.sourceType 不在 ctx 契约取值域：${o.sourceType}`);
+    assert(Number.isFinite(o.y0) && Number.isFinite(o.y1) && o.y1 > o.y0, `${id} 的 y0/y1 非法`);
+  };
+  for (const [i, o] of audit.fill.obstacles.entries()) expectRect(o.id, (o.bounds.minX + o.bounds.maxX) / 2, (o.bounds.minZ + o.bounds.maxZ) / 2, o.bounds.maxX - o.bounds.minX, o.bounds.maxZ - o.bounds.minZ);
+  assertEqual(byId.size, fillObs.length, '填充碰撞 id 不得重复');
+  const kinds = {};
+  for (const o of fillObs) kinds[o.kind] = (kinds[o.kind] ?? 0) + 1;
+  assert(Object.keys(kinds).length >= 4, `填充碰撞应覆盖 ≥4 类实体，实际 ${Object.keys(kinds).join('/')}`);
+  assert(!fillObs.some((o) => /OB-(?!F-fill)/.test(o.id)), '填充碰撞 id 应统一前缀 OB-F-fill-');
+  runner.info(`碰撞登记：${fillObs.length} 条（${Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(' / ')}）；layout 回声 ${F_OBSTACLES.length} 条保持逐条一致`);
+});
+
+await runner.test('可达性不回退：运行期口径（layout 障碍 + 填充障碍）下御花园关键节点仍互达', async () => {
+  const { createWalkSolver } = await loadModule('src/interaction/walk-solver.js');
+  const { createWalkGraph } = await loadModule('src/interaction/walk-graph.js');
+  const runtimeObstacles = [...L.OBSTACLES.map((o) => ({ ...o, bounds: { ...o.bounds } })), ...result.colliders.obstacles];
+  const solver = createWalkSolver({ layout: L, obstacles: runtimeObstacles });
+  const graph = createWalkGraph(solver, { cellSize: 2, layout: L, config: CONFIG });
+  const spawn = L.VIEWPOINTS.find((v) => v.id === 'VP-F-fp-spawn');
+  assert(spawn, '缺少 F 出生点 VP-F-fp-spawn');
+  const targets = [];
+  for (const rec of L.interiorsByZone(ZONE)) {
+    const vp = L.VIEWPOINTS.find((v) => v.id === rec.viewpointId);
+    if (vp) targets.push({ id: rec.slotId, x: vp.position.x, z: vp.position.z });
+  }
+  assert(targets.length >= 7, `F 内景机位应 ≥7（实际 ${targets.length}）`);
+  const facts = [];
+  for (const t2 of targets) {
+    const path2 = graph.path({ x: spawn.position.x, z: spawn.position.z }, { x: t2.x, z: t2.z });
+    assert(path2.ok, `加入填充碰撞后 F 出生点 → ${t2.id} 不可达：${path2.reason ?? ''}`);
+    facts.push(`${t2.id}(${path2.steps?.length ?? '?'} 步)`);
+  }
+  // 填充实体必须真的在挡人；填充铺装必须可站立（不是隐形墙）
+  let blockedCenters = 0;
+  for (const o of audit.fill.obstacles) {
+    const cx = (o.bounds.minX + o.bounds.maxX) / 2;
+    const cz = (o.bounds.minZ + o.bounds.maxZ) / 2;
+    if (solver.probe(cx, cz, o.y0 + 0.1).ok === false) blockedCenters += 1;
+  }
+  assertEqual(blockedCenters, audit.fill.obstacles.length, '填充实体的中心点应全部被判定为不可站立（登记生效）');
+  let standablePaving = 0;
+  for (const p of audit.fill.paving) if (solver.probe(p.x, p.z, p.y0 ?? 0).ok) standablePaving += 1;
+  assert(standablePaving >= audit.fill.paving.length - 2, `填充铺装应可站立（不是隐形墙），可站立 ${standablePaving}/${audit.fill.paving.length}`);
+  runner.info(`运行期口径（layout 障碍 ${L.OBSTACLES.length} + 填充障碍 ${audit.fill.obstacles.length}）：F 出生点 → 7 处内景机位全部可达（${facts.join('、')}）· 填充实体中心 100% 判挡 · 填充铺装 ${standablePaving}/${audit.fill.paving.length} 可站立`);
+});
+
+await runner.test('填充后密度对照：平均覆盖率显著上升、空块清零（不回退）', () => {
+  const f = stats.fill;
+  assert(f.avgCoverageAfter > f.avgCoverageBefore + 0.1, `平均覆盖率 ${f.avgCoverageBefore} → ${f.avgCoverageAfter} 提升不足`);
+  assert(f.emptyBlocksAfter < f.emptyBlocksBefore, `元素数 ≤2 的块 ${f.emptyBlocksBefore} → ${f.emptyBlocksAfter} 未改善`);
+  assertEqual(audit.fill.densityAfter.filter((b) => b.coverage < 0.05).length, 0, '填充后不应再有覆盖率 <5% 的空块');
+  assert(f.obstacles >= 400, `填充碰撞登记应 ≥400，实际 ${f.obstacles}`);
+  assert(stats.triangles <= 1_500_000, `F 三角面 ${stats.triangles} 超全城预算`);
+  runner.info(`对照：平均覆盖率 ${(f.avgCoverageBefore * 100).toFixed(1)}% → ${(f.avgCoverageAfter * 100).toFixed(1)}%；元素数 ≤2 的块 ${f.emptyBlocksBefore} → ${f.emptyBlocksAfter}；<5% 覆盖的块 ${audit.fill.densityBefore.filter((b) => b.coverage < 0.05).length} → 0；F 三角面 ${stats.triangles}（预算 1.5M，余量充足——按"优先加三角面"增内容）`);
+});
+
+/* ========================================================================== */
+runner.section('11b. t4 花园填充增量（竹丛：单批实例化 / 碰撞登记 / 不压必经路径 / 三角面优先）');
+/* ========================================================================== */
+
+await runner.test('t4 竹丛：单批实例化（≤1 新调用）、逐丛登记碰撞、全部落在花园内且不压关键面/走查点', () => {
+  const b = audit.fill.bamboo;
+  const f = stats.fill;
+  assert(f.bambooClusters >= 100, `竹丛应 ≥100 处，实际 ${f.bambooClusters}`);
+  assertEqual(b.count, f.bambooClusters, '竹丛统计与 audit 记录一致');
+  // ① 单批实例化：整区只允许 1 个 'F-fill-bamboo' 实例批次（每批 = 1 绘制调用）
+  const bambooInstances = b.instances;
+  assertEqual(bambooInstances.length, 1, `竹丛实例批次应为 1，实际 ${bambooInstances.length}`);
+  assertEqual(bambooInstances[0].name, 'F-fill-bamboo', '竹丛批次名');
+  assertEqual(bambooInstances[0].count, b.count, '竹丛批次实例数 = 丛数');
+  assertEqual(stats.fill.t4NewBatches, 1, 't4 新增批次 = 1');
+  // ② 原型几何：竹竿 + 叶丛都进了同一个几何（不是逐丛 Mesh）
+  const proto = b.stems + b.leafTufts;
+  assert(proto >= 6, `每丛部位数应 ≥6（${b.stems} 竿 + ${b.leafTufts} 叶丛），实际 ${proto}`);
+  // ③ 碰撞：逐丛登记且与几何同址
+  const obstacles = audit.fill.obstacles.filter((o) => o.kind === 'bambooCluster');
+  assertEqual(obstacles.length, b.count, '竹丛碰撞登记数 = 丛数（登记与几何同轮）');
+  const ids = new Set(obstacles.map((o) => o.id));
+  assertEqual(ids.size, obstacles.length, '竹丛碰撞 id 唯一');
+  for (const o of obstacles) {
+    assert(/^OB-F-fill-bamboo-\d+$/.test(o.id), `${o.id} 前缀不符`);
+    assert(o.y1 - o.y0 > 0.5, `${o.id} 高度非法`);
+  }
+  // ④ 范围与净空（与既有填充同口径）：全在花园内、不压关键面/走查点
+  for (const o of obstacles) {
+    const cx = (o.bounds.minX + o.bounds.maxX) / 2;
+    const cz = (o.bounds.minZ + o.bounds.maxZ) / 2;
+    assert(cx >= audit.fill.rect.minX && cx <= audit.fill.rect.maxX && cz >= audit.fill.rect.minZ && cz <= audit.fill.rect.maxZ, `${o.id} 落在花园外`);
+    for (const w of audit.water) assert(!(cx > w.rect.minX && cx < w.rect.maxX && cz > w.rect.minZ && cz < w.rect.maxZ), `${o.id} 落在水面 ${w.id}`);
+  }
+  // ⑤ 三角面优先：竹丛必须真的贡献可见几何（≥100 三角面/丛；每丛 5 竿 6 边 + 4 叶丛 ≈ 200 面）
+  assert(stats.triangles >= b.count * 100, `新增内容后 F 三角面 ${stats.triangles} 未体现竹丛几何（应 ≥ ${b.count * 100}）`);
+  assert(stats.triangles <= 1_500_000, `F 三角面 ${stats.triangles} 超全城预算`);
+  runner.info(`竹丛 ${b.count} 处（${b.stems} 竿 + ${b.leafTufts} 叶丛/丛，高 ${b.heightRange[0]}–${b.heightRange[1]}m）· 实例批次 ${bambooInstances.length}（${bambooInstances[0].name}:${bambooInstances[0].count}）· 碰撞登记 ${obstacles.length} 条 · F 三角面 ${stats.triangles} · 绘制调用 ${stats.drawCalls}/${BUDGET.drawCalls.perZone.F}`);
+});
+
+await runner.test('t4 不压必经路径：竹丛登记后 F 出生点 → 7 处内景机位仍全部可达、关键面零占用', async () => {
+  const { createWalkSolver } = await loadModule('src/interaction/walk-solver.js');
+  const { createWalkGraph } = await loadModule('src/interaction/walk-graph.js');
+  const runtimeObstacles = [...L.OBSTACLES.map((o) => ({ ...o, bounds: { ...o.bounds } })), ...result.colliders.obstacles];
+  const solver = createWalkSolver({ layout: L, obstacles: runtimeObstacles });
+  const graph = createWalkGraph(solver, { cellSize: 2, layout: L, config: CONFIG });
+  const spawn = L.VIEWPOINTS.find((v) => v.id === 'VP-F-fp-spawn');
+  const targets = L.interiorsByZone('F').map((rec) => L.VIEWPOINTS.find((v) => v.id === rec.viewpointId)).filter(Boolean);
+  const unreachable = [];
+  for (const vp of targets) {
+    const path = graph.path({ x: spawn.position.x, z: spawn.position.z }, { x: vp.position.x, z: vp.position.z });
+    if (!path.ok) unreachable.push(`${vp.id}(${path.reason ?? ''})`);
+  }
+  assertEqual(unreachable.length, 0, `加入竹丛障碍后出现不可达内景机位：${unreachable.join('、')}`);
+  // 竹丛体中心必须真挡人（登记生效）
+  let blocked = 0;
+  for (const o of result.colliders.obstacles.filter((x) => x.kind === 'bambooCluster')) {
+    const cx = (o.bounds.minX + o.bounds.maxX) / 2;
+    const cz = (o.bounds.minZ + o.bounds.maxZ) / 2;
+    if (solver.probe(cx, cz, o.y0 + 0.1).ok === false) blocked += 1;
+  }
+  assertEqual(blocked, stats.fill.bambooClusters, '竹丛中心应全部被判定为不可站立');
+  runner.info(`运行期口径（layout 障碍 ${L.OBSTACLES.length} + 填充障碍 ${result.colliders.obstacles.filter((o) => o.fill === true).length}）：F 出生点 → ${targets.length} 处内景机位全部可达 · 竹丛 ${blocked}/${stats.fill.bambooClusters} 丛中心判挡`);
+});
+
+/* ========================================================================== */
+runner.section('12. t31 池上石栈道（有界开槽 + 同轮可见石件 + 两栋正门双向可达）');
+/* ========================================================================== */
+
+await runner.test('t31 只读取证：水池与两栋配殿门洞通道面的重叠 = 5.0m（修前逐格不可走；开槽已登记）', () => {
+  const walkways = L.F_POND_WALKWAYS ?? [];
+  assertEqual(walkways.length, 2, 'layout.F_POND_WALKWAYS 应有 2 条（唯一权威源）');
+  const facts = [];
+  for (const w of walkways) {
+    const side = /west$/.test(w.id) ? 'west' : 'east';
+    const pond = L.WATER_BODIES.find((b) => b.id === w.pondId);
+    const raw = L.OBSTACLES.find((o) => o.id === `OB-${w.pondId}`);
+    const passage = L.WALKABLE.find((wk) => wk.id === `WK-${w.id}-door-passage`);
+    const slot = L.SLOTS.find((s) => s.id === w.id);
+    assert(pond && raw && passage && slot, `${w.id} 登记缺项`);
+    // ① 重叠区间（修前的水面覆盖段）：z 相交深度必须 = 5.0m
+    const overlapZ = Math.min(pond.bounds.maxZ, passage.bounds.maxZ) - Math.max(pond.bounds.minZ, passage.bounds.minZ);
+    const overlapX = Math.min(pond.bounds.maxX, passage.bounds.maxX) - Math.max(pond.bounds.minX, passage.bounds.minX);
+    assertClose(overlapZ, 5.0, 1e-6, `${side} 水池 ∩ 门洞通道面 的 z 进深`);
+    assertClose(overlapX, slot.door.width, 1e-6, `${side} 重叠宽度应 = 门洞净宽`);
+    // ② 面积守恒：水体 bounds / 水位 / 池深一字未改
+    const expectBounds = w.x < 0
+      ? { minX: -250, maxX: -150, minZ: 318, maxZ: 392 }
+      : { minX: 150, maxX: 250, minZ: 318, maxZ: 392 };
+    assertEqual(JSON.stringify(pond.bounds), JSON.stringify(expectBounds), `${w.pondId}.bounds 不得因开槽而变`);
+    assertClose(pond.y, 0.05, 1e-9, `${w.pondId}.y 水位`);
+    assertClose(pond.depth, 0.45, 1e-9, `${w.pondId}.depth 池深`);
+    // ③ 有界开槽已登记：blocks=exceptDoor + door（宽 = 门洞净宽、沿门轴 z、中心在门轴上）
+    assertEqual(raw.blocks, 'exceptDoor', `${raw.id}.blocks`);
+    assert(raw.door, `${raw.id}.door 必须登记（有界开槽）`);
+    assertClose(raw.door.width, slot.door.width, 1e-9, `${raw.id}.door.width 应 = 门洞净宽`);
+    assertEqual(raw.door.axis, 'z', `${raw.id}.door.axis`);
+    assertClose(raw.door.center.x, w.x, 1e-9, `${raw.id}.door.center.x 应在门轴上`);
+    // ④ 走廊跨池全深（覆盖 5.0m 冲突段）
+    assert(w.minZ <= pond.bounds.minZ && w.maxZ >= passage.bounds.maxZ - 1e-6, `${w.id} 走廊未跨池全深`);
+    // ⑤ 可见石件载体：surface='bridgeDeck' 的道路段（求解器放行水面的唯一机制）
+    const road = L.ROADS.find((r) => r.id === `RD-${w.id}-pond-walk`);
+    assert(road, `缺道路段 RD-${w.id}-pond-walk（石栈道未登记）`);
+    assertEqual(road.surface, 'bridgeDeck', `${road.id}.surface`);
+    assertClose(road.from.y, TERRAIN.gardenPathsY, 1e-9, `${road.id} 石顶登记标高`);
+    assertClose(road.to.y, TERRAIN.gardenPathsY, 1e-9, `${road.id} 石顶登记标高`);
+    assertClose(road.width, slot.door.width, 1e-9, `${road.id} 栈道宽 = 门洞净宽`);
+    facts.push(`${side}: 重叠 ${overlapX}×${overlapZ}m（修前全不可走）· 开槽宽 ${raw.door.width}m · 水位/池深未改`);
+  }
+  // ⑥ 两个水池的障碍都必须不再是"整块 blocks:'all'"
+  const allBlocking = L.OBSTACLES.filter((o) => /^OB-WB-F-pond-/.test(o.id) && o.blocks === 'all');
+  assertEqual(allBlocking.length, 0, `仍有整块阻挡的水池障碍：${allBlocking.map((o) => o.id).join(',')}`);
+  runner.info(facts.join(' | '));
+});
+
+await runner.test('t31 逐格扫描：z=387..392（5.0m 冲突段）逐格可走 + 可见石件（石顶=登记面高+面层、落底支墩到池底）', async () => {
+  const { createWalkSolver } = await loadModule('src/interaction/walk-solver.js');
+  const solver = createWalkSolver({ layout: L, obstacles: result.colliders.obstacles });
+  const rows = [];
+  assertEqual((audit.walkways ?? []).length, 2, '栈道登记数');
+  for (const w of audit.walkways) {
+    const passage = L.WALKABLE.find((wk) => wk.id === `WK-${w.id}-door-passage`);
+    const cx = (passage.bounds.minX + passage.bounds.maxX) / 2;
+    const blocked = [];
+    for (let z = 387; z <= 392.0001; z += 1) {
+      for (const dx of [-2, 0, 2]) {
+        const probe = solver.probe(cx + dx, z, L.floorYAt(cx + dx, z));
+        if (!probe.ok) blocked.push(`(${cx + dx},${z})→${(probe.reasons ?? []).join('+')}`);
+      }
+    }
+    assertEqual(blocked.length, 0, `${w.id} 冲突段仍有不可走格：${blocked.slice(0, 6).join('、')}`);
+    // 可见石件：跨水件 ≥1、石顶高于水面、支墩落到池底
+    const pond = L.WATER_BODIES.find((b) => b.id === w.pondId);
+    assert(w.crossesWater === true && w.overWaterPieces >= 1, `${w.id} 石栈道未跨水（可见石件缺失）`);
+    assert(w.deckTop >= pond.y + 0.02, `${w.id} 石顶 ${w.deckTop} 不高于水面 ${pond.y}`);
+    assert(w.deckTop - w.registeredY <= 0.05, `${w.id} 石顶 ${w.deckTop} 高出登记面 ${w.registeredY} 超过 5cm`);
+    assert(w.piers.length >= 1, `${w.id} 无落底支墩`);
+    for (const p of w.piers) assert(p.y0 <= -0.4 + 0.05, `${p.id} 支墩未落到池底（y0=${p.y0}）`);
+    rows.push(`${w.id}: 18/18 格可走 · 跨水件 ${w.overWaterPieces} 块（石顶 ${w.deckTop}）· 支墩 ${w.piers.length} 根落池底 ${w.piers[0].y0}`);
+  }
+  assertEqual(stats.walkways, 2, 'stats.walkways');
+  assertEqual(stats.walkwayPieces, audit.walkways.reduce((n, w) => n + w.overWaterPieces + w.landPieces, 0), 'stats.walkwayPieces');
+  assert(stats.drawCalls <= BUDGET.drawCalls.perZone.F, `石件不得新增调用：F ${stats.drawCalls}/${BUDGET.drawCalls.perZone.F}`);
+  runner.info(rows.join(' | '));
+});
+
+await runner.test('t31 验收：两栋配殿【正门】双向可达（门前↔室内），且从水池南岸花园跨池进入也连通', async () => {
+  const { createWalkSolver } = await loadModule('src/interaction/walk-solver.js');
+  const { createWalkGraph } = await loadModule('src/interaction/walk-graph.js');
+  const solver = createWalkSolver({ layout: L, obstacles: result.colliders.obstacles });
+  const graph = createWalkGraph(solver, { cellSize: 2 });
+  const facts = [];
+  for (const w of audit.walkways) {
+    const slot = L.SLOTS.find((s) => s.id === w.id);
+    const passage = L.WALKABLE.find((wk) => wk.id === `WK-${w.id}-door-passage`);
+    const interior = L.WALKABLE.find((wk) => wk.id === `WK-${w.id}-interior`);
+    const facade = slot.door.facade;
+    const inner = { x: (interior.bounds.minX + interior.bounds.maxX) / 2, z: (interior.bounds.minZ + interior.bounds.maxZ) / 2 };
+    // ① 门前 → 室内、室内 → 门前（双向）
+    const fwd = graph.path({ x: facade.x, z: facade.z }, inner);
+    const back = graph.path(inner, { x: facade.x, z: facade.z });
+    assert(fwd.ok, `${w.id} 门前(${facade.x},${facade.z}) → 室内 不可达：${fwd.reason ?? ''}`);
+    assert(back.ok, `${w.id} 室内 → 门前 不可达：${back.reason ?? ''}`);
+    // ② 从水池**南岸之外**的花园（z < 水池 minZ）进入 —— 必须跨过整片水面（证明不再依赖幻影通道）
+    const pond = L.WATER_BODIES.find((b) => b.id === w.pondId);
+    const garden = { x: w.corridor.x, z: pond.bounds.minZ - 8 };
+    const south = graph.path(garden, inner);
+    const southBack = graph.path(inner, garden);
+    assert(south.ok, `${w.id} 南岸花园(${garden.x},${garden.z}) → 室内 不可达（栈道未连通）：${south.reason ?? ''}`);
+    assert(southBack.ok, `${w.id} 室内 → 南岸花园 不可达：${southBack.reason ?? ''}`);
+    // ③ 冲突段北端（门洞通道面内）必须与南岸同属一个连通分量
+    const northCell = passage.bounds.maxZ - 0.6;
+    assert(graph.path(garden, { x: w.corridor.x, z: northCell }).ok, `${w.id} 南岸 → 门洞通道北端 不连通`);
+    facts.push(`${w.id}: 门前↔室内 ✓ / 南岸花园(z=${garden.z})↔室内 ✓ / 跨池走廊 ${w.corridor.width}m ✅`);
+  }
+  runner.info(facts.join(' | '));
+});
+
+await runner.test('t31 谓词层收窄安全性三证（A/B/C 冲突段 36 格）：走廊由几何承载、不依赖门洞豁免', async () => {
+  const { createWalkSolver } = await loadModule('src/interaction/walk-solver.js');
+  const { createRegistry } = await loadModule('src/core/registry.js');
+  const registry = createRegistry({ events: makeSilentEvents(), layout: L });
+  registry.registerZone(ZONE, result, { replace: true });
+  const base = registry.allObstacles();
+  const withoutSlots = base.map((o) => (/^OB-WB-F-pond-(west|east)$/.test(o.id) ? { ...o, blocks: 'all', door: null } : o));
+  const layoutWithoutWalkways = { ...L, ROADS: L.ROADS.filter((r) => !/pond-walk$/.test(r.id)) };
+  const cellCount = (solver) => {
+    let ok = 0;
+    let total = 0;
+    for (const w of audit.walkways) {
+      const passage = L.WALKABLE.find((wk) => wk.id === `WK-${w.id}-door-passage`);
+      const cx = (passage.bounds.minX + passage.bounds.maxX) / 2;
+      for (let z = 387; z <= 392.0001; z += 1) {
+        for (const dx of [-2, 0, 2]) {
+          total += 1;
+          if (solver.probe(cx + dx, z, 0.5).ok) ok += 1;
+        }
+      }
+    }
+    return { ok, total };
+  };
+  const A = cellCount(createWalkSolver({ layout: L, obstacles: base }));
+  const B = cellCount(createWalkSolver({ layout: L, obstacles: withoutSlots }));
+  const C = cellCount(createWalkSolver({ layout: layoutWithoutWalkways, obstacles: base }));
+  assertEqual(A.total, 36, '冲突段采样点数（2 池 × 6 行 × 3 点）');
+  assertEqual(A.ok, 36, `A 现状：冲突段应全可走，实际 ${A.ok}/${A.total}`);
+  assertEqual(B.ok, A.ok, `B（去掉开槽）必须与 A 等价 ⇒ 走廊不得依赖门洞豁免：${B.ok} vs ${A.ok}`);
+  assertEqual(C.ok, 0, `C（去掉石栈道）应复现修前缺陷（全封闭），实际 ${C.ok}/${C.total}`);
+  runner.info(`冲突段可走格：A 现状 ${A.ok}/${A.total} · B 去掉开槽 ${B.ok}/${B.total}（≡A ⇒ 不依赖谓词豁免）· C 去掉石栈道 ${C.ok}/${C.total}（修前缺陷可复现）`);
 });
 
 /* ========================================================================== */

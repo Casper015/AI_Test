@@ -1,0 +1,178 @@
+{
+ "protocol": {
+  "selectionAware": false,
+  "meaning": "修前口径复刻：selectionAware=false ⇒ 落点 = 最近的已登记 fp-spawn",
+  "eyeHeight": 1.65,
+  "buildings": 79
+ },
+ "rows": [
+  {
+   "id": "B-hall-main",
+   "name": "金銮殿",
+   "spawnId": "VP-B-fp-spawn",
+   "selectionLanding": null,
+   "selectionFallback": false,
+   "position": {
+    "x": -30,
+    "y": 1.65,
+    "z": -360
+   },
+   "mode": "fp",
+   "fp": true,
+   "anchorKind": "facade",
+   "distToFacade": 216.093,
+   "distToCenter": 245.837,
+   "judge": {
+    "surface": 0,
+    "blocked": false,
+    "inBounds": true,
+    "eyeOk": true,
+    "ok": true
+   },
+   "teleport": {
+    "buildingId": null,
+    "fallback": false,
+    "ok": false,
+    "kind": null,
+    "tier": null,
+    "x": null,
+    "y": null,
+    "z": null,
+    "surfaceY": null,
+    "surfaceId": null,
+    "blockedBy": null,
+    "reasons": [],
+    "candidates": 0,
+    "slotName": null
+   },
+   "deterministic": true
+  },
+  {
+   "id": "C-hall-bed-main",
+   "name": "寝殿正殿",
+   "spawnId": "VP-B-fp-spawn",
+   "selectionLanding": null,
+   "selectionFallback": false,
+   "position": {
+    "x": -30,
+    "y": 1.65,
+    "z": -360
+   },
+   "mode": "fp",
+   "fp": true,
+   "anchorKind": "facade",
+   "distToFacade": 503.894,
+   "distToCenter": 528.852,
+   "judge": {
+    "surface": 0,
+    "blocked": false,
+    "inBounds": true,
+    "eyeOk": true,
+    "ok": true
+   },
+   "teleport": {
+    "buildingId": null,
+    "fallback": false,
+    "ok": false,
+    "kind": null,
+    "tier": null,
+    "x": null,
+    "y": null,
+    "z": null,
+    "surfaceY": null,
+    "surfaceId": null,
+    "blockedBy": null,
+    "reasons": [],
+    "candidates": 0,
+    "slotName": null
+   },
+   "deterministic": true
+  },
+  {
+   "id": "C-gate-inner",
+   "name": "内廷门",
+   "spawnId": "VP-B-fp-spawn",
+   "selectionLanding": null,
+   "selectionFallback": false,
+   "position": {
+    "x": -30,
+    "y": 1.65,
+    "z": -360
+   },
+   "mode": "fp",
+   "fp": true,
+   "anchorKind": "facade",
+   "distToFacade": 437.031,
+   "distToCenter": 454.99,
+   "judge": {
+    "surface": 0,
+    "blocked": false,
+    "inBounds": true,
+    "eyeOk": true,
+    "ok": true
+   },
+   "teleport": {
+    "buildingId": null,
+    "fallback": false,
+    "ok": false,
+    "kind": null,
+    "tier": null,
+    "x": null,
+    "y": null,
+    "z": null,
+    "surfaceY": null,
+    "surfaceId": null,
+    "blockedBy": null,
+    "reasons": [],
+    "candidates": 0,
+    "slotName": null
+   },
+   "deterministic": true
+  },
+  {
+   "id": "F-tower-corner-nw",
+   "name": "西北角楼",
+   "spawnId": "VP-B-fp-spawn",
+   "selectionLanding": null,
+   "selectionFallback": false,
+   "position": {
+    "x": -30,
+    "y": 1.65,
+    "z": -360
+   },
+   "mode": "fp",
+   "fp": true,
+   "anchorKind": "entrance",
+   "distToFacade": 871.209,
+   "distToCenter": 858.878,
+   "judge": {
+    "surface": 0,
+    "blocked": false,
+    "inBounds": true,
+    "eyeOk": true,
+    "ok": true
+   },
+   "teleport": {
+    "buildingId": null,
+    "fallback": false,
+    "ok": false,
+    "kind": null,
+    "tier": null,
+    "x": null,
+    "y": null,
+    "z": null,
+    "surfaceY": null,
+    "surfaceId": null,
+    "blockedBy": null,
+    "reasons": [],
+    "candidates": 0,
+    "slotName": null
+   },
+   "deterministic": true
+  }
+ ],
+ "maxFacade": 871.209,
+ "maxCenter": 858.878,
+ "allLegal": true,
+ "allDeterministic": true
+}

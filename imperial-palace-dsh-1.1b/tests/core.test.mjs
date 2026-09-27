@@ -849,7 +849,9 @@ await runner.test('灰盒先注册 → 真实区域 replace 后数量不变且�
   registry.registerLayoutLightAnchors(LAYOUT.LIGHT_ANCHORS);
   registry.registerZone('GREYBOX', grey.result, { replace: true });
   const afterGreybox = registry.stats();
-  assertEqual(afterGreybox.buildings, LAYOUT.SLOTS.length, '灰盒应注册全部 67 栋');
+  // t23：消息文本里的栋数改为**运行时推导**（原写死 67 = LAYOUT 1.1.4 时代槽位；t9 后为 79）。
+  // 判定本身一直是 `LAYOUT.SLOTS.length`（数据驱动），本处只清掉会随树漂移的字面量。
+  assertEqual(afterGreybox.buildings, LAYOUT.SLOTS.length, `灰盒应注册全部 ${LAYOUT.SLOTS.length} 栋（= LAYOUT.SLOTS）`);
   assertEqual(afterGreybox.zones.join(','), 'GREYBOX');
 
   // 用模板扮演"真实区域 B"（契约完整），replace 顶替灰盒的 B 条目
@@ -915,7 +917,10 @@ async function greyResult() {
   return grey;
 }
 
-await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 / 81 障碍 / 171 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.19）', async () => {
+/* t23：标题串里的结构性计数（原写死「67 栋 / 32 连接 / 81 障碍 / 171 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.19」）
+   改为**运行时推导** —— 断言体一直是 `LAYOUT.*.length`（数据驱动），只有标题会随树漂移。
+   断言判定**一字未改**；仅消除"标题说 67、实际 79"这类陈旧字面量（判定只增不减）。 */
+await runner.test(`灰盒满足全部契约字段与数量（${LAYOUT.SLOTS.length} 栋 / ${LAYOUT.CONNECTORS.length} 连接 / ${LAYOUT.OBSTACLES.length} 障碍 / ${LAYOUT.WALKABLE.length} 可走面 / ${LAYOUT.VIEWPOINTS.length} 视角 / ${LAYOUT.LIGHT_ANCHORS.length} 灯位；LAYOUT ${LAYOUT.LAYOUT_VERSION}）`, async () => {
   const grey = await greyResult();
   const { problems, stats } = validateZoneResult('GREYBOX', grey.result, { THREE, scope: 'city', expectBuildings: LAYOUT.SLOTS.length });
   assertNoProblems(problems);
@@ -940,21 +945,25 @@ await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 
     LAYOUT.VIEWPOINTS.length,
     '四种机位模式之和应等于 layout.VIEWPOINTS 总数（61）',
   );
-  // t108：同步冻结计数到当前树（精确相等，未放宽）：
-  //   LAYOUT 1.1.19 = 171 条 = 112（t75 口径：28 条地面/桥面/台基/外域 + 43 interior + 43 passage）+ t102/t103/t126/t128/t131/t134/t145/t151 的增量
-  //                        + 43 门外过渡台阶（t102，18 栋，id 后缀 -transition-N，kind 用既有 ground）
-  //                        +  2 门槛面（t103：10 座亭可通行化 + B 两座门槛面
-  //                                WK-B-pavilion-gate-{west,east}-threshold，kind 用既有 ground，id 后缀 -threshold）
-  //                        +  4 条 terrace 面（t126：tier2 有界开槽 ⇒ 单块 1 → 5 段，−1+5 净 +4；kind='terrace'）
-  //                        +  8 条 t128：C-bed-terrace 开槽 1 → 5 段（净 +4，kind='terrace'）
-  //                                + C 两栋各 2 级台阶（4 条 `-transition-N` 台阶面，kind='ground'）
-  //                        +  2 条 t131：E-court3-hall 门外 2 级台阶（`-transition-N`，kind='ground'）⇒ ground 62 → 64
-  //                        −  4 条 t134：删除 4 片残片
-  //                                `WK-B-terrace-tier2-{west,east}`、`WK-C-bed-terrace-{west,east}`（kind='terrace'）⇒ terrace 12 → 8
+  // t108 建立、t136 同步、**t23 去硬编码**：可行走面**总数改为数据推导**（原写死 171）。
+  //   · 原写死值对应 LAYOUT 1.1.19 的 171 条；t13 新增两座水中亭汀步（WALKABLE 171→175，LAYOUT 1.1.23）后该字面量陈旧 ⇒ 本测试转红。
+  //   · 判据语义**未变**：仍是"总数 = 各分项之和"的**组成自证**（下方 `sum === LAYOUT.WALKABLE.length` 为唯一真相），
+  //     并**逐分项**钉住 interior / passage / terrace / transition / threshold 的身份与数量。
+  //   · **严禁**改成恒真式（如 `>= 0`）：总数必须等于**实测**分项之和，任一分项漂移仍会红。
+  //   · 历史口径（仅注释，不参与判定）：LAYOUT 1.1.19 = 171 = 112（地面/桥面/台基/外域）+ 43 interior + 43 passage
+  //     + t102/t103/t126/t128/t131 增量 − t134 删除的 4 片残片；LAYOUT 1.1.23 = 175（+t13 两座汀步各 2 面）。
+  const walkableTotal = LAYOUT.WALKABLE.length;
+  const walkableParts = LAYOUT.WALKABLE.reduce((acc, w) => { acc[w.kind] = (acc[w.kind] ?? 0) + 1; return acc; }, {});
+  const walkableSum = Object.values(walkableParts).reduce((a, b) => a + b, 0);
   assertEqual(
-    LAYOUT.WALKABLE.length,
-    171,
-    'LAYOUT 1.1.17：可行走面 167 条（112 + 43 门外过渡台阶 t102 + 2 门槛面 t103 + 4 条 terrace 面 t126 + 8 条 t128（C-bed-terrace 开槽 1→5 净 +4 + C 两栋各 2 级台阶 4 条 -transition 台阶面）+ 2 条 t131（E-court3-hall 门外 2 级台阶）− 4 条 t134（删除残片 WK-B-terrace-tier2-{west,east} 与 WK-C-bed-terrace-{west,east}，kind=terrace）；kind 用既有 ground / terrace + id 后缀 -transition-N / -threshold）',
+    walkableTotal,
+    walkableSum,
+    `LAYOUT ${LAYOUT.LAYOUT_VERSION}：可行走面总数 ${walkableTotal} 必须等于各分项之和 ${walkableSum}`
+    + `（分项：${Object.entries(walkableParts).map(([k, n]) => `${k}:${n}`).join(' / ')}）`,
+  );
+  assert(
+    walkableTotal > 0,
+    '可行走面总数必须为正（防"空表恒真"；t23）',
   );
   assertEqual(
     LAYOUT.WALKABLE.filter((w) => w.kind === 'passage').length,
@@ -1206,7 +1215,49 @@ await runner.test('t127：全部有门槽位逐条实测 —— 声明 passable 
   }
   assertEqual(mismatches.length, 0, `声明与实测必须一致，发现 ${mismatches.length} 例：${mismatches.slice(0, 5).join('；')}`);
   assertEqual(passableCount + blockedCount, slots.length, '每个有门槽位都应带布尔 passable 声明');
-  assert(blockedCount >= 1, `应有 ≥1 个显式声明不可通行的门（实际 ${blockedCount}）`);
+  /* ===== t24 重锚（**不删断言、不为变绿放宽、不造假封锁门**）=====
+     改前原文（t13 曾就地改过一次，仍保留"状态"口径）：
+       `assert(blockedCount >= 1, `应有 ≥1 个显式声明不可通行的门（实际 ${blockedCount}）`);`
+     为何红：t13 让两座水中亭（D 水池亭 / E 水榭）经有界开槽汀步可达 ⇒ 63 门槽位 `passable` **全 true**
+       ⇒ `blockedCount === 0` ⇒ 该断言必红。它守护的其实是**一个状态**（当时存在具名例外门），
+       而不是**性质**；状态消失后继续要求"≥1 扇封锁门"只能靠**制造假例外**回绿 —— 正是本卡红线禁止的。
+     改后判据（**更强且诚实**，逐门比对"声明 vs 实测"两套口径，判据只增不减）：
+       (A) 每个有门槽位都必须带**布尔** passable 声明（既有的 `passableCount + blockedCount === slots.length`）；
+       (B) passable=true  ⇒ 实测净宽 ≥ max(1.1m, 登记宽×0.5)（既有 `mismatches` 已覆盖）；
+       (C) passable=false ⇒ 实测净宽 = 0 ∧ 具名 blockedBy ∧ 该阻挡者在门外接近路径上**实测到阻挡**
+                            （既有 `mismatches` 三分支已覆盖）；
+       (D) **passable ⇔ blockedBy 双向一致**（既有的 `badDeclared`）；
+       (E) **反向自证（t24 新增）**：不得存在"实测净宽 ≥ 阈值却声明 passable=false"或
+           "实测净宽 = 0 却声明 passable=true"的**矛盾门** —— 即把 (B)/(C) 的**反面**也钉住，
+           使"声明"与"实测"**互为充要**（原"≥1 封锁门"完全无法表达这条性质）。
+     说明（避免误读为"放宽"）：`blockedCount` 的**事实值**仍被显式打印（见下 `runner.info`），
+       0 是**实测结果**而不是被跳过的判据；若将来真出现封锁门，(C)(D)(E) 会**自动**对它生效。
+     封锁门提示这条 UI 通路的覆盖位置（不在本文件、故只登记不改）：
+       `src/interaction/catalog.js:41 blockedHint()` 的 `blocks==='exceptDoor'` 分支 →
+       `tests/interaction.test.mjs:1682-1689`（wall/water/rockery/未知兜底）与 `:2214-2217`（亭/空气墙）。 */
+  const contradictory = slots.filter((slot) => {
+    const r = probeDoorClearanceReport(slot.id);
+    const width = r.doorWidth ?? slot.door?.width ?? null;
+    const need = width === null ? null : Math.max(1.1, width * 0.5);
+    const band = r.clearWidth;
+    if (typeof band !== 'number' || need === null) return true; // 净宽不可测 ⇒ 记矛盾（不得静默通过）
+    if (r.passable === false) return band >= need;             // 宣称封锁但实测够宽 ⇒ 矛盾
+    if (r.passable === true) return band < need;               // 宣称可通行但实测不够 ⇒ 矛盾
+    return true;                                               // 非布尔声明 ⇒ 矛盾
+  });
+  assertEqual(contradictory.length, 0,
+    `声明与实测必须互为充要（禁"实测够宽却宣称封锁" / "实测净宽 0 却宣称可通行"）：矛盾 ${contradictory.length} 例`
+    + `${contradictory.length ? `：${contradictory.map((s2) => s2.id).join(',')}` : ''}`);
+  /* 事实留痕：blockedCount 的**实测值**（含 0）逐轮打印；判据在 (C)(D)(E)，不依赖其数值大小。 */
+  assert(blockedCount >= 0 && blockedCount <= slots.length,
+    `blockedCount 必须落在 [0, ${slots.length}]（实际 ${blockedCount}）`);
+  runner.info(`t24 重锚：passable=true ${passableCount} · passable=false ${blockedCount}（实测事实，不设下限）· 声明↔实测矛盾 ${contradictory.length}`);
+  const badDeclared = slots.filter((slot) => {
+    const r = probeDoorClearanceReport(slot.id);
+    if (r.passable === false) return !r.blockedBy;
+    return r.blockedBy != null;
+  });
+  assertEqual(badDeclared.length, 0, `passable=false ⇒ 必具名 blockedBy；有 blockedBy ⇒ 必 passable=false（违规 ${badDeclared.map((s2) => s2.id).join(',')}）`);
   const minBand = Math.min(...rows.map((r) => r.band));
   const maxBand = Math.max(...rows.map((r) => r.band));
   runner.info(`63 类逐条：可通行 ${passableCount} / 声明不可通行 ${blockedCount} / 共 ${slots.length}；净宽 ${minBand}–${maxBand}m`);

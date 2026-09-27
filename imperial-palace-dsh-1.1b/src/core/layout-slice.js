@@ -626,6 +626,13 @@ export function scenicObjectsForZone(zoneId) {
 }
 
 /** 矩形相交（可选外扩 padding）。 */
+/** t13：`outer` 是否包含 `inner`（含容差）—— 用于"桥面真的横跨水体"的判定。 */
+function boundsContain(outer, inner, tol = 0.05) {
+  if (!outer || !inner) return false;
+  return inner.minX >= outer.minX - tol && inner.maxX <= outer.maxX + tol
+    && inner.minZ >= outer.minZ - tol && inner.maxZ <= outer.maxZ + tol;
+}
+
 function rectsOverlap(a, b, padding = 0) {
   return a.minX - padding <= b.maxX && a.maxX + padding >= b.minX && a.minZ - padding <= b.maxZ && a.maxZ + padding >= b.minZ;
 }
@@ -666,9 +673,18 @@ export function normalizeObstacle(obstacle, { helpers = LAYOUT } = {}) {
  *   底面 y0 = min(水面, 岸边地坪) − 埋深；顶面 y1 = 岸边地坪 + WATER_BLOCK_HEADROOM（保证拦得住站在池畔/池面的人）。
  *   被桥梁跨越的水体（护城河）改成 `blocks:'exceptDoor'` + 一条**桥面通道**（宽 = 桥面宽、法线轴 = 过河方向），
  *   因此"桥可过、水不可进"；id 与 layout 的 8 条水体障碍完全一致（`OB-<waterBodyId>`），便于基线对账。
+ *
+ * t13：**有界开槽的两条来源**（先只读取证结论：谓词层只支持"单矩形 + 门洞通道"，不支持多矩形/带洞，
+ *   故沿用本仓既有先例 `door`，而非修改判定模型）：
+ *     ① **桥面横跨**（既有）：`WALKABLE` 里落在水体上的 `bridgeDeck` 面 ⇒ 通道 = 该桥面；
+ *     ② **槽位显式登记**（t13 新增）：`layout.OBSTACLES` 里对应水体条目自带 `door` 且 `blocks==='exceptDoor'`
+ *        ⇒ **以槽位声明的通道为准**（登记与几何同轮；`STONE_STEP_LANES` 的两条汀步走廊即走此路）。
+ *   ② 的存在理由：汀步走廊**不得**由"任意落在水体上的 bridgeDeck 面"推出 —— 否则任何新加的跨水面
+ *   都会**静默**给水体开洞；显式登记使开槽范围（宽度/轴向/中心）可被逐条审计。
  */
 export function deriveWaterColliders(waters = WATER_BODIES, { helpers = LAYOUT, headroom = WATER_BLOCK_HEADROOM, decks = null } = {}) {
   const deckRects = decks ?? WALKABLE.filter((w) => w.kind === 'bridgeDeck').map((w) => ({ id: w.id, bounds: w.bounds }));
+  const layoutObstacleById = new Map((helpers?.OBSTACLES ?? OBSTACLES).map((o) => [o.id, o]));
   const out = [];
   for (const water of waters) {
     const b = water.bounds;
@@ -693,10 +709,15 @@ export function deriveWaterColliders(waters = WATER_BODIES, { helpers = LAYOUT, 
     const y1 = +(bank + headroom).toFixed(3);
 
     const crossing = deckRects.find((d) => rectsOverlap(d.bounds, b) && (b.maxX - b.minX) > (b.maxZ - b.minZ) ? true : false);
-    // 通道：护城河被桥面横跨时，桥面宽度即净宽，方向 = 法线轴（穿越水体的方向）
-    const deck = deckRects.find((d) => rectsOverlap(d.bounds, b));
+    /* t13 ②：槽位显式登记优先（**登记与几何同轮**；由 layout 的 `STONE_STEP_LANES` 驱动）。 */
+    const declared = layoutObstacleById.get(`OB-${water.id}`);
+    const declaredDoor = declared && declared.blocks === 'exceptDoor' && declared.door ? declared.door : null;
+    /* 通道：护城河被桥面横跨时，桥面宽度即净宽，方向 = 法线轴（穿越水体的方向）。
+       t13：桥面判定收紧为"**桥面被水体包含**"（原来的"任意相交"会让一条只搭到池边一角的水面
+       （如花园水池上的汀步步道）把**整个池子**翻成通道。闸门：只有真横跨（桥面 ⊆ 水体）才开。 */
+    const deck = deckRects.find((d) => rectsOverlap(d.bounds, b) && boundsContain(b, d.bounds));
     const horizontalWater = b.maxX - b.minX >= b.maxZ - b.minZ;
-    const door = deck
+    const derivedDoor = deck
       ? {
           axis: horizontalWater ? 'z' : 'x',
           lateralAxis: horizontalWater ? 'x' : 'z',
@@ -713,6 +734,21 @@ export function deriveWaterColliders(waters = WATER_BODIES, { helpers = LAYOUT, 
           source: deck.id,
         }
       : null;
+    const door = declaredDoor
+      ? {
+          axis: declaredDoor.axis,
+          lateralAxis: declaredDoor.lateralAxis ?? (declaredDoor.axis === 'z' ? 'x' : 'z'),
+          wallAxis: declaredDoor.wallAxis ?? declaredDoor.lateralAxis ?? (declaredDoor.axis === 'z' ? 'x' : 'z'),
+          sourceAxis: declaredDoor.sourceAxis ?? declaredDoor.axis,
+          axisFlipped: false,
+          center: { ...declaredDoor.center },
+          width: declaredDoor.width,
+          height: declaredDoor.height ?? Math.max(0.5, y1 - y0),
+          sillY: declaredDoor.sillY ?? y0,
+          source: `layout:OB-${water.id}`,
+          declared: true,
+        }
+      : derivedDoor;
     out.push({
       id: `OB-${water.id}`,
       sourceType: 'water',
@@ -725,7 +761,7 @@ export function deriveWaterColliders(waters = WATER_BODIES, { helpers = LAYOUT, 
       y1,
       blocks: door ? 'exceptDoor' : 'all',
       door,
-      note: `core 派生（t27）：水体不可站立；岸边地坪 ${bank}、顶面 = 岸边 + ${headroom}m${door ? `；桥面通道宽 ${door.width}m` : ''}`,
+      note: `core 派生（t27）：水体不可站立；岸边地坪 ${bank}、顶面 = 岸边 + ${headroom}m${door ? `；通道宽 ${door.width}m（${door.declared ? '槽位显式登记的汀步走廊' : '桥面横跨'}）` : ''}`,
     });
     void crossing;
   }
@@ -760,15 +796,104 @@ export function assembleBaselineObstacles({ obstacles = OBSTACLES, waters = WATE
   return { list, stats };
 }
 
-/** 点是否落在门洞通道内（canonical：`door.axis` 为面法线轴）。 */
+/**
+ * t35：**按登记几何解析"室内进深"** —— 障碍包围盒 → 唯一 `SLOTS` 条目 → `INTERIOR_BY_SLOT` → `WALKABLE` 室内面。
+ *   不新造常量、不猜：包围盒与槽位几何**逐值相等**才算命中；命中数 ≠ 1（0 或多）一律返回 `null`
+ *   （⇒ 调用方**回退整进深**，绝不因"解析失败"制造新的阻挡）。
+ */
+function registeredInteriorRect(bounds) {
+  if (!bounds) return null;
+  let hit = null;
+  for (const slot of SLOTS) {
+    const sb = slot.bounds;
+    if (!sb) continue;
+    if (
+      Math.abs(sb.minX - bounds.minX) > 1e-9 || Math.abs(sb.maxX - bounds.maxX) > 1e-9
+      || Math.abs(sb.minZ - bounds.minZ) > 1e-9 || Math.abs(sb.maxZ - bounds.maxZ) > 1e-9
+    ) continue;
+    if (hit) return null; // 非唯一 ⇒ 不解析（绝不猜）
+    hit = slot;
+  }
+  if (!hit) return null;
+  const record = INTERIOR_BY_SLOT[hit.id];
+  if (!record?.walkableId) return null;
+  return WALKABLE.find((w) => w.id === record.walkableId) ?? null;
+}
+
+/** t35：进深（米）按包围盒对象记忆化（基线条目的 `bounds` 引用跨调用稳定）。 */
+const doorBandDepthCache = new WeakMap();
+
+/**
+ * t35：**门洞豁免的进深**（canonical，沿 `door.axis` 的进深轴）。
+ *
+ *   · `door.through !== false`（16 门类 + 10 开敞亭 + **未登记 `through`** 的桥面/汀步/宫墙城门）
+ *     ⇒ 返回 `null` = **整进深**（原语义逐字不变）；
+ *   · `door.through === false`（hall / sideHall：只有正立面开门、背面实心后墙）
+ *     ⇒ 返回 `|门侧外墙外沿 − 室内面远边|` —— 门洞带 + 室内进深，**止于后墙**（后墙内侧即室内面远边）。
+ *
+ * 缺陷（t22 只读定位、t31 三证、本卡落地）：收窄前 63 条建筑门一律 `[lo−r, hi+r]` = **贯穿整栋**，
+ * 于是 37 栋非贯穿建筑在碰撞层被开了一条"从后墙穿出"的幻影走廊（`camera.js` / `registry.js` /
+ * `walk-solver.js` 三个消费方共用本谓词 ⇒ 玩家真能穿出）。收窄后门侧端**保持原样**（含外侧 `radius` 环），
+ * 只把远端从 `外墙外沿 + radius` 收到**室内面远边**。阈值（`radius`）一字未动。
+ */
+export function doorBandDepthOf(door, bounds) {
+  if (!door || !bounds || door.through !== false) return null;
+  const cached = doorBandDepthCache.get(bounds);
+  if (cached !== undefined) return cached;
+  let depth = null;
+  const lateralAxis = door.lateralAxis ?? ((bounds.maxX - bounds.minX) >= (bounds.maxZ - bounds.minZ) ? 'x' : 'z');
+  const normalAxis = lateralAxis === 'x' ? 'z' : 'x';
+  const vector = CONFIG.ORIENTATION.facingVectors[door.facade?.outward];
+  const sign = vector ? Math.sign(normalAxis === 'z' ? vector.z : vector.x) : 0;
+  const rect = registeredInteriorRect(bounds);
+  if (sign !== 0 && rect) {
+    const lo = normalAxis === 'z' ? bounds.minZ : bounds.minX;
+    const hi = normalAxis === 'z' ? bounds.maxZ : bounds.maxX;
+    const doorSide = sign > 0 ? hi : lo;
+    const far = sign > 0
+      ? (normalAxis === 'z' ? rect.bounds.minZ : rect.bounds.minX)
+      : (normalAxis === 'z' ? rect.bounds.maxZ : rect.bounds.maxX);
+    const candidate = Math.abs(doorSide - far);
+    if (candidate > 0) depth = +candidate.toFixed(3);
+  }
+  doorBandDepthCache.set(bounds, depth);
+  return depth;
+}
+
+/** 进深轴上的门带区间判定：`bandDepth === null` ⇒ **整进深**（原式逐字不变），否则止于室内面远边。 */
+function insideDoorNormalSpan(door, bounds, coord, radius, bandDepth) {
+  const lateralAxis = door.lateralAxis ?? ((bounds.maxX - bounds.minX) >= (bounds.maxZ - bounds.minZ) ? 'x' : 'z');
+  const normalAxis = lateralAxis === 'x' ? 'z' : 'x';
+  const lo = normalAxis === 'z' ? bounds.minZ : bounds.minX;
+  const hi = normalAxis === 'z' ? bounds.maxZ : bounds.maxX;
+  const vector = CONFIG.ORIENTATION.facingVectors[door.facade?.outward];
+  const sign = vector ? Math.sign(normalAxis === 'z' ? vector.z : vector.x) : 0;
+  if (bandDepth !== null && bandDepth !== undefined && sign !== 0) {
+    const doorSide = sign > 0 ? hi : lo;
+    const far = doorSide - sign * bandDepth;
+    // 门侧端 = 原式（外墙外沿 ± radius）；远端 = 室内面远边（止于后墙）
+    return sign > 0 ? coord >= far && coord <= hi + radius : coord >= lo - radius && coord <= far;
+  }
+  return coord >= lo - radius && coord <= hi + radius; // 回退：整进深（不制造新阻挡）
+}
+
+/** 点是否落在门洞通道内（canonical：`door.axis` 为面法线轴）；t35 起 `through === false` 的门**止于后墙**。 */
 export function insideObstacleDoor(door, bounds, x, z, radius = INTERACTION.player.radius) {
   if (!door || !bounds) return false;
   const lateralAxis = door.lateralAxis ?? ((bounds.maxX - bounds.minX) >= (bounds.maxZ - bounds.minZ) ? 'x' : 'z');
   const halfWidth = Math.max(0, (door.width ?? 0) / 2 - radius);
-  if (lateralAxis === 'x') {
-    return Math.abs(x - (door.center?.x ?? 0)) <= halfWidth && z >= bounds.minZ - radius && z <= bounds.maxZ + radius;
+  const bandDepth = doorBandDepthOf(door, bounds);
+  if (bandDepth === null) {
+    // 整进深（原式逐字不变）
+    if (lateralAxis === 'x') {
+      return Math.abs(x - (door.center?.x ?? 0)) <= halfWidth && z >= bounds.minZ - radius && z <= bounds.maxZ + radius;
+    }
+    return Math.abs(z - (door.center?.z ?? 0)) <= halfWidth && x >= bounds.minX - radius && x <= bounds.maxX + radius;
   }
-  return Math.abs(z - (door.center?.z ?? 0)) <= halfWidth && x >= bounds.minX - radius && x <= bounds.maxX + radius;
+  if (lateralAxis === 'x') {
+    return Math.abs(x - (door.center?.x ?? 0)) <= halfWidth && insideDoorNormalSpan(door, bounds, z, radius, bandDepth);
+  }
+  return Math.abs(z - (door.center?.z ?? 0)) <= halfWidth && insideDoorNormalSpan(door, bounds, x, radius, bandDepth);
 }
 
 /**

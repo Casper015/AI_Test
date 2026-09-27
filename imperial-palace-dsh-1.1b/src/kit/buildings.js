@@ -133,6 +133,19 @@ export function composeBuilding(env, p, kind, detail) {
     }
     : null;
 
+  /* t6：**门洞两侧开口（贯穿）** —— 门类建筑的登记语义本身就是"通道口"：
+   *   · 登记依据（只读 layout）：`kind ∈ {gateHall, courtyardGate}` + `slot.door`（axis/facade/width/height/sillY）
+   *     + `usage` 的通道语义（"通道口/宫门/城门/门洞可通行"）+ 障碍 `blocks:'exceptDoor'` 的门洞带为**整进深穿透**
+   *     （`docs/report-airwall.md` §10.2 明写"沿另一轴则贯穿通过，与主殿门洞'穿透体块'同一语义"）；
+   *   · 登记里**没有**第二个 `facade`/`door.back` 字段 ⇒ 对面开口由 `door` **镜像派生**（同轴、同宽、同高、同门槛），
+   *     不新增任何登记字段即可与登记逐值对齐；
+   *   · 显式覆盖：`through: true`（让殿堂也成穿堂）/ `through: false`（强制单面）；
+   *   · **开口 ≠ 可穿墙**：本参数只改**墙体几何**（背面墙开洞 + 背面门额），不产生、也不修改任何碰撞/可行走数据
+   *     （障碍与通道面属 layout，kit 从不写这两类数据）。
+   */
+  const throughDefault = kind === 'gateHall' || kind === 'courtyardGate';
+  const through = Boolean(door) && !isPavilion && p.through !== false && (p.through === true || throughDefault);
+
   // 1) 台基（单层台明；多层台基交给 kit.terrace）
   const plinthResult = buildPlinth(T, { w: localW, d: localD, terraceH, baseY: 0, tile: tile.stone, cap: detail !== 'far' });
   parts.absorb(plinthResult.parts);
@@ -152,6 +165,8 @@ export function composeBuilding(env, p, kind, detail) {
     bayPitch: scale.bayPitch,
     tile: tile.stone,
     door,
+    // t6：门洞两侧开口（贯穿）。开口 ≠ 可穿墙 —— 这里只描述**几何**，通行性看 layout 的 door.passable。
+    through,
     windows: !isPavilion && !isGate, // 窗只由 kind 决定（殿堂有、门殿/院门无、亭全开敞）
     openFront: isPavilion, // 亭：四面全开敞（内部参数，不是"正面开门"开关；正面开门看 door）
   });
@@ -184,8 +199,26 @@ export function composeBuilding(env, p, kind, detail) {
       topHalfD: apronWaistD,
     });
     // 只把"下层腰檐的瓦面"改名（它与主屋面是两重不同的屋面，必须分开）；
-    // 檐口封边（瓦口）与垂脊是同类构件，沿用同名——避免重檐建筑额外占用合批桶（§8.2 分区绘制预算）。
+    // 檐口封边（瓦口）沿用同名——避免重檐建筑额外占用合批桶（§8.2 分区绘制预算）。
     apron.parts.rename('roof', 'lowerRoof');
+    /* t27：**下檐脊饰的部位归属**（g1 判据 5.4：重檐应有第二层脊饰 —— 要求 `lowerRoof` 之外
+     * 还有 `lowerRidge` 类部件）。本改动**只动归属、不动几何**：下檐正脊（`ridge` 盒）与下檐垂脊
+     * （`hipRidge` 梁）本来就在（前者中/近档、后者近档，见 `buildRoof` 的 ridge/hipRidge 段），
+     * 只是此前与**上层**同名同类构件合并进同一个合批桶 ⇒ "看不出重檐有两层脊饰"。
+     *
+     * 为何只在**近景档**改名（而不是全档统一）——这是 §8.2 的硬约束，不是形制取舍：
+     *   · 合批键 = `material.uuid|part`（`src/kit/merge.js:557-563`）⇒ **任何新部位名必然新增一个绘制调用**；
+     *   · B/C/F 三区都是**单档**建造：B=mid（`forecourt.js:66`）、F=mid（`garden-boundary.js:506`）、
+     *     C 的 `C-hall-bed-main` 在 `NEAR_DETAIL_SLOTS` ⇒ near（`inner-palace.js:54/232`）；
+     *   · 实测（t27）：全档改名 ⇒ 主场景 341→344、B 62→63、C 55→56、**F 80→81 ✗ 超预算**（F 无余量）；
+     *     近景档改名 ⇒ 主场景 341→342、C 55→56、B/D/E/F **逐值不变**（F 仍 80/80 ✓）。
+     *   · 与本文件既有的分档口径一致：下檐垂脊/脊兽（hipRidge、ridgeBeast/ridgeEnd）本就是分档部件。
+     * 若主理人要求中档也统一归属，需要 §8.2 裁定（F 80→81，或授权把两个既有脊饰部位名合并以腾出 1 个桶）。
+     */
+    if (detail === 'near') {
+      apron.parts.rename('ridge', 'lowerRidge');
+      apron.parts.rename('hipRidge', 'lowerRidge');
+    }
     parts.absorb(apron.parts);
     apronPlan = apron.metrics;
 
@@ -358,6 +391,20 @@ export function composeBuilding(env, p, kind, detail) {
         clearWidth: +((door.openFraction ?? kindOpenFraction) * doorWidthEffective).toFixed(4),
         playerClearWidth: +(2 * config.INTERACTION.player.radius).toFixed(4),
         source: door.source,
+      }
+      : null,
+    // t6：贯穿门洞的回显（背面开口；无门扇 ⇒ 净宽 = 洞宽）。`hasBackOpening` 为几何事实，
+    // 与 `door.passable`（通行性）**分开**回显，避免下游把"有洞"误读成"能走"。
+    through,
+    hasBackOpening: through,
+    openingBack: through
+      ? {
+        width: doorWidthEffective,
+        height: door.height,
+        openFraction: 1,
+        clearWidth: +doorWidthEffective.toFixed(4),
+        playerClearWidth: +(2 * config.INTERACTION.player.radius).toFixed(4),
+        source: 'through',
       }
       : null,
     stairs: stairsDims,
