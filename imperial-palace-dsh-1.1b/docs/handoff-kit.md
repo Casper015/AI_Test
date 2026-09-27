@@ -604,3 +604,134 @@ $ node tests/interaction.test.mjs                 → 80 / 81（唯一红 = **t3
 2. **网格可达性口径**见 §3（t39-F3）：不得用 `cellSize ≥ 0.5` 的 flood 判定塔楼可登。
 3. `t39-F1/F2` 未修（文件不在 inScope）⇒ 五套件里 `zone-east`/`interaction` 各 1 红；本卡 inScope 内三条（layout/walk-reachability/audit）全绿。
 4. 塔身内芯 `y1 = topY − slab`（9.214）刻意**低于观景台面**（9.34）：若取到 `topY`，`obstacleBlocksPoint` 的含界判定会把观景台拦住（t37 已记录，本卡沿用）。
+
+---
+
+## 附：t41 多层楼阁 —— 原型证伪 + 可落地蓝图（attempt 3/4，未接线；**树未改**）
+
+> 任务 `t41`（`kit-engineer`）。本卡四次派单均因**几何不可行**或**inScope 冲突**停在取证阶段；
+> 本节把「原型证伪证据 + 唯一在 inScope 内可行的设计蓝图」写清，供下一 attempt 直接实施。
+
+### 1. 原型证伪（attempt 3 实测，补丁留档 `work/t41-gallery-prototype.patch`）
+
+在 `src/kit/towers.js` 落过 `storeyGalleryPlan`/`makeStoreyGallery`（腰檐 + 平座外廊 + 逐层直跑梯，
+只用既有桶 `stairs/terraceCap/lowerRoof/lowerRidge/railing`）。单栋（B-hall-main，levels 3）实测：
+
+```text
+levels 3 · faces 50 · floorRise 3.57 · maxHopMeasured 0.149 ≤ climbStepMax 0.42 · reverseOk true
+但 climb.ok = false，overlapCount = 24   ← 被 faceOverlaps（"不被更高面取高"）判据当场证伪
+```
+
+根因：`kit.hall` 的屋身是**一体实心**（`src/kit/buildings.js` 不在本卡 inScope），檐下任意标高处墙面都在
+x=±w/2 ⇒ ①平座只能挂在 x≥w/2 之外；②平座按层内收 ⇒ 埋进实心屋身；按层外挑 ⇒ **上层压住下层**（取高）；
+③连接梯段无论放哪都会被更高层平座覆盖。
+
+### 2. 蓝图（唯一在 inScope 内可行：**外侧不互压的 U 形平座 + 外向阶梯**）
+
+关键约束（三条，缺一即被 `faceOverlaps`/取高判据打回）：
+① 所有可走面组在 plan 上**互不重叠**（不同 y 也不行 —— 取高只看 plan）；② 每条梯段的 plan 不被任何更高面覆盖；
+③ 每跳 |Δy| ≤ `climbStepMax()`。
+
+B 区三栋（inScope 内可达的最大集：`B-hall-main` g3→3 层 / `B-hall-mid`、`B-hall-rear` g2→2 层）：
+
+| 面组 | 位置（相对槽位中心） | 标高 | 说明 |
+| --- | --- | --- | --- |
+| L2 东廊 | x ∈ [w/2, w/2+2.6]，z ∈ [−d/2, d/2] | baseY + E/3 | 平座（板厚 slab，`terraceCap`） |
+| L2 北桥 | z ∈ [d/2, d/2+2.6]，x ∈ [−w/2, w/2] | 同 L2 | 连接东廊↔西廊（**只在 3 层栋需要**） |
+| L2 西廊 | x ∈ [−w/2−2.6, −w/2]，z ∈ [−d/2, d/2] | 同 L2 | 仅 3 层栋 |
+| L2 东梯 | x ∈ [w/2+2.8, w/2+5.4]，z 自 (z−d/2+0.2) 起，步深 0.34 | baseY → baseY+E/3 | 22–36 级（E/3 ≈ 2.2–3.6m ⇒ run 7.5–12.2m ≤ d ✓） |
+| L3 西廊 | x ∈ [−w/2−5.2, −w/2−2.6]，z ∈ [−d/2, d/2] | baseY + 2E/3 | **比 L2 西廊再外挑 2.6m** ⇒ 与 L2 面组 plan 不相交 |
+| L3 西梯 | x ∈ [−w/2−7.8, −w/2−5.2]，z 自 (z−d/2+0.2) 起 | baseY+E/3 → baseY+2E/3 | 自 L2 西廊上行 |
+
+· **层数按等级序**：`levels = grade === 3 ? 3 : 2`，与 t38 的 `eaveAbs` 降序一致（B-hall-main 10.71 > B-hall-mid 6.60 > B-hall-rear 6.40）。
+· **eaveAbs/totalHeight 逐值不变**（楼层只是腰位分层，未改屋身/屋顶）⇒ t38 冻结口径与 R3–R6 读数不受影响。
+· 面数估算：3 层栋 ≈ 62 面、2 层栋 ≈ 36 面 ⇒ 三栋 ≈ **134 面（WALKABLE 247 → 381）**；**OBSTACLES/VIEWPOINTS/内景 43 逐值不变**
+  （楼身阻挡继续由槽位 `OB-<slotId>` 承担，平座在其包围盒之外）⇒ 跨 owner pin 只剩 WALKABLE 一类。
+· 预算：新腰檐/栏杆并入既有桶（B 区已有 `lowerRoof/lowerRidge/railing/terraceCap/stairs`）⇒ 预期 **+0…+2** 调用（B 62/70）。
+
+### 3. 落地顺序（下一 attempt，按 t39 已验证模式）
+
+① `src/kit/towers.js`：`STOREY_GALLERY_SPEC` + `storeyGalleryPlan()`（纯数据，含 `climbSequenceReport` 自检 + `faceOverlaps` 必为 0）
+  + `makeStoreyGallery()`（几何 + `walkable`，kind 取既有白名单 `terrace`，**不登记 obstacles/viewpoints**）；
+② `src/shared/layout.js`：`STOREY_GALLERIES` 紧凑规格（slotId/x/z/w/d/baseY/eaveHeight/levels，全部由 `SLOTS`+`slotVolumeCaliber` 派生）
+  + `storeyGalleryPlan()` 镜像 + `...spread` 并入 `WALKABLE` + `LAYOUT_STATS.storeyGalleries` + `LAYOUT_VERSION` 递增；
+③ `src/zones/forecourt.js`：合批前建 3 座并 `root.add`，与 `zone.walkable` **逐值核对**（漂移抛错，防空气楼梯）；
+④ `tests/layout.test.mjs`：t41 块（层数按 eaveAbs 序、面数派生、climb.ok/逐跳/反向/叠压 0、登记↔几何逐值、突变对照必红）
+  + 把 WALKABLE pin 改为 `175 + CLIMB_TOWER_FACES + STOREY_GALLERY_FACES`（数据推导）；
+⑤ `tests/zone-forecourt.test.mjs`：同族"面标高 = 区域地坪"类断言按 `galleryId` 排除并追加梯段链自证；
+⑥ `work/probe-t41-storeys.mjs` 扩成真实文件口径探针（面中心 `probe` 逐跳 + 生产 `probe.ok` + 含量 A/B）。
+
+### 4. 交回裁定（前置，非本 attempt 能自行决定）
+
+1. **候选集**：前 5 候选里 2 栋属 C 区（`src/zones/inner-palace.js` **Out-of-scope**）、F 区 4 候选被预算（**80/80 零余量**）与 `onWall` 排除
+   ⇒ inScope 内最多 **B 区 3 栋**。请裁定「授权 inner-palace.js」或「本卡仅 B 区 3 栋」。
+2. **替代轻卡（建议优先）**：现状 B-hall-main / C-hall-bed-main / F-gate-south·north **已是重檐**；用户说"全是一层"很可能指
+   **其余中轴栋皆单檐**。若接受「只做外观」，可改派一张轻卡：按 grade 给中轴 4–6 栋**加腰檐分层**（不改 eaveAbs/totalHeight、
+   不新增计数、无取高争议），半天内可交付 —— 这比把塔楼环带/切段逻辑整套移植到矩形平面（方案 B）风险与成本都低得多。
+3. 遗留：t39-F1（`tests/zone-east.test.mjs` 33/34）、t39-F2（`tests/interaction.test.mjs` 80/81）两件配对更新仍未派单。
+
+---
+
+## 附：t41 交付记录 —— 中轴楼阁**腰檐分层**（外观多层，2026-09-26，LAYOUT 1.1.27 → **1.1.28**）
+
+> 需求（用户原话）：「把中轴的建筑高度改的高低有序，有的三层有的两层的 现在全是一层的楼」。
+> inScope：`src/kit/towers.js`、`src/kit/index.js`、`src/shared/layout.js`、`src/zones/forecourt.js`、
+> `tests/layout.test.mjs`、`tests/zone-forecourt.test.mjs`、`docs/handoff-kit.md`。
+
+### 1. 先只读取证（台账 + 候选判定，不凭喜好挑）
+
+`work/probe-t41-storeys.mjs` + `work/t41-ledger.txt`（真实文件只读）：中轴 11 栋逐栋
+`{kind, grade, roofType, 占地 w×d, 台基层数, eaveAbs, totalHeight, 三角面, 是否双檐, onWall, 现层数=1}`。
+**候选规则（数据推导）**：中轴（B/C 区）非 `onWall` 的 `hall`，按 `slotVolumeCaliber().eaveAbs` **降序**取前 5 ⇒
+`B-hall-main 10.71(g3)` · `C-hall-bed-main 7.71(g3)` · `B-hall-mid 6.60(g2)` · `B-hall-rear 6.40(g2)` · `C-hall-bed-rear 5.80(g2)`。
+**实际落地 = 候选里 zone B 的 3 栋**（`B-hall-main` 3 层、`B-hall-mid`/`B-hall-rear` 2 层）：另 2 栋由
+`src/zones/inner-palace.js` 装配（**本卡 Out-of-scope**），以 `buildable:false` + 具名理由**逐条登记**在
+`layout.STOREY_BAND_CANDIDATES`（台账不隐瞒、不删项）。F 区 4 候选被预算（**80/80 零余量**）与 `onWall` 排除。
+
+### 2. 裁定说明：为何本卡**只做外观分层**（卡内「否则明确交回裁定说明」条款）
+
+**上层「可达」在本卡 inScope 内被实测证伪**（attempt 3 原型，补丁留档 `work/t41-gallery-prototype.patch`）：
+按卡内路线在 `src/kit/towers.js` 实现「腰檐 + 平座外廊 + 逐层直跑梯」后，单栋自检
+
+```text
+levels 3 · faces 50 · floorRise 3.57 · maxHopMeasured 0.149 ≤ climbStepMax 0.42 · reverseOk true
+climb.ok = false · overlapCount = 24   ← faceOverlaps（不被更高面取高）当场打回
+```
+
+根因：`kit.hall` 屋身**一体实心**，而 `src/kit/buildings.js` **不在本卡 inScope** ⇒ 檐下任意标高处墙面恒在
+x=±w/2：平座只能外挂；**按层内收 ⇒ 埋进实心屋身**；**按层外挑 ⇒ 上层压住下层**（玩家在低层被 `floorYAt` 吸到高层）。
+唯一在 inScope 内的可达方案是把 `towerPlan` 的「环带按梯段切段 + 逐层外向」整套移植到矩形平面
+（见本文件「附：t41 多层楼阁 —— 原型证伪 + 可落地蓝图」§2 的 U 形平座蓝图，估 ≈200 行 + layout 派生镜像
++ WALKABLE 247→381），属**一张完整卡**的工作量，本卡额度内不可交付。
+⇒ 本卡交付**外观多层**（腰檐 + 檐脊分层，**不登记任何可行走面** ⇒ **无空气楼梯**），并把可达方案的**蓝图**留给下一卡。
+
+### 3. 落地（登记与几何同轮）
+
+| 层 | 位置 | 内容 |
+| --- | --- | --- |
+| kit | `src/kit/towers.js`（新增 `STOREY_BAND_SPEC` / `storeyBandPlan` / `makeStoreyBands`）· `src/kit/index.js`（`KIT_VERSION 1.0.2 → **1.0.3**` + 导出 + `stats().factories.towers`） | 按等级在屋身腰位加**腰檐（四边出挑 1.2m）+ 檐脊**；只用既有部位/材质 `lowerRoof`/`lowerRidge` × `glazeTile` ⇒ **并入既有合批桶** |
+| layout | `src/shared/layout.js` 第二十节（`STOREY_BAND_SPEC`/`STOREY_BAND_CANDIDATES`/`STOREY_BANDS`/`storeyBandPlan()`/`STOREY_BAND_PLANS`/`STOREY_BAND_SUMMARY` + `LAYOUT_STATS.storeyBands`） | 口径 `bandY(k) = baseY + eaveHeight·(k−1)/levels`；`levels = grade===3 ? 3 : 2`；**eaveHeight/totalHeight/eaveAbs 一字未改**（t38 口径 R3–R6 读数不变） |
+| zone | `src/zones/forecourt.js`（合批前建 3 座 + `root.add`） | **逐栋核对 `bandCount` 与每道 `bandY`（逐值，漂移即抛错）** ⇒ 登记↔几何同轮；灰盒无 `makeStoreyBands` 时跳过（不静默：`stats.storeyBands` 记 0） |
+
+**计数（零变动）**：`WALKABLE 247` · `OBSTACLES 94` · `VIEWPOINTS 62` · 内景 43 · SLOTS 79 · 道路 97 **全部不变**；
+`LAYOUT_VERSION 1.1.27 → 1.1.28`；**未动任何阈值**（0.5/0.6 一字未改）。
+
+**实测（audit --enforce exit 0）**：主场景 **344 → 345 / 350**（+1）· B 区 **62 → 63 / 70**（+1）· C/D/E/F 逐值不变（F 80/80）·
+可见三角面 425941/1.5M；腰檐几何 = 4 道 × 8 盒 = **768 三角面**（`kit.makeStoreyBands` 实测 192/栋·道）。
+
+### 4. 判据（`tests/layout.test.mjs` t41 块，+16 条，只增不减）
+
+候选 5 栋 / eaveAbs 降序 `/ 落地 3 栋并集` / 层数随等级（g3⇒3、g2⇒2）/ `ordered` 自检 / 不改 eaveHeight+eaveAbs /
+**零计数变动 0/0/0** / 腰檐道数 4 / LAYOUT_VERSION ≥ 1.1.28 / **bandY 与 `kit.storeyBandPlan` 逐值相等** /
+**突变对照（改 eaveHeight ⇒ bandY 必偏离）** / bandY 落在 (baseY, baseY+eaveHeight) 内。
+
+### 5. 未运行 / 交回
+
+1. **五套件**：`audit --enforce` exit 0 ✓；`tests/layout.test.mjs` 与 `tests/zone-forecourt.test.mjs` 现存
+   **2 + 1 处红，全部来自并发落地的「院墙扩展」**（`WALLS 60 → 72`、院墙 68 段；断言 pin 仍是 60/6 段），
+   本卡 diff **未触碰任何 WALLS/cityWall/courtWall 行**（`git diff` 计数 0）⇒ 属**并发写入窗口的陈旧 pin**，
+   由该落地方更新（`tests/layout.test.mjs` 的「冻结计数 79/60/32/14/10」与 `tests/zone-forecourt.test.mjs` 的
+   「院墙 6 段」两处）。
+2. **浏览器侧未跑**：建议 V3 用 `?view=axis` 与 B 区 `--view=zone` 各出一图对照腰檐分层观感。
+3. **可达多层的下一步**：见本文件「附：t41 多层楼阁 —— 原型证伪 + 可落地蓝图」（U 形平座 + 外向阶梯），
+   或改由「拆屋身真楼层」（需 `src/kit/buildings.js` 授权）实现 —— 两者均需主理人裁定后再派卡。

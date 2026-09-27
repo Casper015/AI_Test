@@ -36,7 +36,8 @@ const slice = await loadModule('src/core/layout-slice.js');
 const { createZoneContext, validateZoneResult } = await loadModule('src/core/context.js');
 
 const ZONE_IDS = ['B', 'C', 'D', 'E', 'F'];
-const expectCourtWalls = { B: 12, C: 12, D: 16, E: 16, F: 0 };
+/* t48：计数**数据推导**（中轴切口把 12 段跨轴院墙各拆两段 ⇒ 逐区 +2/+2）——不再写死。 */
+const expectCourtWalls = Object.fromEntries(['B', 'C', 'D', 'E', 'F'].map((z) => [z, LAYOUT.WALLS.filter((w) => w.kind === 'courtWall' && w.owner === z).length]));
 const expectCityWalls = { B: 0, C: 0, D: 0, E: 0, F: 4 };
 
 const wallById = new Map(LAYOUT.WALLS.map((w) => [w.id, w]));
@@ -63,12 +64,13 @@ const registryWithLayout = () => createRegistry({ config: CONFIG, events: makeSi
 runner.section('1. 过滤修复：owner / courtyardId（不再恒空）');
 /* ========================================================================== */
 
-await runner.test('字段事实：WALLS 60 条全部有 owner、56 条有 courtyardId、0 条有 zone', () => {
-  assertEqual(LAYOUT.WALLS.length, 60, 'WALLS 应为 60 段');
-  assertEqual(LAYOUT.WALLS.filter((w) => w.owner !== undefined).length, 60, '60/60 必须有 owner');
-  assertEqual(LAYOUT.WALLS.filter((w) => w.courtyardId !== undefined).length, 56, '56/56 院墙必须有 courtyardId');
+await runner.test('字段事实：全部 WALLS 有 owner、全部院墙有 courtyardId、0 条有 zone（计数数据推导）', () => {
+  const courtWalls = LAYOUT.WALLS.filter((w) => w.kind === 'courtWall');
+  assertEqual(LAYOUT.WALLS.length, 4 + LAYOUT.COURTYARDS.length * 4 + LAYOUT.WALLS.filter((w) => w.axisCutoutSide === 'east').length, 'WALLS = 4 宫墙 + 4×院落 + t48 中轴切口拆分段');
+  assertEqual(LAYOUT.WALLS.filter((w) => w.owner !== undefined).length, LAYOUT.WALLS.length, '全部墙必须有 owner');
+  assertEqual(LAYOUT.WALLS.filter((w) => w.courtyardId !== undefined).length, courtWalls.length, '全部院墙必须有 courtyardId');
   assertEqual(LAYOUT.WALLS.filter((w) => w.zone !== undefined).length, 0, '没有任何一条有 zone —— 旧过滤必然恒空');
-  assertEqual(LAYOUT.WALLS.filter((w) => w.kind === 'courtWall').length, 56);
+  assertEqual(courtWalls.length, 56 + LAYOUT.WALLS.filter((w) => w.axisCutoutSide === 'east').length);
   assertEqual(LAYOUT.WALLS.filter((w) => w.cityWall === true).length, 4);
 });
 

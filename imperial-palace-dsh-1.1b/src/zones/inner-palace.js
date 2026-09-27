@@ -34,7 +34,7 @@
  */
 
 import { CONFIG, deriveSeed } from '../shared/config.js';
-import { rampsFromRoads } from '../core/layout-slice.js';
+import { rampsFromRoads, wallRunsForZone } from '../core/layout-slice.js'; // t48：可视院墙消费权威归并段
 
 export const ZONE_ID = 'C';
 export const ZONE_VERSION = '1.0.0';
@@ -425,43 +425,15 @@ export async function createZone(ctx) {
 
   const wallObstacles = [];
   const wallOpenings = [];
+  /* t48：**可视院墙改为消费 core 的权威归并段**（`wallRunsForZone`，与碰撞层同一份 `deriveWallRuns()`）——
+     每段边界墙**恰由一个区域建造**（`seg.owner`）。旧实现逐条 `kit.wall({ baseY: 0.9 })` **完全不归并**
+     ⇒ ① 与 B 在 z=80 形成**跨区双层共面**（同长 192m，UV 不同 ⇒ 红白交替 + 斜条纹）；
+     ② C 自身 z=142 / z=216 同区共面重合；③ C 的 x=±96 三段与 B 的同线墙也各自建一遍。
+     现在：C 只建 `seg.owner === 'C'` 的子区间，且 `baseY = seg.y0` / `height = seg.y1 - seg.y0`
+     = 贡献者名义跨度并集（C 独占段 = [0.9, 0.9+墙高]；跨区段整片归 B ⇒ C 不再重复建）。
+     **碰撞登记仍逐条墙**（`wallSolidSpans`）⇒ `deriveCityWallColliders()` 输出与改前逐值一致、覆盖不减少。 */
   for (const wall of courtyardWalls) {
     const horizontal = wall.axis === 'x';
-    const mid = horizontal ? (wall.from.x + wall.to.x) / 2 : (wall.from.z + wall.to.z) / 2;
-    // 门洞净高：kit 默认取墙身高的 gateOpeningHeight；若洞口落在高台上，则按该处地坪（floorYAt）抬到
-    // "玩家身高 + 一级台阶"的净空——否则 1.8m 的玩家会被压在寝殿月台处的门楣下（第一人称卡死）。
-    const openings = (wall.openings ?? []).map((o) => {
-      const atX = horizontal ? o.at : wall.from.x;
-      const atZ = horizontal ? wall.from.z : o.at;
-      const localFloor = (typeof helpers.floorYAt === 'function' ? helpers.floorYAt(atX, atZ) : null) ?? groundY;
-      const needed = round(localFloor + playerHeadroom - groundY);
-      const height = Math.min(wall.height, Math.max(round(wall.height * 0.62), needed));
-      wallOpenings.push({
-        wallId: wall.id,
-        axis: wall.axis,
-        position: { x: atX, z: atZ },
-        width: o.width,
-        height,
-        floorY: localFloor,
-        neededHeight: needed,
-      });
-      return { at: round(o.at - mid), width: o.width, height };
-    });
-    const mesh = kit.wall({
-      id: wall.id,
-      name: wall.name,
-      from: { ...wall.from },
-      to: { ...wall.to },
-      thickness: wall.thickness,
-      height: wall.height,
-      baseY: groundY,
-      openings,
-      // 'far' 只影响压顶脊线（kit.wall 唯一按 detail 分支的部件）；院墙以体量与门洞为主，
-      // 省下的 1 个绘制批次留给 §8.2 分区预算的余量（实测见回执 §2.6）。
-      detail: 'far',
-    });
-    root.add(mesh);
-
     // 院墙实心段碰撞：layout.OBSTACLES 未登记院墙，而院墙是 C 自己负责的实体边界（缺碰撞即穿模）
     for (const [i, [a, b]] of wallSolidSpans(wall).entries()) {
       wallObstacles.push({
@@ -480,6 +452,65 @@ export async function createZone(ctx) {
       });
     }
   }
+
+  const cWallRuns = [];
+  for (const run of wallRunsForZone(ZONE_ID)) {
+    const horizontal = run.horizontal;
+    for (const seg of run.segments.filter((x) => x.owner === ZONE_ID)) {
+      const mid = (seg.lo + seg.hi) / 2;
+      // 门洞净高：kit 默认取墙身高的 gateOpeningHeight；若洞口落在高台上，则按该处地坪（floorYAt）抬到
+      // "玩家身高 + 一级台阶"的净空——否则 1.8m 的玩家会被压在寝殿月台处的门楣下（第一人称卡死）。
+      const openings = run.openings
+        .filter(([g0, g1]) => g1 > seg.lo - 1 && g0 < seg.hi + 1)
+        .map(([g0, g1]) => {
+          const at = (g0 + g1) / 2;
+          const atX = horizontal ? at : run.line;
+          const atZ = horizontal ? run.line : at;
+          const localFloor = (typeof helpers.floorYAt === 'function' ? helpers.floorYAt(atX, atZ) : null) ?? groundY;
+          const needed = round(localFloor + playerHeadroom - groundY);
+          const height = Math.min(seg.y1 - seg.y0, Math.max(round((seg.y1 - seg.y0) * 0.62), needed));
+          wallOpenings.push({
+            wallId: run.id,
+            axis: run.axis,
+            position: { x: atX, z: atZ },
+            width: round(g1 - g0),
+            height,
+            floorY: localFloor,
+            neededHeight: needed,
+          });
+          return { at: round(at - mid), width: round(g1 - g0), height };
+        });
+      const mesh = kit.wall({
+        id: `${ZONE_ID}-wallrun-${horizontal ? 'x' : 'z'}${run.line}-${round(seg.lo)}`,
+        name: `${horizontal ? '东西向' : '南北向'}院墙 z/x=${run.line}（${seg.lo}…${seg.hi}）`,
+        from: horizontal ? { x: seg.lo, z: run.line } : { x: run.line, z: seg.lo },
+        to: horizontal ? { x: seg.hi, z: run.line } : { x: run.line, z: seg.hi },
+        thickness: run.thickness,
+        height: round(seg.y1 - seg.y0),
+        baseY: seg.y0,
+        openings,
+        // 'far' 只影响压顶脊线（kit.wall 唯一按 detail 分支的部件）；院墙以体量与门洞为主，
+        // 省下的 1 个绘制批次留给 §8.2 分区预算的余量（实测见回执 §2.6）。
+        detail: 'far',
+      });
+      mesh.userData.zone = ZONE_ID;
+      mesh.userData.wallRunId = run.id;
+      root.add(mesh);
+      cWallRuns.push({
+        runId: run.id,
+        lo: seg.lo,
+        hi: seg.hi,
+        line: run.line,
+        alongX: horizontal,
+        baseY: seg.y0,
+        topY: seg.y1,
+        openings: openings.length,
+        sources: seg.wallIds.slice(),
+        owners: seg.owners.slice(),
+      });
+    }
+  }
+  stats.wallRuns = cWallRuns;
   stats.courtyardWalls = courtyardWalls.length;
   stats.wallObstacles = wallObstacles.length;
 

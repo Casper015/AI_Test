@@ -93,26 +93,29 @@ function floorAlongWall(helpers, wall, a, b, fallback = 0) {
 }
 
 /**
- * 由 `layout.WALLS` 统一派生墙体碰撞盒（宫墙 + 院墙），返回冻结格式的 Obstacle 数组
- * （CONTRACTS §6.3：`{ id, sourceType:'wall', zone, buildingId, bounds, y0, y1, blocks:'all', door:null }`）。
+ * **权威墙段归并（t48）**：`layout.WALLS` → 全城归并后的"墙段（run）"清单。
+ * 碰撞层（`deriveWallColliders`）与**可视层**（B/C/D/E 四区的院墙建造）**共用这一份实现**，
+ * 从而保证「每段边界墙恰由一个区域建造」——消除同区/跨区共线共面重复（z=80 跨区双层 192m、
+ * z=142 / z=216 同区重合、x=±96 六贡献者、x=±112 / z=±290 四贡献者等）。
  *
- * 关于宫墙：`layout.OBSTACLES` 里另有 4 条 `OB-WALL-CITY-*`，其 `door.axis` 是"墙的走向轴"，
- * 与环境/第一人称对建筑用的"正面法线轴"语义相反（第一人称求解器按建筑语义解释 → 整条宫墙都变成可穿）。
- * 因此这里对宫墙也**统一派生**（门洞取 `openings`，26m 净宽），并让 registry 去重时以本派生为准。
+ * 归并键 = `轴 | 墙线 | 厚度 | 墙高`，**刻意不含 owner**（B 的后殿院北墙与 C 的内廷院南墙同在 z=80，
+ * 是同一道实体墙）；`owner` 取该组第一条墙（`layout.WALLS` 顺序）作为**唯一建造者/代表区**，
+ * `owners` 保留全部贡献区（供 `wallCollidersForZone` 的归属过滤）。
+ *
+ * 返回每段：
+ *   `{ id, axis, line, thickness, height, owner, owners, wallIds, courtyardIds, cityWall,
+ *      extents,    // 墙身并集（未扣门洞）—— 可视层按段建墙时用
+ *      openings,   // 门洞并集（1m 归并后，世界坐标 `[lo, hi]`）—— 可视层与碰撞共用
+ *      spans,      // 实心段 = extents − openings —— 碰撞盒逐段用（与改前逐值一致）
+ *      y0, y1,     // **贡献者名义跨度并集**（可视层用）：min(各区地坪) … max(区地坪 + 墙高)
+ *      floorOf     // 逐实心段的地坪（`floorAlongWall` 取两侧最低）—— 碰撞盒 y0/y1 用
+ *   }`
  */
-export function deriveWallColliders(walls = WALLS, { helpers = LAYOUT, embed = WALL_COLLIDER_EMBED } = {}) {
-  const out = [];
-  /**
-   * 先按（owner + 轴向 + 墙线 + 厚度 + 墙高）分组：`layout.WALLS` 里同一道实体墙可能被拆成两条
-   * 相邻院落的墙记录（例如 `CY-B-plaza-wall-north` 与 `CY-B-throne-wall-south` 同在 z=-180），
-   * 若不归并就会得到两份完全重合的碰撞盒（重复阻挡 + 冗余盒）。归并规则与区域侧的历史实现一致。
-   */
+export function deriveWallRuns(walls = WALLS, { helpers = LAYOUT } = {}) {
   const groups = new Map();
   for (const wall of walls) {
     const horizontal = wall.axis === 'x';
     const line = horizontal ? wall.from.z : wall.from.x;
-    // 注意：key **不含 owner** —— B 的后殿院北墙与 C 的内廷院南墙同在 z=80，是同一道实体墙；
-    // 归并后由 `wallIds` 同时归属两个区域（各区的 wallColliders 用 wallIds 交集过滤）。
     const key = `${wall.axis}|${line.toFixed(2)}|${wall.thickness}|${wall.height}`;
     if (!groups.has(key)) {
       groups.set(key, {
@@ -126,6 +129,7 @@ export function deriveWallColliders(walls = WALLS, { helpers = LAYOUT, embed = W
         intervals: [],
         gaps: [],
         owners: new Set(),
+        nominalBases: [],
       });
     }
     const group = groups.get(key);
@@ -133,63 +137,145 @@ export function deriveWallColliders(walls = WALLS, { helpers = LAYOUT, embed = W
     group.owners.add(wall.owner);
     for (const span of wallSolidSpans(wall)) group.intervals.push(span);
     for (const opening of wall.openings ?? []) group.gaps.push([opening.at - opening.width / 2, opening.at + opening.width / 2]);
+    // 贡献者**名义**基准面 = 其所属区域的地坪（B 0 / C 0.9 / D·E 0.4 / F 0）—— 与各区可视建造的 baseY 同源
+    const zoneGround = ZONE_BY_ID.get(wall.owner)?.groundY;
+    group.nominalBases.push(Number.isFinite(zoneGround) ? zoneGround : 0);
   }
 
-  let groupIndex = 0;
-  for (const group of groups.values()) {
-    groupIndex += 1;
-    // 墙身并集
-    const mergedSpans = [];
-    for (const span of group.intervals.slice().sort((a, b) => a[0] - b[0])) {
-      const last = mergedSpans[mergedSpans.length - 1];
-      if (last && span[0] <= last[1] + 0.05) last[1] = Math.max(last[1], span[1]);
-      else mergedSpans.push([span[0], span[1]]);
+  const mergeIntervals = (list, tolerance = 0.05) => {
+    const merged = [];
+    for (const span of list.slice().sort((a, b) => a[0] - b[0])) {
+      const last = merged[merged.length - 1];
+      if (last && span[0] <= last[1] + tolerance) last[1] = Math.max(last[1], span[1]);
+      else merged.push([span[0], span[1]]);
     }
-    // 门洞并集（并集后再扣除，避免归并后的盒体落在任何一方的门洞里）
-    const mergedGaps = [];
-    for (const gap of group.gaps.slice().sort((a, b) => a[0] - b[0])) {
-      const last = mergedGaps[mergedGaps.length - 1];
-      if (last && gap[0] <= last[1] + 0.05) last[1] = Math.max(last[1], gap[1]);
-      else mergedGaps.push([gap[0], gap[1]]);
-    }
-    const solid = [];
-    for (const [a, b] of mergedSpans) {
-      let cursor = a;
-      for (const [gapLo, gapHi] of mergedGaps) {
-        if (gapHi <= cursor || gapLo >= b) continue;
-        if (gapLo > cursor) solid.push([cursor, Math.min(gapLo, b)]);
-        cursor = Math.max(cursor, Math.min(gapHi, b));
-      }
-      if (b > cursor + 0.05) solid.push([cursor, b]);
-    }
+    return merged;
+  };
 
-    solid.forEach(([a, b], index) => {
-      const representative = group.walls[0];
-      const floor = floorAlongWall(helpers, representative, a, b, 0);
+  const runs = [];
+  for (const group of groups.values()) {
+    /* `wallSolidSpans` 已逐墙扣过门洞 ⇒ `intervals` 是实心段；为给可视层"整段建墙 + 门洞参数"的形态，
+       这里用实心段 ∪ 门洞区间还原**墙身并集** `extents`（与 `mergedGaps` 并集后再做差 ⇒ 与改前同解）。 */
+    const mergedGaps = mergeIntervals(group.gaps);
+    const solid = mergeIntervals(group.intervals);
+    const extentList = mergeIntervals([...solid, ...mergedGaps]);
+    const representative = group.walls[0];
+    const wallIds = group.walls.map((w) => w.id);
+    const owners = [...group.owners];
+    const y0 = +Math.min(...group.nominalBases).toFixed(3);
+    const y1 = +Math.max(...group.nominalBases.map((b) => b + group.height)).toFixed(3);
+    /* **逐子区间归属（t48）**：把墙身并集按贡献者区间端点切分，每片子区间标出覆盖它的贡献墙，
+       取**第一条贡献墙的 owner** 作为唯一建造者（与碰撞盒的 `zone` 同规则）。
+       ⇒ 跨区共线段（z=80）整片归代表区（B）且垂直跨度取并集；非重叠段各归其本区（不越区建墙）。 */
+    const perWall = group.walls.map((w) => {
+      const horizontal = w.axis === 'x';
+      const lo = horizontal ? Math.min(w.from.x, w.to.x) : Math.min(w.from.z, w.to.z);
+      const hi = horizontal ? Math.max(w.from.x, w.to.x) : Math.max(w.from.z, w.to.z);
+      const zoneGround = ZONE_BY_ID.get(w.owner)?.groundY;
+      return { wall: w, lo, hi, base: Number.isFinite(zoneGround) ? zoneGround : 0 };
+    });
+    const bounds = [...new Set(perWall.flatMap((p) => [p.lo, p.hi]))].sort((a, b) => a - b);
+    const rawSegments = [];
+    for (let i = 0; i + 1 < bounds.length; i += 1) {
+      const lo = bounds[i];
+      const hi = bounds[i + 1];
+      if (hi - lo <= 1e-6) continue;
+      const mid = (lo + hi) / 2;
+      const covering = perWall.filter((p) => p.lo <= mid && mid <= p.hi);
+      if (covering.length === 0) continue;
+      const segOwners = [...new Set(covering.map((p) => p.wall.owner))];
+      rawSegments.push({
+        lo,
+        hi,
+        owner: covering[0].wall.owner,
+        owners: segOwners,
+        wallIds: covering.map((p) => p.wall.id),
+        y0: +Math.min(...covering.map((p) => p.base)).toFixed(3),
+        y1: +Math.max(...covering.map((p) => p.base + group.height)).toFixed(3),
+      });
+    }
+    /* 相邻且（owner / y0 / y1）相同的子区间**合并为一段**（同一区的连续墙身不该被贡献墙的分界切开）。 */
+    const segments = [];
+    for (const seg of rawSegments) {
+      const last = segments[segments.length - 1];
+      if (last && last.owner === seg.owner && last.y0 === seg.y0 && last.y1 === seg.y1 && Math.abs(last.hi - seg.lo) <= 1e-6) {
+        last.hi = seg.hi;
+        last.wallIds = [...new Set([...last.wallIds, ...seg.wallIds])];
+        last.owners = [...new Set([...last.owners, ...seg.owners])];
+      } else {
+        segments.push({ ...seg, wallIds: [...seg.wallIds], owners: [...seg.owners] });
+      }
+    }
+    runs.push({
+      id: `WALLRUN-${group.owner}-${group.horizontal ? 'x' : 'z'}${group.line.toFixed(2)}`,
+      key: group.key,
+      axis: group.horizontal ? 'x' : 'z',
+      horizontal: group.horizontal,
+      line: group.line,
+      thickness: group.thickness,
+      height: group.height,
+      owner: representative.owner,
+      owners,
+      wallIds,
+      courtyardIds: [...new Set(group.walls.map((w) => w.courtyardId).filter(Boolean))],
+      cityWall: group.walls.every((w) => w.cityWall === true),
+      representative,
+      extents: extentList,
+      openings: mergedGaps,
+      spans: solid,
+      segments,
+      y0,
+      y1,
+      floorOf: solid.map(([a, b]) => +floorAlongWall(helpers, representative, a, b, 0).toFixed(3)),
+    });
+  }
+  return runs;
+}
+
+/** 某区域**应当建造**的可视墙段（唯一建造者 = `run.owner`）。 */
+export function wallRunsForZone(zoneId, options = {}) {
+  return deriveWallRuns(options.walls ?? WALLS, options).filter((run) => run.owner === zoneId);
+}
+
+/**
+ * 由 `layout.WALLS` 统一派生墙体碰撞盒（宫墙 + 院墙），返回冻结格式的 Obstacle 数组
+ * （CONTRACTS §6.3：`{ id, sourceType:'wall', zone, buildingId, bounds, y0, y1, blocks:'all', door:null }`）。
+ *
+ * 关于宫墙：`layout.OBSTACLES` 里另有 4 条 `OB-WALL-CITY-*`，其 `door.axis` 是"墙的走向轴"，
+ * 与环境/第一人称对建筑用的"正面法线轴"语义相反（第一人称求解器按建筑语义解释 → 整条宫墙都变成可穿）。
+ * 因此这里对宫墙也**统一派生**（门洞取 `openings`，26m 净宽），并让 registry 去重时以本派生为准。
+ *
+ * t48：归并逻辑抽到 `deriveWallRuns()`（可视层共用）；本函数的**输出逐值不变**（回归口径见
+ * `tests/core-walls.test.mjs` 与回执的规范串哈希）。
+ */
+export function deriveWallColliders(walls = WALLS, { helpers = LAYOUT, embed = WALL_COLLIDER_EMBED } = {}) {
+  const out = [];
+  for (const run of deriveWallRuns(walls, { helpers })) {
+    run.spans.forEach(([a, b], index) => {
+      const representative = run.representative;
+      const floor = run.floorOf[index];
       const y0 = +(floor - embed).toFixed(3);
-      const y1 = +(floor + group.height).toFixed(3);
-      const wallIds = group.walls.map((w) => w.id);
-      const zones = [...group.owners];
+      const y1 = +(floor + run.height).toFixed(3);
       out.push({
-        id: `OB-WALLRUN-${group.owner}-${group.horizontal ? 'x' : 'z'}${group.line.toFixed(2)}-span${index + 1}`,
+        id: `OB-WALLRUN-${run.owner}-${run.horizontal ? 'x' : 'z'}${run.line.toFixed(2)}-span${index + 1}`,
         sourceType: 'wall',
         zone: representative.owner,
-        zones,
+        zones: run.owners,
         buildingId: representative.id,
         wallId: representative.id,
-        wallIds,
+        wallIds: run.wallIds,
         courtyardId: representative.courtyardId ?? null,
-        cityWall: group.walls.every((w) => w.cityWall === true),
-        bounds: group.horizontal
+        cityWall: run.cityWall,
+        bounds: run.horizontal
           ? {
               minX: +a.toFixed(3),
               maxX: +b.toFixed(3),
-              minZ: +(group.line - group.thickness / 2).toFixed(3),
-              maxZ: +(group.line + group.thickness / 2).toFixed(3),
+              minZ: +(run.line - run.thickness / 2).toFixed(3),
+              maxZ: +(run.line + run.thickness / 2).toFixed(3),
             }
           : {
-              minX: +(group.line - group.thickness / 2).toFixed(3),
-              maxX: +(group.line + group.thickness / 2).toFixed(3),
+              minX: +(run.line - run.thickness / 2).toFixed(3),
+              maxX: +(run.line + run.thickness / 2).toFixed(3),
               minZ: +a.toFixed(3),
               maxZ: +b.toFixed(3),
             },
@@ -197,10 +283,9 @@ export function deriveWallColliders(walls = WALLS, { helpers = LAYOUT, embed = W
         y1,
         blocks: 'all',
         door: null,
-        note: `core 派生：${group.walls.map((w) => w.name).join(' + ')}（共线墙已归并；门洞已在墙身中扣除，门洞处为可通行缺口）`,
+        note: `core 派生：${run.wallIds.map((id) => (LAYOUT.WALLS.find((w) => w.id === id)?.name ?? id)).join(' + ')}（共线墙已归并；门洞已在墙身中扣除，门洞处为可通行缺口）`,
       });
     });
-    void groupIndex;
   }
   return out;
 }

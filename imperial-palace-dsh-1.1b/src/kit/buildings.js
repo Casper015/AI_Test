@@ -684,20 +684,26 @@ export function makeWall(env, raw = {}) {
    * 这是几何修复（体块不再套叠/端面不再共面），不是掩盖（未改 MSAA、未改绘制顺序、未关深度检测）。
    */
   const baseH = Math.min(0.8, bodyH * 0.2);
+  /* t49：**世界锚定 UV 的平移到世界沿墙轴** —— 墙内局部 x（沿墙轴）加本常数 = 世界沿墙坐标；
+     垂直轴（厚度方向）同理。⇒ 门洞两侧分块 / 门额 / 多段共线宫墙**相位连续**（±z 两面各按世界坐标，不加同一常数）。 */
+  const _dirX = (to.x - from.x) / length;
+  const _dirZ = (to.z - from.z) / length;
+  const _worldU = ((from.x + to.x) / 2) * _dirX + ((from.z + to.z) / 2) * _dirZ;
+  const _worldP = ((from.x + to.x) / 2) * -_dirZ + ((from.z + to.z) / 2) * _dirX;
   for (const [a, b] of intervals) {
     const w = b - a;
     if (w <= 0.01) continue;
-    parts.add('wallBody', 'plasterRed', box(T, { w, h: bodyH - baseH, d: thickness, x: (a + b) / 2, y: baseY + baseH, tile: tile.wall }));
-    parts.add('wallBase', 'wallBase', box(T, { w, h: baseH, d: thickness * 1.06, x: (a + b) / 2, y: baseY, tile: tile.stone }));
+    parts.add('wallBody', 'plasterRed', box(T, { w, h: bodyH - baseH, d: thickness, x: (a + b) / 2, y: baseY + baseH, tile: tile.wall, uvAnchor: true, uvOffsetU: _worldU / tile.wall, uvOffsetPerpU: _worldP / tile.wall }));
+    parts.add('wallBase', 'wallBase', box(T, { w, h: baseH, d: thickness * 1.06, x: (a + b) / 2, y: baseY, tile: tile.stone, uvAnchor: true, uvOffsetU: _worldU / tile.stone, uvOffsetPerpU: _worldP / tile.stone }));
   }
   for (const op of openings) {
     const w = op.width ?? 0;
     const h = op.height ?? bodyH * PROPORTIONS.gateOpeningHeight;
     const above = bodyH - h;
     if (above > 0.1) {
-      parts.add('wallBody', 'plasterRed', box(T, { w, h: above, d: thickness, x: op.at, y: baseY + h, tile: tile.wall }));
+      parts.add('wallBody', 'plasterRed', box(T, { w, h: above, d: thickness, x: op.at, y: baseY + h, tile: tile.wall, uvAnchor: true, uvOffsetU: _worldU / tile.wall, uvOffsetPerpU: _worldP / tile.wall }));
     }
-    parts.add('wallLintel', 'stoneWhite', box(T, { w: w * 1.05, h: Math.max(0.3, thickness * 0.12), d: thickness * 1.02, x: op.at, y: baseY + h - 0.2, tile: tile.stone }));
+    parts.add('wallLintel', 'stoneWhite', box(T, { w: w * 1.05, h: Math.max(0.3, thickness * 0.12), d: thickness * 1.02, x: op.at, y: baseY + h - 0.2, tile: tile.stone, uvAnchor: true, uvOffsetU: _worldU / tile.stone, uvOffsetPerpU: _worldP / tile.stone }));
   }
   // 压顶
   if (battlementH > 0.01) {

@@ -49,6 +49,100 @@ const { planMinimap, zoneAreaAt, drawMinimap } = await loadModule('src/ui/minima
 const { cssVariables, assertTokens, SPACING_SCALE } = await loadModule('src/ui/tokens.js');
 
 /* ==========================================================================
+ *  0b. t30：结构锚定的函数体提取（本文件内实现；与 `tests/core-stats.test.mjs` 的 t29 同源）
+ *
+ *  为何必须：旧写法用**符号名位置切片**
+ *      const body = src.slice(src.indexOf('function escapeToSafePoint'), src.indexOf('function exitInterior'));
+ *  在函数改名时 `indexOf` 返回 **-1** ⇒ `slice(-1, -1)` 为空、或 `slice(start, -1)` 退化为**几乎整个文件**
+ *  ⇒ 三条正则断言在"几乎整个文件"上照样成立 = **假绿**（断言与守护对象脱钩）。两函数之间插代码
+ *  也会**静默**改变作用域。本实现按 **词法状态 + 花括号配对** 提取函数体，签名缺失/未闭合返回 `null`
+ *  （调用方**必须**断言非空，不得静默继续）。
+ *
+ *  扫描器口径（足以穿过 `src/interaction/index.js` 的真实写法）：
+ *    · 跳过 `'…'`、`"…"`、`` `…` ``（含 `${…}` 嵌套表达式）内的所有括号/注释符；
+ *    · 跳过 `//…` 行注释与 `/*…*​/` 块注释；
+ *    · 跳过正则字面量（按前一个有效字符启发式判定，含字符类 `[…]`）；
+ *    · 只对**代码态**的花括号计深度，深度回到 0 即函数体结束。
+ *  返回 `{ start, braceStart, end, body }`；找不到签名/未闭合时返回 `null`。
+ * ========================================================================== */
+
+function extractFunctionBody(source, signature) {
+  const start = source.indexOf(signature);
+  if (start < 0) return null;
+  const braceStart = source.indexOf('{', start + signature.length);
+  if (braceStart < 0) return null;
+  const isRegexStart = (i) => {
+    let j = i - 1;
+    while (j >= 0 && /\s/.test(source[j])) j -= 1;
+    if (j < 0) return true;
+    if ('([{,;:=!&|?+-*%~^<>'.includes(source[j])) return true;
+    const before = source.slice(Math.max(0, j - 6), j + 1);
+    return /(?:^|[^\w$])(?:return|typeof|instanceof|case|in|of|new|delete|void|do|else|yield|await)$/.test(before);
+  };
+  const skipRegex = (i) => {
+    let j = i + 1;
+    let inClass = false;
+    for (; j < source.length; j += 1) {
+      const c = source[j];
+      if (c === '\\') { j += 1; continue; }
+      if (c === '[') inClass = true;
+      else if (c === ']') inClass = false;
+      else if (c === '/' && !inClass) return j;
+      else if (c === '\n') return i; // 不是正则（换行截断）⇒ 当作普通字符
+    }
+    return i;
+  };
+  let depth = 0;
+  const templateExpr = [];
+  let mode = 'code';
+  for (let i = braceStart; i < source.length; i += 1) {
+    const c = source[i];
+    const c2 = source[i + 1];
+    if (mode === 'line') { if (c === '\n') mode = 'code'; continue; }
+    if (mode === 'block') { if (c === '*' && c2 === '/') { mode = 'code'; i += 1; } continue; }
+    if (mode === 'sq' || mode === 'dq') {
+      if (c === '\\') { i += 1; continue; }
+      if ((mode === 'sq' && c === "'") || (mode === 'dq' && c === '"')) mode = 'code';
+      continue;
+    }
+    if (mode === 'tpl') {
+      if (c === '\\') { i += 1; continue; }
+      if (c === '`') { mode = 'code'; continue; }
+      if (c === '$' && c2 === '{') { templateExpr.push(depth); depth += 1; mode = 'code'; i += 1; }
+      continue;
+    }
+    if (c === '/' && c2 === '/') { mode = 'line'; i += 1; continue; }
+    if (c === '/' && c2 === '*') { mode = 'block'; i += 1; continue; }
+    if (c === "'") { mode = 'sq'; continue; }
+    if (c === '"') { mode = 'dq'; continue; }
+    if (c === '`') { mode = 'tpl'; continue; }
+    if (c === '/' && isRegexStart(i)) { i = skipRegex(i); continue; }
+    if (c === '{') { depth += 1; continue; }
+    if (c === '}') {
+      depth -= 1;
+      if (templateExpr.length > 0 && depth === templateExpr[templateExpr.length - 1]) {
+        templateExpr.pop();
+        mode = 'tpl';
+        continue;
+      }
+      if (depth <= 0) return { start, braceStart, end: i + 1, body: source.slice(braceStart, i + 1) };
+    }
+  }
+  return null;
+}
+
+/** t30：提取**恰好两个函数体**（按签名逐个结构锚定，再拼接）。任一签名缺失 ⇒ 抛错（调用方须断言）。 */
+function extractTwoFunctionBodies(source, sigA, sigB) {
+  const a = extractFunctionBody(source, sigA);
+  const b = extractFunctionBody(source, sigB);
+  const missing = [a ? null : sigA, b ? null : sigB].filter(Boolean);
+  if (missing.length > 0) {
+    throw new Error(`结构锚定失败：源码中缺少或花括号未闭合的签名 → ${missing.join('、')}（旧的位置切片在此时会退化成几乎整个文件而假绿）`);
+  }
+  return { body: `${a.body}\n${b.body}`, a, b };
+}
+
+/* ==========================================================================
  *  0. 最小 DOM 替身（只实现本项目 UI 用到的子集；不模拟布局引擎）
  * ======================================================================== */
 
@@ -2283,8 +2377,19 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   const blockedAll = solver.obstacles().filter((o) => o.blocks === 'all');
   const blockedIds = new Set(blockedAll.map((o) => o.id));
   const hintCatalog = buildCatalog({ layout: LAYOUT, config: CONFIG });
-  const groupOf = (id) =>
-    /^OB-F-tower-corner/.test(id) ? '角楼' : /^OB-MOAT/.test(id) ? '护城河' : /^OB-WB/.test(id) ? '水体' : /^OB-SC/.test(id) ? '山石' : '批量装饰';
+  /* t30：分组函数改为按**障碍对象**分派（原写法只吃 id ⇒ 无法表达 `buildingKind` 这类对象字段）。
+     `塔楼` 组 = `buildingKind === 'towerShaft'`（t39 塔身内芯：**无对应 SLOT**，只能按 buildingKind 识别）。
+     其余分组语义与 t8 逐字相同（角楼/MOAT 前缀/WB 水体/SC 山石/余下为批量装饰）。 */
+  const groupOfObstacle = (o) => {
+    const id = o.id;
+    if (/^OB-F-tower-corner/.test(id)) return '角楼';
+    if (o.buildingKind === 'towerShaft') return '塔楼';
+    if (/^OB-MOAT/.test(id)) return '护城河';
+    if (/^OB-WB/.test(id)) return '水体';
+    if (/^OB-SC/.test(id)) return '山石';
+    return '批量装饰';
+  };
+  const groupOf = (id) => groupOfObstacle(blockedAll.find((o) => o.id === id) ?? { id });
 
   /* 语义推导：
      ① 实心槽位 = `SLOTS` 里 visitable===false 且 hasDoor!==true（角楼 / 批量装饰 / 其它实心殿座）
@@ -2305,6 +2410,15 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   const uncarvedWaterIds = waterObstacles.filter((o) => o.blocks === 'all' && !/^OB-MOAT/.test(o.id)).map((o) => o.id);
   const rockeryIds = solver.obstacles().filter((o) => o.sourceType === 'rockery').map((o) => o.id);
   /**
+   * t30：**塔楼类**（t39 塔身内芯）—— 这些障碍**没有对应 SLOT**（它们是塔楼槽位的子体块，
+   * `buildingId = 'T-watchtower-3'` 而 `SLOTS` 中不存在该 id），因此**只能**按 `buildingKind === 'towerShaft'`
+   * 识别。旧 `derived` 集合只由「实心槽位 / MOAT / 山石 / 未开槽水体」推导 ⇒ 塔身必然落进 `extra`
+   * 而被误判为"语义之外的成员"（t39 落地后 `interaction` 的唯一红即此）。
+   * 期望值一律**取自 layout 自身**（`LAYOUT.OBSTACLES` 里同 `buildingKind` 的条目），不写死数量。
+   */
+  const towerShaftObstacles = LAYOUT.OBSTACLES.filter((o) => o.buildingKind === 'towerShaft');
+  const towerShaftIds = towerShaftObstacles.map((o) => o.id);
+  /**
    * 判据本体（**纯函数**，便于做"突变对照"证明它真的会失败、不是恒真）：
    *   · `missing` = 语义上应实心阻挡却不在运行时清单里的（漏登记 / 被静默改成可通行）
    *   · `extra`   = 运行时清单里但语义上不该有的（多出成员）
@@ -2318,6 +2432,8 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
       ...moatRects.map((r) => `OB-${r.id}`),
       ...list.filter((o) => o.sourceType === 'rockery').map((o) => o.id),
       ...water.filter((o) => o.blocks === 'all' && !/^OB-MOAT/.test(o.id)).map((o) => o.id),
+      // t30：塔楼（towerShaft）单列一类——无对应 SLOT，只能按 buildingKind 识别（期望值取自 layout）
+      ...list.filter((o) => o.buildingKind === 'towerShaft').map((o) => o.id),
     ]);
     return {
       runtime,
@@ -2353,6 +2469,17 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   const bulkAnnexIds = (LAYOUT.GARDEN_BULK_SLOTS ?? []).map((s) => `OB-${s.id}`);
   const residualIds = blockedAll.filter((o) => groupOf(o.id) === '批量装饰').map((o) => o.id);
   assertEqual([...residualIds].sort().join(','), [...bulkAnnexIds].sort().join(','), `「批量装饰」组必须**集合等于** GARDEN_BULK_SLOTS（${bulkAnnexIds.length} 条）：${residualIds.join('、')}`);
+  /* t30：**塔楼组必须集合等于 layout 的 towerShaft 障碍集合**（t39 塔身内芯；无 SLOT，只能按 buildingKind 识别）。
+     集合相等（不是计数相等）：layout 多登记 ⇒ missing 已先红；运行时多出 ⇒ extra 已先红；此处再逐条对账一遍。 */
+  const towerGroupIds = blockedAll.filter((o) => groupOfObstacle(o) === '塔楼').map((o) => o.id);
+  assertEqual(towerGroupIds.length, towerShaftIds.length, `塔楼组条数必须等于 layout 的 towerShaft 障碍数（${towerShaftIds.length}；实际 ${towerGroupIds.length}）`);
+  assertEqual([...towerGroupIds].sort().join(','), [...towerShaftIds].sort().join(','), `塔楼组必须**集合等于** layout 中 buildingKind='towerShaft' 的障碍集合：${towerGroupIds.join('、')} vs ${towerShaftIds.join('、')}`);
+  for (const id of towerShaftIds) {
+    const ob = blockedAll.find((o) => o.id === id);
+    assert(ob, `${id}（towerShaft）必须整足迹阻挡且在册`);
+    assert(ob.buildingKind === 'towerShaft', `${id} 的 buildingKind 必须为 towerShaft（实际 ${ob.buildingKind}）`);
+    assert(blockedIds.has(id), `${id} 必须出现在整足迹阻挡清单中`);
+  }
   // 每个整足迹阻挡者都必须有**非兜底**具名提示（逐条，不只给个数）
   for (const o of blockedAll) {
     assert(o.kind !== 'pavilion' && !pavilionSlots.some((s) => `OB-${s.id}` === o.id), `${o.id} 不得是亭（亭已可通行）`);
@@ -3106,12 +3233,127 @@ await runner.test('F23 脱困确定性放置（t99-F2）：落点 == nearestFpSp
 
   // ── ⑤ 静态守卫：必须用确定性放置（enterFp + spawnId/position/instant），禁止"连发两次请求"的老写法
   const src = readFileSync(join(ROOT, 'src/interaction/index.js'), 'utf8');
-  const body = src.slice(src.indexOf('function escapeToSafePoint'), src.indexOf('function exitInterior'));
-  assert(/rig\.enterFp\(\{[^}]*spawnId[^}]*\}/s.test(body), '脱困必须用 rig.enterFp({ spawnId, position, instant }) 做确定性放置');
+  /* t30：**结构锚定**（替换旧的位置切片）——
+     改前原文（已删除）：
+       const body = src.slice(src.indexOf('function escapeToSafePoint'), src.indexOf('function exitInterior'));
+     旧写法在函数改名时 `indexOf` 返回 -1 ⇒ `slice(start, -1)` **退化为几乎整个文件**，三条正则断言照样成立 = 假绿；
+     两函数间插代码也会**静默**改变作用域。现按函数体边界（花括号配对 + 词法状态）取**恰好两个函数体**。
+     **签名缺失/未闭合 ⇒ extractTwoFunctionBodies 抛错**（不得静默继续；下方 assert 再兜一道）。 */
+  const scoped = (() => {
+    try {
+      return extractTwoFunctionBodies(src, 'function escapeToSafePoint(', 'function exitInterior(');
+    } catch (error) {
+      return { error };
+    }
+  })();
+  assert(!scoped.error, `结构锚定必须成功（签名存在且花括号闭合）：${scoped.error?.message ?? ''}`);
+  const body = scoped.body;
+  /* 作用域自证（三条，只增不减）：① 恰好两个函数体、以 '{' 开头以 '}' 收尾；
+     ② 不得夹带相邻函数签名（否则说明作用域被撑大）；③ 每个函数体自身首尾也必须是 { … }。 */
+  assert(/^\s*\{/.test(scoped.a.body) && /\}\s*$/.test(scoped.a.body), 'escapeToSafePoint 的函数体必须恰以 { 开头、以 } 收尾');
+  assert(/^\s*\{/.test(scoped.b.body) && /\}\s*$/.test(scoped.b.body), 'exitInterior 的函数体必须恰以 { 开头、以 } 收尾');
+  assertEqual(scoped.a.end - scoped.a.braceStart, scoped.a.body.length, '函数体长度必须与 braceStart..end 自洽（escapeToSafePoint）');
+  assertEqual(scoped.b.end - scoped.b.braceStart, scoped.b.body.length, '函数体长度必须与 braceStart..end 自洽（exitInterior）');
+  const straySignatures = (scoped.body.match(/^\s*function\s+[A-Za-z_$][\w$]*\s*\(/gm) ?? []).length;
+  assertEqual(straySignatures, 0, `作用域内不得含任何函数签名声明（实际 ${straySignatures} 处）⇒ 说明切到了函数体之外`);
+  assert(scoped.a.end <= scoped.b.start, '两个函数体不得重叠（escapeToSafePoint 必须在 exitInterior 之前结束）');
+  /* 锚定生效的正面证据：作用域必须**短于**整个文件，且确实包含两个函数体内的唯一调用点 */
+  assert(body.length < src.length, `结构锚定后的作用域必须窄于整个文件（${body.length} < ${src.length}）——否则等同旧写法的假绿`);
+  assert(/\benterFp\b/.test(body), '作用域内应含 enterFp 调用点（escapeToSafePoint 的确定性放置）');
   assert(/instant:\s*true/.test(body), '确定性放置必须用 instant: true（无过渡，落点即最终值）');
+  /* ★ 原判据语义一字不改（t99-F2 / t99-F1），只换了作用域（从"符号位置切片"改为"结构锚定两函数体"） */
+  assert(/rig\.enterFp\(\{[^}]*spawnId[^}]*\}/s.test(body), '脱困必须用 rig.enterFp({ spawnId, position, instant }) 做确定性放置');
   assert(!/requestViewMode, \{ mode: 'fp' \}\);\s*\n\s*requester\.send\(EVENTS\.requestViewMode/.test(body), '禁止"同一 tick 连发两次 requestViewMode"的老写法（t99-F2 根因）');
   app.interaction.dispose();
   app.ui.dispose();
+});
+
+/* ==========================================================================
+ *  t30：结构锚定 vs 旧「符号名位置切片」——**直接编码原失败模式**（只增不减）
+ * ======================================================================== */
+
+await runner.test('E17b 结构锚定自证：改名 / 插代码 / 缺失签名 / 未闭合花括号 四种情形（旧写法假绿处一律红）', async () => {
+  /* 合成源码：两个相邻函数（`f` 与 `g`），中间留一处"可插代码"的位置。
+     用 `g` 充当旧写法里的"结束符号"（对应真实的 `exitInterior`）。 */
+  const srcOf = ({ renameF = false, insertBetween = false, extraFn = false, unclosedG = false } = {}) => {
+    const fName = renameF ? 'fRenamed' : 'f';
+    const between = insertBetween ? '  const injected = 1;\n' : '';
+    const tail = extraFn ? 'function another() { return 9; }\n' : '';
+    return [
+      `function ${fName}() {`,
+      `  // 与签名同名的干扰字符串：'function g(' 与 { } 都不得影响边界`,
+      `  const tag = 'function g(' + '}';`,
+      `  return { tag, enterFp: true, instant: true };`,
+      `}`,
+      between + `function g() {`,
+      `  return { done: true };`,
+      unclosedG ? `  if (true) {` : `}`,
+      tail,
+    ].filter(Boolean).join('\n') + '\n';
+  };
+
+  /* 旧写法（照抄被替换的那一行）：符号名位置切片 */
+  const oldSlice = (source) => source.slice(source.indexOf('function f('), source.indexOf('function g('));
+
+  /* ① 基线：两函数体结构锚定成功，且**窄于**整个文件 */
+  const base = srcOf();
+  const ok = extractTwoFunctionBodies(base, 'function f(', 'function g(');
+  assert(ok.body.length < base.length, `结构锚定必须窄于整个文件（${ok.body.length} < ${base.length}）`);
+  assert(/^\s*\{/.test(ok.a.body) && /\}\s*$/.test(ok.a.body), 'f 的函数体应恰以 { 开头、} 收尾');
+  /* 关键：同名干扰字符串（"function g(" 出现在字符串里）不得让 f 的函数体被截断或撑大 */
+  assert(ok.a.body.includes('const tag'), 'f 函数体必须包含它自己的语句（干扰字符串不得破坏边界）');
+  assert(!ok.a.body.includes('function g(') || ok.a.body.includes("'function g('"), 'f 函数体不得真的含 g 的签名声明');
+  assertEqual((ok.body.match(/^\s*function\s+[A-Za-z_$][\w$]*\s*\(/gm) ?? []).length, 0, '拼接作用域内不得含函数签名声明');
+
+  /* ② 改名 ⇒ 结构锚定必须**抛错**；旧写法退化为**错误作用域**（不得静默继续） */
+  const renamed = srcOf({ renameF: true });
+  let threw = false;
+  try { extractTwoFunctionBodies(renamed, 'function f(', 'function g('); } catch { threw = true; }
+  assert(threw, '【改名】签名缺失时结构锚定必须抛错（不得静默继续）');
+  /* 旧写法的实际退化方向（实测澄清，避免把机制说错）：
+     · 「结束锚点」缺失 ⇒ `indexOf` = -1 ⇒ `slice(start, -1)` ⇒ **吃掉末尾一个字符**（作用域被撑大到"起点之后几乎整个文件"）；
+     · 「起始锚点」缺失 ⇒ `indexOf` = -1 ⇒ `slice(-1, other)` ⇒ **空切片**（判据在空串上恒真 ⇒ 同样假绿）。
+     两种方向都是"作用域错误 + 判据照旧成立"，故**任一锚点缺失都必须抛错**。 */
+  const oldRenamed = oldSlice(renamed); // 起始锚点缺失 ⇒ 空切片
+  assertEqual(oldRenamed.length, 0, `【改名】起始锚点缺失时旧写法得到**空切片**（${oldRenamed.length} 字符）⇒ 正则断言在空串上恒真 = 假绿`);
+  const endMissing = srcOf().replace(/function g\(/g, 'function gRenamed(') + 'function anotherOne() { return 9; }\n'.repeat(12);
+  assert(endMissing.indexOf('function g(') < 0, '构造检查：endMissing 中确实不含结束锚点');
+  assert(endMissing.indexOf('function f(') >= 0, '构造检查：endMissing 中起始锚点仍存在');
+  const oldEndMissing = endMissing.slice(endMissing.indexOf('function f('), endMissing.indexOf('function g('));
+  assert(oldEndMissing.length > ok.body.length, `【改名】结束锚点缺失时旧写法作用域被撑大（${oldEndMissing.length} > 正确 ${ok.body.length}）⇒ 断言在超集上照旧成立 = 假绿`);
+  assert(oldEndMissing.length > ok.body.length, `【改名】结束锚点缺失时旧写法作用域被撑大（${oldEndMissing.length} > 正确 ${ok.body.length}）⇒ 断言在超集上照旧成立 = 假绿`);
+  /* 反向对照：旧写法在基线（两锚点都在）上确实等同于正确作用域 —— 说明上述差异**只**来自锚点缺失 */
+  assertEqual(oldSlice(base), base.slice(base.indexOf('function f('), base.indexOf('function g(')), '基线对照：旧写法在锚点齐备时与切片等价（差异只来自锚点缺失）');
+
+  /* ③ 两函数间插代码 ⇒ 结构锚定**不受影响**（旧写法静默把插入代码纳入作用域） */
+  const inserted = srcOf({ insertBetween: true });
+  const ok2 = extractTwoFunctionBodies(inserted, 'function f(', 'function g(');
+  assert(!ok2.body.includes('injected'), '【插代码】结构锚定不得纳入两函数之间的插入代码');
+  assert(oldSlice(inserted).includes('injected'), '【插代码】旧写法确实会把插入代码静默纳入作用域（作用域被撑大）');
+  assertEqual(ok2.body, ok.body, '【插代码】插入代码不得改变两函数体的拼接结果（逐字节相同）');
+
+  /* ④ 已闭合函数之后仍有函数 ⇒ 作用域仍恰为两个函数体（不多吃） */
+  const extra = srcOf({ extraFn: true });
+  const ok3 = extractTwoFunctionBodies(extra, 'function f(', 'function g(');
+  assert(!ok3.body.includes('function another('), '【多函数】结构锚定不得纳入第三个函数体');
+  assertEqual(ok3.body, ok.body, '【多函数】第三个函数的存在不得改变两函数体的拼接结果');
+
+  /* ⑤ 花括号未闭合 ⇒ 必须抛错（旧写法同样静默给出错误作用域） */
+  const broken = srcOf({ unclosedG: true });
+  let threw2 = false;
+  try { extractTwoFunctionBodies(broken, 'function f(', 'function g('); } catch { threw2 = true; }
+  assert(threw2, '【未闭合】花括号未闭合时结构锚定必须抛错（不得静默继续）');
+  assertEqual(extractFunctionBody(broken, 'function g('), null, '未闭合函数体应返回 null（调用方须断言非空）');
+  assertEqual(extractFunctionBody('const x = 1;', 'function zzz('), null, '签名不存在时应返回 null');
+
+  /* ⑥ 真实源码上的作用域自证（防"换了个更隐蔽的脆弱写法"） */
+  const realSrc = readFileSync(join(ROOT, 'src/interaction/index.js'), 'utf8');
+  const real = extractTwoFunctionBodies(realSrc, 'function escapeToSafePoint(', 'function exitInterior(');
+  assert(real.body.length < realSrc.length * 0.5, `真实源码作用域应显著窄于整文件（${real.body.length} / ${realSrc.length}）`);
+  assert(real.a.end <= real.b.start, '真实源码中 escapeToSafePoint 必须在 exitInterior 之前结束（不重叠）');
+  runner.info(
+    `结构锚定自证：基线 ${ok.body.length} 字符（整文件 ${base.length}）· 改名⇒旧写法「起始锚点缺失=空切片 0 字符」/「结束锚点缺失=作用域撑大到 ${oldEndMissing.length} 字符」，两者都假绿 ⇒ 新写法一律抛错 · 插代码/多函数均不改变拼接 · 未闭合⇒抛错 · 真实源码作用域 ${real.body.length}/${realSrc.length}`,
+  );
 });
 
 /* ==========================================================================

@@ -138,10 +138,50 @@ export function metricBoxUVs(geometry, { w, h, d, tile = 1 }) {
 }
 
 /** 轴对齐盒（y = 底面高度）。 */
-export function box(T, { w, h, d, x = 0, y = 0, z = 0, tile = 1 }) {
+/**
+ * **世界锚定**的墙面 UV 重算（t49：门两侧/门额/立面分块的贴图相位）。
+ * -----------------------------------------------------------------------------
+ * 缺陷：`metricBoxUVs()` 只用每个盒体**自身的 0..1 面内坐标**乘 (真实尺寸/tile) ⇒ 每块相位从 0 起。
+ *   `makeWall` 按洞口把墙切成左段/门额/右段（`facadeWall` 同理按门窗切格子）⇒ **相邻块相位跳变**
+ * （实测右段 u 0→14.6875，应为 16.5625 ⇒ 偏 106.00m；门额 0→1.875，应为 14.6875 ⇒ 偏 94.00m）。
+ * 修法：**不改 tile 尺度、不换贴图、不关材质绕**，改为按**三角形主法线**用**平移后（= 墙内绝对）坐标**填 u/v：
+ *   · ±z 面 ⇒ u = x/tile + offsetU，v = y/tile + offsetV
+ *   · ±x 面 ⇒ u = z/tile + offsetU，v = y/tile + offsetV
+ *   · ±y 面 ⇒ u = x/tile + offsetU，v = z/tile + offsetV
+ * ⇒ 同一堵墙的相邻分块在同一位置得到同一相位（1e-3 格内），且 **±z 两面各自按世界坐标**（不给所有面加同一常数）。
+ * `offsetU/offsetV` 用于把墙内局部坐标平移到**世界沿墙轴坐标**（多段共线宫墙之间也不留缝）。
+ */
+export function anchorFaceUVs(geometry, { tile = 1, offsetU = 0, offsetV = 0, offsetPerpU = 0 } = {}) {
+  const uv = geometry.attributes.uv;
+  const pos = geometry.attributes.position;
+  if (!uv || !pos) return geometry;
+  const inv = 1 / tile;
+  for (let i = 0; i + 2 < pos.count; i += 3) {
+    const ax = pos.getX(i); const ay = pos.getY(i); const az = pos.getZ(i);
+    const bx = pos.getX(i + 1); const by = pos.getY(i + 1); const bz = pos.getZ(i + 1);
+    const cx = pos.getX(i + 2); const cy = pos.getY(i + 2); const cz = pos.getZ(i + 2);
+    const ux = bx - ax; const uy = by - ay; const uz = bz - az;
+    const vx = cx - ax; const vy = cy - ay; const vz = cz - az;
+    const nx = Math.abs(uy * vz - uz * vy); const ny = Math.abs(uz * vx - ux * vz); const nz = Math.abs(ux * vy - uy * vx);
+    for (let k = 0; k < 3; k += 1) {
+      const px = pos.getX(i + k); const py = pos.getY(i + k); const pz = pos.getZ(i + k);
+      let u; let v;
+      if (nz >= nx && nz >= ny) { u = px * inv + offsetU; v = py * inv + offsetV; }        // ±z 墙面
+      else if (nx >= ny) { u = pz * inv + offsetPerpU; v = py * inv + offsetV; }           // ±x 端面（垂直轴）
+      else { u = px * inv + offsetU; v = pz * inv + offsetPerpU; }                         // 顶/底
+      uv.setXY(i + k, u, v);
+    }
+  }
+  uv.needsUpdate = true;
+  return geometry;
+}
+
+export function box(T, { w, h, d, x = 0, y = 0, z = 0, tile = 1, uvAnchor = false, uvOffsetU = 0, uvOffsetV = 0, uvOffsetPerpU = 0 }) {
   const g = nonIndexed(new T.BoxGeometry(w, h, d));
   metricBoxUVs(g, { w, h, d, tile });
-  return translate(T, g, x, y + h / 2, z);
+  const out = translate(T, g, x, y + h / 2, z);
+  if (uvAnchor) anchorFaceUVs(out, { tile, offsetU: uvOffsetU, offsetV: uvOffsetV, offsetPerpU: uvOffsetPerpU });
+  return out;
 }
 
 /** 圆柱（y = 底面高度，UV 米制）。 */
@@ -609,7 +649,7 @@ export function buildBody(T, {
       // face = -1 正面（z = −halfD + inset + 墙厚/2）/ +1 背面（z = +halfD − inset − 墙厚/2）
       const zCenter = face * (halfD - inset - wallThick / 2);
       if (openings.length === 0) {
-        parts.add('wall', 'plasterRed', box(T, { w: xMax - xMin, h: wallH, d: wallThick, x: (xMin + xMax) / 2, z: zCenter, y: baseY, tile }));
+        parts.add('wall', 'plasterRed', box(T, { w: xMax - xMin, h: wallH, d: wallThick, x: (xMin + xMax) / 2, z: zCenter, y: baseY, tile, uvAnchor: true }));
         return;
       }
       const cutPoints = (lo, hi, values) => {
@@ -625,7 +665,7 @@ export function buildBody(T, {
           const cy = (ys[j] + ys[j + 1]) / 2;
           const inHole = openings.some((o) => cx > o.x0 + eps && cx < o.x1 - eps && cy > o.y0 + eps && cy < o.y1 - eps);
           if (inHole) continue;
-          parts.add('wall', 'plasterRed', box(T, { w: xs[i + 1] - xs[i], h: ys[j + 1] - ys[j], d: wallThick, x: cx, y: ys[j], z: zCenter, tile }));
+          parts.add('wall', 'plasterRed', box(T, { w: xs[i + 1] - xs[i], h: ys[j + 1] - ys[j], d: wallThick, x: cx, y: ys[j], z: zCenter, tile, uvAnchor: true }));
         }
       }
     };

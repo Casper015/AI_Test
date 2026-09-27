@@ -645,8 +645,10 @@ await runner.test('C→F 御花园接口：北墙线 z=300、x=±84，且院墙�
     assertEqual(Math.abs(cxn.position.x), 84, '花园入口在两侧（后寝殿居中）');
     assertEqual(cxn.elevation, TERRAIN.gardenPathsY, '标高必须等于花园步道标高');
   }
-  const wall = LAYOUT.WALLS.find((w) => w.id === 'CY-C-rear-wall-north');
-  assert(wall && wall.owner === ZONE, '后寝院北墙归 C 负责');
+  /* t48：中轴切口把该墙拆成「西段（原 id）+ 东段（`-east`）」⇒ 门洞按两段合并查。 */
+  const wallParts = LAYOUT.WALLS.filter((w) => w.id === 'CY-C-rear-wall-north' || w.id === 'CY-C-rear-wall-north-east');
+  const wall = { openings: wallParts.flatMap((w) => w.openings ?? []) };
+  assert(wallParts.length === 2 && wallParts.every((w) => w.owner === ZONE), '后寝院北墙（含中轴拆分段）归 C 负责');
   for (const cxn of [west, east]) {
     const opening = wall.openings.find((o) => Math.abs(o.at - cxn.position.x) < 1);
     assert(opening, `北墙必须在 x=${cxn.position.x} 开门洞`);

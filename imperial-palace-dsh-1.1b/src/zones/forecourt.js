@@ -28,8 +28,8 @@
 
 import * as THREE from 'three';
 import { CONFIG, MODULES, TERRAIN, deriveSeed } from '../shared/config.js';
-import { INTERIOR_BY_SLOT, SCENIC_OBJECTS, WALKABLE, WALLS } from '../shared/layout.js';
-import { rampsFromRoads } from '../core/layout-slice.js';
+import { INTERIOR_BY_SLOT, SCENIC_OBJECTS, STOREY_BANDS, STOREY_BAND_PLANS, WALKABLE, WALLS } from '../shared/layout.js'; // t41：中轴楼阁腰檐分层（外观多层）
+import { rampsFromRoads, wallRunsForZone } from '../core/layout-slice.js'; // t48：可视院墙消费权威归并段
 
 export const ZONE_ID = 'B';
 export const ZONE_NAME = '中轴前朝';
@@ -459,80 +459,64 @@ function buildStairFlights(ctx, group, detail) {
 function buildCourtWalls(ctx, group, detail) {
   const { kit, zoneLayout } = ctx;
   const wall = kitFactory(kit, 'wall');
-  const groups = new Map();
   /**
-   * 优先消费 `ctx.zoneLayout.courtyardWalls`（契约字段）；若切片为空则回落为「按 courtyardId 从冻结表取」。
-   * 背景：`layout.WALLS` 的条目只有 `owner`/`courtyardId`、**没有** `zone` 字段，早期 `layout-slice.js`
-   * 用 `w.zone === zoneId` 过滤导致各区 `courtyardWalls` 恒空；t2 已修正（B 区实测 12 条），
-   * 这里保留回退分支以便切片再次变更时不静默丢墙。数据来源始终是 `src/shared/layout.js`。
+   * t48：**可视院墙改为消费 core 的权威归并段**（`wallRunsForZone`，与碰撞层 `deriveWallColliders`
+   * 同一份 `deriveWallRuns()` 实现）——每段边界墙**恰由一个区域建造**（`run.owner`）。
+   * 旧实现在本区内部按（轴向@墙线）bucket 归并，只能合并 B 自己的墙 ⇒ 跨区共线（z=80 的
+   * `CY-B-rear-wall-north` × `CY-C-front-wall-south`）与 C 区内部共线（z=142 / z=216）仍会**共面重复**；
+   * 且 `wall({...})` 未传 `baseY` ⇒ 起于 y=0，C 侧 0.9m 地坪处会**缺一段墙**。
+   * 现在：① 建造者 = `run.owner`（B 拥有的段才由 B 建）；② `baseY = run.y0`、`height = run.y1 - run.y0`
+   * = **贡献者名义跨度并集**（B 0 … C 0.9+墙高）⇒ 跨区段同时覆盖两侧地坪，无缺口；
+   * ③ 门洞取 `run.openings`（全贡献者门洞 1m 归并后的并集）⇒ 守恒。
+   * `zoneLayout.courtyardWalls` 仍用于**本区碰撞登记**（见下），可视建造改走归并段。
    */
   const courtyardIds = new Set(zoneLayout.courtyards.map((c) => c.id));
   const courtyardWalls =
     zoneLayout.courtyardWalls && zoneLayout.courtyardWalls.length > 0
       ? zoneLayout.courtyardWalls
       : WALLS.filter((w) => w.kind === 'courtWall' && courtyardIds.has(w.courtyardId));
-
-  for (const source of courtyardWalls) {
-    const alongX = source.axis === 'x';
-    const line = alongX ? source.from.z : source.from.x;
-    const key = `${alongX ? 'x' : 'z'}@${line.toFixed(2)}`;
-    const lo = alongX ? Math.min(source.from.x, source.to.x) : Math.min(source.from.z, source.to.z);
-    const hi = alongX ? Math.max(source.from.x, source.to.x) : Math.max(source.from.z, source.to.z);
-    if (!groups.has(key)) {
-      groups.set(key, { alongX, line, intervals: [], openings: [], sources: [] });
-    }
-    const bucket = groups.get(key);
-    bucket.intervals.push([lo, hi]);
-    bucket.sources.push(source.id);
-    for (const opening of source.openings) {
-      bucket.openings.push({ at: opening.at, width: opening.width, from: source.id });
-    }
-  }
+  void courtyardWalls;
 
   const runs = [];
-  for (const bucket of groups.values()) {
-    const merged = [];
-    for (const interval of bucket.intervals.slice().sort((a, b) => a[0] - b[0])) {
-      const last = merged[merged.length - 1];
-      if (last && interval[0] <= last[1] + 0.01) last[1] = Math.max(last[1], interval[1]);
-      else merged.push([interval[0], interval[1]]);
-    }
-    merged.forEach(([lo, hi], index) => {
+  for (const run of wallRunsForZone(ZONE_ID)) {
+    // t48：只建**归属本区**的子区间（`seg.owner` = 该片第一条贡献墙的 owner，与碰撞盒 `zone` 同规则）
+    run.segments.filter((seg) => seg.owner === ZONE_ID).forEach((seg, index) => {
+      const [lo, hi] = [seg.lo, seg.hi];
       const mid = (lo + hi) / 2;
-      // 开口：落在本段内 → 去重（1m 内视为同一口，取最大净宽）→ 转相对偏移
-      const picked = [];
-      for (const opening of bucket.openings) {
-        if (opening.at < lo - 1 || opening.at > hi + 1) continue;
-        const hit = picked.find((p) => Math.abs(p.at - opening.at) <= 1);
-        if (hit) hit.width = Math.max(hit.width, opening.width);
-        else picked.push({ at: opening.at, width: opening.width, from: opening.from });
-      }
-      const openings = picked.map((p) => ({ at: +(p.at - mid).toFixed(3), width: p.width, source: p.from }));
-      const from = bucket.alongX ? { x: lo, z: bucket.line } : { x: bucket.line, z: lo };
-      const to = bucket.alongX ? { x: hi, z: bucket.line } : { x: bucket.line, z: hi };
+      const openings = run.openings
+        .filter(([g0, g1]) => g1 > lo - 1 && g0 < hi + 1)
+        .map(([g0, g1]) => ({ at: +(((g0 + g1) / 2) - mid).toFixed(3), width: +(g1 - g0).toFixed(3), source: run.wallIds.join('+') }));
+      const from = run.horizontal ? { x: lo, z: run.line } : { x: run.line, z: lo };
+      const to = run.horizontal ? { x: hi, z: run.line } : { x: run.line, z: hi };
       const object = wall({
-        id: `B-wallrun-${bucket.alongX ? 'x' : 'z'}${bucket.line}-${index}`,
-        name: `${bucket.alongX ? '东西向' : '南北向'}院墙 z/x=${bucket.line}`,
+        id: `B-wallrun-${run.horizontal ? 'x' : 'z'}${run.line}-${index}`,
+        name: `${run.horizontal ? '东西向' : '南北向'}院墙 z/x=${run.line}`,
         from,
         to,
-        thickness: MODULES.courtyardWallThickness,
-        height: MODULES.courtyardWallHeight,
+        thickness: run.thickness,
+        height: +(seg.y1 - seg.y0).toFixed(3),
+        baseY: seg.y0,
         kind: 'courtWall',
         openings,
-        source: bucket.sources.join('+'),
+        source: run.wallIds.join('+'),
         detail,
       });
       object.userData.zone = ZONE_ID;
+      object.userData.wallRunId = run.id;
       group.add(object);
       runs.push({
         id: object.name,
-        alongX: bucket.alongX,
-        line: bucket.line,
+        runId: run.id,
+        alongX: run.horizontal,
+        line: run.line,
         lo,
         hi,
         length: +(hi - lo).toFixed(3),
         openings,
-        sources: bucket.sources.slice(),
+        sources: seg.wallIds.slice(),
+        baseY: seg.y0,
+        topY: seg.y1,
+        owners: seg.owners.slice(),
       });
     });
   }
@@ -1062,6 +1046,31 @@ export async function createZone(ctx) {
   /* ---- 7. 整区合批（跨建筑 × 同材质同部位） ---- */
   let preMergeDrawCalls = kit.countDrawCalls ? kit.countDrawCalls(root) : null;
   let mergeStats = null;
+  /* ------------------------------------------------------------------------
+   * t41：中轴楼阁**腰檐分层**（外观多层；**不登记可行走面** ⇒ 无空气楼梯）
+   * 几何 = `kit.makeStoreyBands`，登记 = `layout.STOREY_BANDS/STOREY_BAND_PLANS`：
+   * 逐栋核对 `bandCount` 与每道腰檐标高 `bandY`（逐值，漂移即抛错）—— 登记与几何同轮。
+   * 层数由 grade 派生（g3⇒3、g2⇒2），与 t38 的 `eaveAbs` 降序一致；不改 eaveHeight/totalHeight。
+   * ---------------------------------------------------------------------- */
+  const storeyBandFacts = [];
+  if (typeof kit.makeStoreyBands === 'function') {
+    for (const spec of STOREY_BANDS) {
+      const plan = STOREY_BAND_PLANS.find((q) => q.id === spec.id);
+      if (!plan) throw new Error(`forecourt: 缺 layout 腰檐登记 ${spec.id}`);
+      const built = kit.makeStoreyBands({ ...spec, detail: 'mid', x: spec.x, z: spec.z, baseY: spec.baseY, w: spec.w, d: spec.d, levels: spec.levels, eaveHeight: spec.eaveHeight });
+      const got = built.metrics.bandY ?? [];
+      const want = plan.bands.map((b) => b.y);
+      const drift = got.length !== want.length
+        ? `bandCount ${got.length}≠${want.length}`
+        : got.map((y, i) => (Math.abs(y - want[i]) > 1e-6 ? `#${i} ${y}≠${want[i]}` : null)).filter(Boolean).join('、');
+      if (drift) throw new Error(`forecourt: ${spec.id} 腰檐几何与登记不一致：${drift}`);
+      root.add(built.group);
+      storeyBandFacts.push({
+        id: spec.id, slotId: spec.slotId, grade: spec.grade, eaveAbs: spec.eaveAbs, levels: spec.levels,
+        bandCount: built.metrics.bandCount, bandY: got, floorRise: plan.floorRise, triangles: built.metrics.triangles,
+      });
+    }
+  }
   if (typeof kit.mergeZone === 'function') {
     const merged = kit.mergeZone(root, { name: 'B:batch' });
     mergeStats = merged?.stats ?? null;
@@ -1128,6 +1137,11 @@ export async function createZone(ctx) {
   });
 
   const stats = {
+    /* t41：中轴楼阁腰檐分层（外观多层；不登记可行走面）—— 与 layout.STOREY_BANDS 逐值核对后的台账 */
+    storeyBands: storeyBandFacts.length,
+    storeyBandBands: storeyBandFacts.reduce((n, f) => n + f.bandCount, 0),
+    storeyBandTriangles: storeyBandFacts.reduce((n, f) => n + f.triangles, 0),
+    storeyBandFacts,
     zone: ZONE_ID,
     version: FORECOURT_VERSION,
     buildings: buildings.length,

@@ -522,7 +522,13 @@ for (const w of L.WALLS) {
 }
 check('所有穿越墙体的道路都有 ≥ 路宽的开口', crossingViolations.length === 0, crossingViolations.slice(0, 5).join(', '));
 check('四段宫墙各有一个城门开口', L.WALLS.filter((w) => w.cityWall).every((w) => w.openings.length >= 1));
-check('院墙 id 与院落一一对应', L.COURTYARDS.every((c) => L.WALLS.filter((w) => w.courtyardId === c.id).length === 4));
+/* t48：中轴切口把 12 段跨轴院墙各拆成左右两段（`<id>` + `<id>-east`）⇒ 单院落墙记录数 ≥4；
+   "一一对应"改判**四条墙线**（拆分段共享同一墙线，故仍恰为 4 条）。 */
+check('院墙 id 与院落一一对应（四条墙线；t48 中轴切口拆分段共享墙线）', L.COURTYARDS.every((c) => {
+  const ws = L.WALLS.filter((w) => w.courtyardId === c.id);
+  const lines = new Set(ws.map((w) => `${w.axis}|${w.axis === 'x' ? w.from.z : w.from.x}`));
+  return ws.length >= 4 && lines.size === 4;
+}));
 
 // 统计与只读
 eq('LAYOUT_STATS.slotCount 与实际一致', L.LAYOUT_STATS.slotCount, L.SLOTS.length);
@@ -622,7 +628,9 @@ eq(`VIEWPOINTS = 61 + t39 塔顶 ${L.CLIMB_TOWER_VIEWPOINTS.length}（= ${61 + L
 eq('t39 塔顶机位 mode = focus-extra（不属 43 栋内景冻结集）', [...new Set(L.CLIMB_TOWER_VIEWPOINTS.map((v) => v.mode))].join(','), 'focus-extra');
 eq('FP_ROUTE = 50（9 基础 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿）', L.FP_ROUTE.length, 50);
 eq('visitable = 43（2 殿 + 2 门殿 + 4 城门 + 12 殿 + 23 配殿；4 角楼按 Q3 排除）', L.SLOTS.filter((s) => s.visitable).length, 43);
-eq('冻结计数不动：SLOTS/WALLS/CONNECTORS/院落/导览', [L.SLOTS.length, L.WALLS.length, L.CONNECTORS.length, L.COURTYARDS.length, L.TOUR_POINTS.length].join('/'), '79/60/32/14/10');
+/* t48：WALLS 计数**数据推导**（4 宫墙 + 4×院落 + 中轴切口拆分段）；其余计数仍为有意 pin。 */
+const AXIS_SPLIT_EAST = L.WALLS.filter((w) => w.axisCutoutSide === 'east').length;
+eq('冻结计数：SLOTS/WALLS(数据推导)/CONNECTORS/院落/导览', [L.SLOTS.length, L.WALLS.length, L.CONNECTORS.length, L.COURTYARDS.length, L.TOUR_POINTS.length].join('/'), `79/${4 + L.COURTYARDS.length * 4 + AXIS_SPLIT_EAST}/32/14/10`);
 
 /* ===== t9：GARDEN_BULK_ANNEX（12 座批量装饰建筑）—— 逐条判据（只增不减） =====
    口径三要素：
@@ -987,6 +995,47 @@ console.log(` - t85 连通性定位：**surfaces-only 启发式（不含 connect
   console.log(` - t37 塔楼工厂自检：面 ${plan.faces.length} 块 · 跳 ${plan.climb.hops}（最大 ${plan.climb.maxHopMeasured} ≤ ${hopMax}）· 顶层 y=${plan.climb.topFaceY} · 三角面 ${built.metrics.triangles} · 合并网格 ${built.metrics.parts.length} 个 · 机位 mode=${built.viewpoints.map((v) => v.mode).join(',')}（**未接线**：全仓无 makeTower 调用点）`);
 }
 
+
+/* ===== t48：院墙**归并 + 中轴打通**常驻守卫（数据推导；缺失即失败） =====
+   口径三要素：
+     · 来源 = `core/layout-slice.js` 的 `deriveWallRuns()`（可视与碰撞**同一份实现**）+ `layout.WALLS` 的
+       `axisCutout` 字段（中轴切口，由 `layout.js` 按数据推导生成）；
+     · 判据 = ① 归并完备：不存在两段 run 共享归并键（`轴|墙线|厚度|墙高`）——把 owner 加回归并键即红；
+              ② 中轴切口：每段跨轴院墙 `W ≥ 最宽中央门洞净宽 + 2×门垛` ∧ `W ≥ 中轴通行道宽 + 2×柱廊占位`，
+                 残余侧段 ≥1m，且**中央 W 内没有任何墙记录**（数据层无墙 ⇒ 碰撞层与可视层都不会有）；
+              ③ 单建造者：每段边界墙的 run 子区间恰有一个 `owner`，各区子区间数之和 = 子区间总数；
+     · 反例 = 任一不成立即红（见回执 §16.4 的突变证明）。 */
+{
+  const slice48 = await import(join(ROOT, 'src', 'core', 'layout-slice.js'));
+  const runs48 = slice48.deriveWallRuns();
+  const keys48 = runs48.map((r) => r.key);
+  check('t48 归并完备：不存在两段 run 共享归并键（`轴|墙线|厚度|墙高`；归并键含 owner 即红）',
+    keys48.length === new Set(keys48).size, `${keys48.length} 段 / 唯一键 ${new Set(keys48).size}`);
+  const segs48 = runs48.flatMap((r) => r.segments);
+  const ownerSum48 = segs48.reduce((acc, x) => ((acc[x.owner] = (acc[x.owner] ?? 0) + 1), acc), {});
+  check('t48 单建造者：每段边界墙子区间恰有一个 owner，且各区子区间数之和 = 子区间总数',
+    segs48.every((x) => typeof x.owner === 'string' && x.owner.length > 0 && x.owners.includes(x.owner))
+    && Object.values(ownerSum48).reduce((a, b) => a + b, 0) === segs48.length,
+    `${segs48.length} 子区间 · ${JSON.stringify(ownerSum48)}`);
+  const cut48 = L.WALLS.filter((w) => w.axisCutout);
+  const cutBad = cut48.filter((w) => {
+    const c = w.axisCutout;
+    return !(c.width >= c.doorWidth + 2 * c.pier - 1e-9 && c.width >= c.corridor + 2 * c.colonnade - 1e-9 && Math.abs(w.to.x - w.from.x) >= 1);
+  });
+  check('t48 中轴切口：W ≥ 门洞净宽 + 2×门垛 ∧ W ≥ 中轴通行道宽 + 2×柱廊占位，且残余侧段 ≥1m（逐段数据推导）',
+    cut48.length === 24 && cutBad.length === 0,
+    cut48.length ? `${cut48.length} 段（${[...new Set(cut48.map((w) => w.axisCutout.width))].sort((a, b) => a - b).join('/')}）违规 ${cutBad.length}` : '无切口段');
+  const axisLines48 = [...new Set(cut48.map((w) => w.from.z))];
+  const axisHoles48 = axisLines48.map((z) => {
+    const gap = cut48.find((w) => w.from.z === z).axisCutout.width / 2;
+    const covering = L.WALLS.filter((w) => w.kind === 'courtWall' && w.axis === 'x' && Math.abs(w.from.z - z) < 1e-6
+      && Math.min(w.from.x, w.to.x) < gap - 1e-6 && Math.max(w.from.x, w.to.x) > -gap + 1e-6);
+    return `${z}:${covering.length}`;
+  });
+  check('t48 中轴打通：每条切口墙线在中央 W 内**没有任何墙记录**（数据层无墙 ⇒ 碰撞/可视都不会有隐形墙）',
+    axisLines48.length === 7 && axisHoles48.every((s) => s.endsWith(':0')), axisHoles48.join(' '));
+  console.log(` - t48：归并段 ${runs48.length} / 子区间 ${segs48.length}（${JSON.stringify(ownerSum48)}）· 中轴切口 ${cut48.length} 段 / 7 条墙线 · 共面重复见回执探针`);
+}
 
 /* ===== t103：10 座开敞亭可通行化（hasDoor → exceptDoor）+ B 两座入口门槛 ===== */
 {
@@ -1631,6 +1680,51 @@ console.log(` - 视角 ${L.VIEWPOINTS.length}，导览点 ${L.TOUR_POINTS.length
   // 突变对照：扰动一个面的 y ⇒ 同一比较必须报漂移（证明判据非恒真）
   const perturbed = plan.faces.map((f, i) => (i === 5 ? { ...f, y: f.y + 0.1 } : f)).map(faceKey).sort();
   check('t39 突变对照：扰动一个面 y ⇒ 逐值比较必须报出漂移（判据非恒真）', perturbed.filter((k, i) => k !== kitKeys[i]).length === 1, `${perturbed.filter((k, i) => k !== kitKeys[i]).length}`);
+}
+
+
+/* ==========================================================================================
+ * t41 · 中轴楼阁**腰檐分层**（外观多层）：登记 ↔ 几何逐值 + 等级有序 + 零计数变动
+ * ------------------------------------------------------------------------------------------
+ * 口径（卡内「否则明确交回裁定说明为何只做外观」条款）：上层**可达**在本卡 inScope 内被
+ * `faceOverlaps`（不被更高面取高）实测证伪（原型 climb.ok=false / overlapCount=24，见 handoff「附：t41」）
+ * ⇒ 本卡交付外观分层：`bandY(k) = baseY + eaveHeight·(k−1)/levels`，**不改 eaveHeight/totalHeight**，
+ *   **不登记任何可行走面/障碍/机位**（无空气楼梯）。
+ * ======================================================================================== */
+{
+  const KIT_T = await import(join(ROOT, 'src', 'kit', 'towers.js'));
+  const C = CONFIG_NS.CONFIG;
+  eq('t41 候选台账 5 栋（数据推导：中轴 B/C 区非 onWall 的 hall，按 eaveAbs 降序）', L.STOREY_BAND_CANDIDATES.length, 5);
+  eq('t41 候选 eaveAbs 降序 = [10.71, 7.71, 6.6, 6.4, 5.8]', JSON.stringify(L.STOREY_BAND_CANDIDATES.map((c) => c.eaveAbs)), JSON.stringify([10.71, 7.71, 6.6, 6.4, 5.8]));
+  eq('t41 实际落地 = 候选里 zone B 的 3 栋（C 区 2 栋需裁定：由 src/zones/inner-palace.js 装配，Out-of-scope）', L.STOREY_BANDS.map((b) => b.slotId).join(','), 'B-hall-main,B-hall-mid,B-hall-rear');
+  check('t41 层数按等级：g3⇒3 层、g2⇒2 层（层数随等级单调不降）', L.STOREY_BAND_PLANS.every((p) => p.levels === (p.grade === 3 ? 3 : 2)));
+  eq('t41 等级序自检（高等级层数不少于低等级；同级 eaveAbs 不相等）', L.STOREY_BAND_SUMMARY.ordered, true);
+  check('t41 不改体量口径：逐栋 eaveHeight/eaveAbs = slotVolumeCaliber 登记值', L.STOREY_BANDS.every((b) => {
+    const cal = L.slotVolumeCaliber(L.getSlot(b.slotId));
+    return Math.abs(b.eaveHeight - cal.eaveHeight) < 1e-9 && Math.abs(b.eaveAbs - cal.eaveAbs) < 1e-9;
+  }));
+  eq('t41 零计数变动：新增可行走面/障碍/机位 = 0/0/0', `${L.WALKABLE.filter((w) => w.storeyBandId).length}/${L.OBSTACLES.filter((o) => o.storeyBandId).length}/${L.VIEWPOINTS.filter((v) => v.storeyBandId).length}`, '0/0/0');
+  eq('t41 腰檐道数 = Σ(levels−1) = 2+1+1 = 4', L.STOREY_BAND_SUMMARY.bandCount, 4);
+  check('t41 LAYOUT_VERSION ≥ 1.1.28', Number(L.LAYOUT_VERSION.split('.')[2]) >= 28, L.LAYOUT_VERSION);
+  // 登记 ↔ 几何逐值（bandY 逐道）
+  const drift = [];
+  for (const spec of L.STOREY_BANDS) {
+    const plan = L.STOREY_BAND_PLANS.find((q) => q.id === spec.id);
+    const kitPlan = KIT_T.storeyBandPlan({ ...spec }, C);
+    const got = kitPlan.bands.map((b) => b.y).join(',');
+    if (got !== plan.bands.map((b) => b.y).join(',')) drift.push(`${spec.id}: ${got} vs ${plan.bands.join(',')}`);
+  }
+  eq('t41 layout 派生 bandY 与 kit.storeyBandPlan 逐值相等（登记↔几何同轮）', drift.length, 0);
+  // 突变对照：改 eaveHeight ⇒ 必偏离（判据非恒真）
+  const mutated = L.STOREY_BANDS.filter((spec, i) => {
+    const plan = L.STOREY_BAND_PLANS[i];
+    const changed = KIT_T.storeyBandPlan({ ...spec, eaveHeight: spec.eaveHeight + 0.5 }, C);
+    return changed.bands.map((b) => b.y).join(',') !== plan.bands.map((b) => b.y).join(',');
+  }).length;
+  eq('t41 突变对照：逐栋改 eaveHeight +0.5 ⇒ bandY 全部偏离登记（判据非恒真）', mutated, L.STOREY_BANDS.length);
+  // 腰檐标高必须落在屋身范围内（几何自洽）：baseY < bandY < baseY + eaveHeight
+  check('t41 每道腰檐标高落在 (baseY, baseY+eaveHeight) 内', L.STOREY_BAND_PLANS.every((p) => p.bands.every((b) => b.y > p.baseY + 1e-6 && b.y < p.baseY + p.eaveHeight - 1e-6)));
+  console.log(` - t41 腰檐分层：候选 5（B 区 3 落地 / C 区 2 需裁定）· 层数 g3⇒3、g2⇒2（ordered=${L.STOREY_BAND_SUMMARY.ordered}）· 腰檐 4 道 · WALKABLE/OBSTACLES/VIEWPOINTS 零变动 · bandY 与 kit.storeyBandPlan 逐值一致`);
 }
 
 if (failures.length > 0) {

@@ -833,17 +833,25 @@ runner.section('6. 围合（院墙 + 廊庑，广场四周不得留无边界空�
 /* ========================================================================== */
 
 
-await runner.test('院墙 6 段：共线归并后覆盖 3 个院落的四边，且开口落在通西/东宫苑与内廷门位置', () => {
+// t48：段数期望值在**测试外**先算好（回调非 async，不能在其中 await loadModule）
+const WALL_RUNS_EXPECTED = (await loadModule('src/core/layout-slice.js')).wallRunsForZone('B').reduce((a, r) => a + r.segments.filter((x) => x.owner === 'B').length, 0);
+await runner.test(`院墙 ${WALL_RUNS_EXPECTED} 段（数据推导）：共线归并 + 中轴切口后覆盖 3 个院落的四边，且开口落在通西/东宫苑与内廷门位置`, () => {
   const runs = built.stats.details.wallRuns;
-  assertEqual(runs.length, 6, '共线归并后院墙段数（3 院落 × 4 边 → 归并后 6 段）');
+  assertEqual(runs.length, WALL_RUNS_EXPECTED, `共线归并 + 中轴切口后院墙段数（数据推导 = ${WALL_RUNS_EXPECTED}）`);
+  /* t48：中轴切口是**设计要求**（中轴彻底打通）⇒ 闭合判据改为「墙身 ∪ 中轴切口」覆盖整边；
+     切口宽度由 layout 数据给出（`axisCutout.width`，逐墙数据推导）。 */
+  const cutoutGap = (line) => {
+    const w = LAYOUT.WALLS.find((x) => x.axisCutout && x.axis === 'x' && Math.abs(x.from.z - line) < 0.01);
+    return w ? [[-w.axisCutout.width / 2, w.axisCutout.width / 2]] : [];
+  };
   for (const courtyard of zoneLayout.courtyards) {
     const { minX, maxX, minZ, maxZ } = courtyard.bounds;
-    const south = runs.filter((r) => r.alongX && Math.abs(r.line - minZ) < 0.01).map((r) => [r.lo, r.hi]);
-    const north = runs.filter((r) => r.alongX && Math.abs(r.line - maxZ) < 0.01).map((r) => [r.lo, r.hi]);
+    const south = runs.filter((r) => r.alongX && Math.abs(r.line - minZ) < 0.01).map((r) => [r.lo, r.hi]).concat(cutoutGap(minZ));
+    const north = runs.filter((r) => r.alongX && Math.abs(r.line - maxZ) < 0.01).map((r) => [r.lo, r.hi]).concat(cutoutGap(maxZ));
     const west = runs.filter((r) => !r.alongX && Math.abs(r.line - minX) < 0.01).map((r) => [r.lo, r.hi]);
     const east = runs.filter((r) => !r.alongX && Math.abs(r.line - maxX) < 0.01).map((r) => [r.lo, r.hi]);
-    assert(covers(south, minX, maxX), `${courtyard.id} 南边未闭合`);
-    assert(covers(north, minX, maxX), `${courtyard.id} 北边未闭合`);
+    assert(covers(south, minX, maxX), `${courtyard.id} 南边未闭合（墙身 ∪ 中轴切口）`);
+    assert(covers(north, minX, maxX), `${courtyard.id} 北边未闭合（墙身 ∪ 中轴切口）`);
     assert(covers(west, minZ, maxZ), `${courtyard.id} 西边未闭合`);
     assert(covers(east, minZ, maxZ), `${courtyard.id} 东边未闭合`);
   }
@@ -858,15 +866,17 @@ await runner.test('院墙 6 段：共线归并后覆盖 3 个院落的四边，�
     assert(opening, `${connectorId} 处院墙必须留开口（z=${connector.position.z}）`);
     assert(opening.width >= connector.width - 1, `${connectorId} 开口宽度应不小于通道宽度 ${connector.width}`);
   }
-  // 中轴开口：南（进广场）与北（内廷门）
+  /* t48（用户裁定 P0）：中轴**彻底打通** —— 原「中央门洞」升级为**中央整段无墙**（`axisCutout`）。
+     判据随之升级（只增不减）：南墙中轴开口净宽 ≥20、北墙 ≥24 **且** 均由 layout 的 `axisCutout.width` 给出。 */
+  const axisWall = (id) => LAYOUT.WALLS.find((w) => w.id === id);
+  const southWall = axisWall('CY-B-plaza-wall-south');
   const southRun = runs.find((r) => r.alongX && Math.abs(r.line + 400) < 0.01);
-  assert(southRun, '缺少广场南墙');
-  const southMid = (southRun.lo + southRun.hi) / 2;
-  assert(southRun.openings.some((o) => Math.abs(o.at + southMid) <= 1.5 && o.width >= 20), '广场南墙必须留中轴开口');
+  assert(southRun && southWall, '缺少广场南墙');
+  assert(southWall.axisCutout && southWall.axisCutout.width >= 20, `广场南墙中轴整段开口净宽 ${southWall.axisCutout?.width} 应 ≥20（原门洞 ${southWall.axisCutout?.doorWidth}）`);
+  const northWall = axisWall('CY-B-rear-wall-north');
   const northRun = runs.find((r) => r.alongX && Math.abs(r.line - 80) < 0.01);
-  assert(northRun, '缺少后殿院北墙');
-  const northMid = (northRun.lo + northRun.hi) / 2;
-  assert(northRun.openings.some((o) => Math.abs(o.at + northMid) <= 1.5 && o.width >= 24), '后殿院北墙必须留内廷门开口');
+  assert(northRun && northWall, '缺少后殿院北墙');
+  assert(northWall.axisCutout && northWall.axisCutout.width >= 24, `后殿院北墙中轴整段开口净宽 ${northWall.axisCutout?.width} 应 ≥24（内廷门）`);
 });
 
 await runner.test('廊庑 6 段与 layout.CORRIDORS 一致（含广场东西 3 层廊）', () => {

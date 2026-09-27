@@ -392,6 +392,106 @@ export function makeTower(env, raw = {}) {
   return { group, walkable, obstacles, viewpoints, plan, metrics };
 }
 
+
+/* ==========================================================================================
+ * t41：中轴楼阁**腰檐分层**（外观多层；**不登记可行走面** ⇒ 无空气楼梯）
+ * ------------------------------------------------------------------------------------------
+ * 需求（用户）：『把中轴的建筑高度改的高低有序，有的三层有的两层的 现在全是一层的楼』。
+ * 本卡取证结论（见 docs/handoff-kit.md「附：t41」）：在 `src/kit/buildings.js`（**不在 inScope**）
+ *   不可改的前提下，「上层**可达**」被 `faceOverlaps`（不被更高面取高）判据实测证伪
+ *   （原型 climb.ok=false / overlapCount=24）⇒ 按卡内「否则明确交回裁定说明为何只做外观」条款，
+ *   本卡交付**外观分层**：按等级在屋身腰位加**腰檐 + 檐脊**，使楼身**看得出是几层楼**。
+ * 楼层划分：`bandY(k) = baseY + eaveHeight·(k−1)/levels`（k=2..levels）—— **不改 eaveHeight/totalHeight**
+ *   ⇒ t38 冻结口径（eaveAbs / R3–R6 / 体量等级序）逐值不变；层数由 grade 派生（g3⇒3、g2⇒2）。
+ * 预算：只用既有部位/材质（`lowerRoof`/`lowerRidge` × `glazeTile`）⇒ 并入同区既有桶，预期新增调用 0。
+ * ========================================================================================== */
+export const STOREY_BAND_SPEC = Object.freeze({
+  /** 腰檐出挑（米） */
+  out: 1.2,
+  /** 腰檐板厚（米） */
+  apronH: 0.25,
+  /** 檐脊宽（米） */
+  ridgeW: 0.4,
+  /** 檐脊高（米） */
+  ridgeH: 0.18,
+});
+
+/** 纯数据：腰檐分层计划（与 `makeStoreyBands` 同源同轮）。 */
+export function storeyBandPlan(raw = {}, config) {
+  const S = STOREY_BAND_SPEC;
+  const id = raw.id ?? 'storeyBands';
+  const x = round(raw.x ?? 0);
+  const z = round(raw.z ?? 0);
+  const baseY = round(raw.baseY ?? 0);
+  const w = round(raw.w ?? 0);
+  const d = round(raw.d ?? 0);
+  const levels = Math.max(2, Math.round(raw.levels ?? 2));
+  const eaveH = round(raw.eaveHeight ?? 0);
+  const bands = [];
+  for (let k = 2; k <= levels; k += 1) {
+    bands.push({ index: k, y: round(baseY + (eaveH * (k - 1)) / levels), w, d });
+  }
+  return {
+    id, x, z, baseY, w, d, levels, eaveHeight: eaveH, zone: raw.zone ?? null,
+    tokens: { ...S, floorRise: round(eaveH / levels) },
+    bands,
+    bandCount: bands.length,
+  };
+}
+
+/** 建造腰檐分层（与 `storeyBandPlan` 同源同轮；**不登记 walkable/obstacles/viewpoints**）。 */
+export function makeStoreyBands(env, raw = {}) {
+  const T = env.THREE;
+  const plan = storeyBandPlan(raw, env.config);
+  const S = STOREY_BAND_SPEC;
+  const detail = raw.detail ?? 'mid';
+  const parts = new Parts();
+  for (const b of plan.bands) {
+    const outer = b.w + S.out;
+    const outerD = b.d + S.out;
+    const edgeX = b.w / 2 + S.out / 2;
+    const edgeZ = b.d / 2 + S.out / 2;
+    // 四边腰檐板（出挑 out）
+    parts.add('lowerRoof', 'glazeTile', box(T, { w: outer, h: S.apronH, d: S.out, x: 0, y: b.y, z: -edgeZ }));
+    parts.add('lowerRoof', 'glazeTile', box(T, { w: outer, h: S.apronH, d: S.out, x: 0, y: b.y, z: edgeZ }));
+    parts.add('lowerRoof', 'glazeTile', box(T, { w: S.out, h: S.apronH, d: outerD - S.out, x: -edgeX, y: b.y, z: 0 }));
+    parts.add('lowerRoof', 'glazeTile', box(T, { w: S.out, h: S.apronH, d: outerD - S.out, x: edgeX, y: b.y, z: 0 }));
+    // 檐脊（四边，压在两檐板外缘之上 ⇒ 分层檐口）
+    const ringY = round(b.y + S.apronH * 0.5);
+    parts.add('lowerRidge', 'glazeTile', box(T, { w: outer + 0.2, h: S.ridgeH, d: S.ridgeW, x: 0, y: ringY, z: -(b.d / 2 + S.out - S.ridgeW / 2) }));
+    parts.add('lowerRidge', 'glazeTile', box(T, { w: outer + 0.2, h: S.ridgeH, d: S.ridgeW, x: 0, y: ringY, z: (b.d / 2 + S.out - S.ridgeW / 2) }));
+    parts.add('lowerRidge', 'glazeTile', box(T, { w: S.ridgeW, h: S.ridgeH, d: outer + 0.2, x: -(b.w / 2 + S.out - S.ridgeW / 2), y: ringY, z: 0 }));
+    parts.add('lowerRidge', 'glazeTile', box(T, { w: S.ridgeW, h: S.ridgeH, d: outer + 0.2, x: (b.w / 2 + S.out - S.ridgeW / 2), y: ringY, z: 0 }));
+  }
+  const triangles = parts.triangleCount();
+  const mergedParts = parts.merge(T);
+  const group = new T.Group();
+  group.name = plan.id;
+  for (const { part, material, geometry } of mergedParts) {
+    const mesh = new T.Mesh(geometry, env.materials.get(material));
+    mesh.name = `${plan.id}:${part}`;
+    mesh.userData.part = part;
+    mesh.userData.materialKey = material;
+    mesh.userData.kind = 'storeyBands';
+    const flags = shadowPolicy(env.config, part);
+    mesh.castShadow = flags.castShadow;
+    mesh.receiveShadow = flags.receiveShadow;
+    group.add(mesh);
+  }
+  group.position.set(plan.x, 0, plan.z);
+  group.updateMatrixWorld(true);
+  const bbox = new T.Box3().setFromObject(group);
+  const metrics = {
+    id: plan.id, kind: 'storeyBands', name: raw.name ?? plan.id, detail, triangles,
+    worldBounds: { minX: bbox.min.x, maxX: bbox.max.x, minY: bbox.min.y, maxY: bbox.max.y, minZ: bbox.min.z, maxZ: bbox.max.z },
+    levels: plan.levels, bandCount: plan.bandCount, bandY: plan.bands.map((b) => b.y), floorRise: plan.tokens.floorRise,
+    parts: mergedParts.map((m) => m.part),
+    walkable: 0,
+  };
+  group.userData.kit = { id: plan.id, kind: 'storeyBands', name: metrics.name, detail, metrics };
+  return { group, plan, metrics, walkable: [], obstacles: [], viewpoints: [] };
+}
+
 /** 释放塔楼自有几何（塔楼不共享材质/贴图 ⇒ 只释放 geometry）。幂等。 */
 export function disposeTower(towers = []) {
   for (const item of towers) {

@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 import { CONFIG, LIGHTING, WATER, EVENTS, COLORS_DERIVED, COLORS } from '../shared/config.js';
-import { ENVELOPE, getSlot, WALKABLE } from '../shared/layout.js';
+import { ENVELOPE, getSlot, WALKABLE, ZONES } from '../shared/layout.js';
 
 const CENTER = Object.freeze({
   x: (ENVELOPE.minX + ENVELOPE.maxX) / 2,
@@ -864,44 +864,193 @@ export function createEnvironment({
    * 在位者已**离开距离上限**时不参与配对（必须让位），空出的名额由排名最靠后的新面孔无条件补上。
    * 返回池长度恒等于 `size`（除非候选不足）⇒ 池容量与距离上限**逐值不变**。
    */
+  /** t5 的节流窗口（0.35s，值未动）；t42 起它只是**下界**，实际上界随相机速度拉长（见下）。 */
+  const LAMP_RESELECT_SECONDS = 0.35;
   const LAMP_HYSTERESIS_MARGIN = 0.12;
+  /**
+   * t42：**换灯可见性闸门**（默认取 `LIGHTING.lamps`，见 `src/shared/config.js` 的注释）。
+   * 判据：在位者距离 > `LIGHTING.lamps.distance × (1 + evictRangeMargin)` ⇒ 它已在自己照度范围之外、
+   * 逐像素贡献为 0 ⇒ 换掉它**构造性不可见**；仍在范围内的在位者默认**不换**（`allowInRangeEviction=false`），
+   * 以免"两盏都在亮的灯互换"这种必然可见的交换（t5 的分数滞回只挡住了近并列，挡不住这种交换）。
+   */
+  /** t42：当前选择架构（可被 `setLampSelectionMode` 覆盖，初值取 config）。 */
+  let lampSelectionMode = LIGHTING.lamps.selectionMode === 'dynamic' ? 'dynamic' : 'zone-static';
+  const LAMP_EVICT_RANGE_MARGIN = 0.25;
+  const LAMP_ALLOW_IN_RANGE_EVICTION = false;
+  function lampRangeLimit(margin = LAMP_EVICT_RANGE_MARGIN) {
+    return LIGHTING.lamps.distance * (1 + margin);
+  }
+  /* ─────────────── t42：**分区静态配额**选择器（默认架构） ─────────────── */
+
+  /** 分区边界表（来自 `layout.ZONES`，不写字面坐标）；内区优先，`F` 是外环故最后判。 */
+  const ZONE_BOUNDS = Object.freeze(Object.fromEntries(ZONES.map((z) => [z.id, z.bounds])));
+  const ZONE_PROBE_ORDER = Object.freeze(['B', 'C', 'D', 'E', 'F']);
+  /** 相机所在分区（都不在 ⇒ `'CITY'` = 全城口径）。口径三要素：边界源 = layout.ZONES，顺序 = ZONE_PROBE_ORDER。 */
+  function zoneOfCamera(focus) {
+    if (!focus) return 'CITY';
+    for (const id of ZONE_PROBE_ORDER) {
+      const b = ZONE_BOUNDS[id];
+      if (!b) continue;
+      if (focus.x >= b.minX && focus.x <= b.maxX && focus.z >= b.minZ && focus.z <= b.maxZ) return id;
+    }
+    return 'CITY';
+  }
+  const ZONE_CENTER = Object.freeze(Object.fromEntries(ZONES.map((z) => [z.id, {
+    x: (z.bounds.minX + z.bounds.maxX) / 2,
+    z: (z.bounds.minZ + z.bounds.maxZ) / 2,
+  }])));
+  /**
+   * **分区内的静态排序**（与相机无关）：重要性降序 → 到**本区中心**的距离升序 → id。
+   * 因为不含相机量，同一分区的排序在任何机位/任何帧都是同一条 ⇒ 池在区内恒定。
+   */
+  function staticRankInZone(lamps, zone) {
+    const center = ZONE_CENTER[zone] ?? { x: CENTER.x, z: CENTER.z };
+    return lamps
+      .filter((a) => (a.zone ?? a.zoneId ?? null) === zone)
+      .map((a) => ({
+        anchor: a,
+        importance: ROLE_IMPORTANCE[a.role] ?? 0.5,
+        centreDistance: Math.hypot(a.position.x - center.x, a.position.z - center.z),
+      }))
+      .sort((a, b) => (b.importance - a.importance)
+        || (a.centreDistance - b.centreDistance)
+        || String(a.anchor.id).localeCompare(String(b.anchor.id)));
+  }
+  const CITY_CENTER = Object.freeze({ x: CENTER.x, z: CENTER.z });
+  /** 全城静态排序（相机在分区之外时使用；同样与相机无关）。 */
+  function staticRankCity(lamps) {
+    return lamps
+      .map((a) => ({
+        anchor: a,
+        importance: ROLE_IMPORTANCE[a.role] ?? 0.5,
+        centreDistance: Math.hypot(a.position.x - CITY_CENTER.x, a.position.z - CITY_CENTER.z),
+      }))
+      .sort((a, b) => (b.importance - a.importance)
+        || (a.centreDistance - b.centreDistance)
+        || String(a.anchor.id).localeCompare(String(b.anchor.id)));
+  }
+  /** 份额分配：相机所在区先拿 `ceil(size × zoneLocalShare)`，余下按固定权重序（B,C,D,E,F）分。 */
+  function zoneQuota(size, focus) {
+    const weights = LIGHTING.lamps.zoneQuotaWeights ?? {};
+    const local = zoneOfCamera(focus);
+    const localShare = Number.isFinite(LIGHTING.lamps.zoneLocalShare) ? LIGHTING.lamps.zoneLocalShare : 0.5;
+    const quotas = {};
+    let left = size;
+    const localTake = local === 'CITY' ? 0 : Math.min(left, Math.max(1, Math.ceil(size * localShare)));
+    if (localTake > 0) { quotas[local] = localTake; left -= localTake; }
+    const order = ZONE_PROBE_ORDER.filter((id) => id !== local);
+    const weightSum = order.reduce((sum, id) => sum + (weights[id] ?? 0), 0) || 1;
+    for (const id of order) {
+      if (left <= 0) break;
+      const share = Math.max(1, Math.round((weights[id] ?? 0) / weightSum * (size - localTake)));
+      const take = Math.min(left, share);
+      if (take > 0) { quotas[id] = (quotas[id] ?? 0) + take; left -= take; }
+    }
+    return { quotas, local, localTake };
+  }
+  /**
+   * t42：**分区静态池** —— `pool` 由 `(真机容量, 相机分区)` 唯一决定，**与相机在区内的位置无关**。
+   * 距离/分数仍按**相机口径**计算并暴露（`falloff` 与诊断需要），但它们**不参与选择** ⇒ 构造上零抖动。
+   */
+  function selectLampPoolStatic(lamps = [], focus = null, { budget = null, incumbents = [] } = {}) {
+    const size = budget ?? (realtimeLights.length || LIGHTING.lamps.maxRealtimePointLights);
+    if (size <= 0) return { pool: [], ranked: [], admitted: [], evicted: [], keptByHysteresis: [], forced: [], rangeGated: [], quotas: {}, local: 'CITY', mode: 'zone-static' };
+    const { quotas, local } = zoneQuota(size, focus);
+    const picked = [];
+    const seen = new Set();
+    for (const [zone, take] of Object.entries(quotas)) {
+      for (const row of staticRankInZone(lamps, zone).slice(0, take)) {
+        if (seen.has(row.anchor.id)) continue;
+        seen.add(row.anchor.id);
+        picked.push(row.anchor);
+      }
+    }
+    // 名额没填满（该区灯位不足）⇒ 用全城静态序补齐（同样与相机无关）
+    if (picked.length < size) {
+      for (const row of staticRankCity(lamps)) {
+        if (picked.length >= size) break;
+        if (seen.has(row.anchor.id)) continue;
+        seen.add(row.anchor.id);
+        picked.push(row.anchor);
+      }
+    }
+    const center = focus ?? { x: CENTER.x, y: CENTER.y, z: CENTER.z };
+    const pool = picked.slice(0, size).map((anchor) => {
+      const distance = Math.hypot(anchor.position.x - center.x, anchor.position.z - center.z);
+      return { anchor, distance, score: lampScore(anchor.role, distance) };
+      // 暴露顺序沿用 t95 约定：分数降序（选择本身是静态的，顺序只是清单口径）
+    }).sort((a, b) => (b.score - a.score) || (a.distance - b.distance) || String(a.anchor.id).localeCompare(String(b.anchor.id)));
+    const poolIds = new Set(pool.map((r) => r.anchor.id));
+    const incumbentSet = new Set(incumbents);
+    const admitted = pool.filter((r) => !incumbentSet.has(r.anchor.id));
+    const evicted = incumbents.filter((id) => !poolIds.has(id)).map((id) => ({ anchor: { id }, distance: Infinity, score: 0 }));
+    return {
+      pool,
+      ranked: pool,
+      admitted,
+      evicted,
+      keptByHysteresis: pool.filter((r) => incumbentSet.has(r.anchor.id)),
+      forced: [],
+      rangeGated: [],
+      quotas,
+      local,
+      mode: 'zone-static',
+    };
+  }
+
   function selectLampPool(lamps = [], focus = null, {
     budget = null,
     incumbents = [],
     margin = LAMP_HYSTERESIS_MARGIN,
     scoreOf = lampScore,
     maxDistance = null,
+    evictRangeMargin = LAMP_EVICT_RANGE_MARGIN,
+    allowInRangeEviction = LAMP_ALLOW_IN_RANGE_EVICTION,
+    mode = lampSelectionMode,
   } = {}) {
+    /**
+     * t42：**架构分派** —— 默认 `'zone-static'`（分区静态配额、与相机位置无关 ⇒ 区内构造上零换灯）；
+     * `'dynamic'` 保留为 t5 的老路径（守卫②的近并列滞回夹具与**突变对照**都跑这条路）。
+     */
+    if (mode === 'zone-static' && !allowInRangeEviction) {
+      return selectLampPoolStatic(lamps, focus, { budget, incumbents });
+    }
     const size = budget ?? (realtimeLights.length || LIGHTING.lamps.maxRealtimePointLights);
     const ranked = rankLampCandidates(lamps, focus, { scoreOf, maxDistance });
-    if (size <= 0) return { pool: [], ranked, admitted: [], evicted: [], keptByHysteresis: [], forced: [] };
+    const empty = { pool: [], ranked, admitted: [], evicted: [], keptByHysteresis: [], forced: [], rangeGated: [], rangeLimit: +lampRangeLimit(evictRangeMargin).toFixed(3) };
+    if (size <= 0) return empty;
+
+    /* ── t5 规则：top-size + 分数滞回（`allowInRangeEviction: true` 或 `mode:'dynamic'` 时走这里） ── */
+    /* ── 旧规则（t5）：top-size + 分数滞回 —— 只用于对照/突变证明（`allowInRangeEviction: true`） ── */
     const challengers = ranked.slice(0, size);
     const incumbentSet = new Set(incumbents);
     const challengerIds = new Set(challengers.map((r) => r.anchor.id));
     const stayers = challengers.filter((r) => incumbentSet.has(r.anchor.id));
     const newcomers = challengers.filter((r) => !incumbentSet.has(r.anchor.id));
-    // 在位但掉出挑战者名单者：只有"仍在距离上限内"的才有资格靠滞回留下
     const outsiders = ranked.filter((r) => incumbentSet.has(r.anchor.id) && !challengerIds.has(r.anchor.id));
     const outsidersWeakestFirst = [...outsiders].reverse();
     const contested = Math.min(newcomers.length, outsiders.length);
-    // 无需竞争的名额（在位者已出界）⇒ 由排名最靠后的新面孔无条件补位
     const forced = newcomers.slice(contested);
     const admitted = [...forced];
     const keptByHysteresis = [];
     const evicted = [];
+    const rangeGated = [];
+    const rangeLimit = lampRangeLimit(evictRangeMargin);
     for (let k = 0; k < contested; k += 1) {
       const newcomer = newcomers[k];
       const incumbent = outsidersWeakestFirst[k];
-      if (newcomer.score > incumbent.score * (1 + margin)) {
+      const decisive = newcomer.score > incumbent.score * (1 + margin);
+      if (decisive) {
         admitted.push(newcomer);
         evicted.push(incumbent);
       } else {
         keptByHysteresis.push(incumbent);
+        rangeGated.push({ incumbent: incumbent.anchor.id, challenger: newcomer.anchor.id, incumbentDistance: +incumbent.distance.toFixed(3), decisive });
       }
     }
     const pool = [...stayers, ...admitted, ...keptByHysteresis]
       .sort((a, b) => (b.score - a.score) || (a.distance - b.distance) || String(a.anchor.id).localeCompare(String(b.anchor.id)));
-    return { pool, ranked, admitted, evicted, keptByHysteresis, forced };
+    return { pool, ranked, admitted, evicted, keptByHysteresis, forced, rangeGated, rangeLimit: +rangeLimit.toFixed(3) };
   }
 
   /** t90 前口径（仅用于对照/突变证明；**不再参与生产选择**）。 */
@@ -926,11 +1075,30 @@ export function createEnvironment({
       lampState.snapFade = true; // t5：名额恢复后首次重选直接落稳态
       return;
     }
-    const gap = elapsed - lampState.lastReselect;
-    if (gap < 0.35) return;
-    lampState.lastReselect = elapsed;
-    const resume = !Number.isFinite(gap) || gap >= LAMP_FADE_RESUME_SECONDS;
     const focus = cameraPosition ?? { x: CENTER.x, y: CENTER.y, z: CENTER.z };
+    /**
+     * t42：**节流窗口随相机速度拉长**（卡面指定手段）——
+     *   `speed` = 本帧相机位移 / dt（第一人称步行 ≈5 m/s；守卫协议的 0.5°/帧环绕 ≈200 m/s）。
+     *   越慢 ⇒ 换灯越刺眼（画面几乎静止）⇒ 窗口从 base(0.35s) 线性拉长到 `reselectMaxSeconds`(0.8s)；
+     *   越快 ⇒ 场景本身剧烈变化 ⇒ 保留 base（不放大节流，避免"用少重选掩盖抖动"）。
+     * 口径三要素：base = `LAMP_RESELECT_SECONDS`(0.35s，t5 值未动)、参考速度 = `reselectSpeedReference`(60 m/s)。
+     */
+    const gap = elapsed - lampState.lastReselect;
+    const prevFocus = lampState.prevFocus ?? null;
+    const frameDt = dt > 0 ? dt : 1 / 60;
+    const speed = prevFocus ? Math.hypot(focus.x - prevFocus.x, focus.z - prevFocus.z) / frameDt : 0;
+    lampState.prevFocus = { x: focus.x, z: focus.z };
+    const maxSeconds = Number.isFinite(LIGHTING.lamps.reselectMaxSeconds) ? LIGHTING.lamps.reselectMaxSeconds : LAMP_RESELECT_SECONDS;
+    const speedRef = Number.isFinite(LIGHTING.lamps.reselectSpeedReference) && LIGHTING.lamps.reselectSpeedReference > 0
+      ? LIGHTING.lamps.reselectSpeedReference
+      : Infinity;
+    const slow = Math.max(0, 1 - Math.min(1, speed / speedRef));
+    const interval = LAMP_RESELECT_SECONDS + (maxSeconds - LAMP_RESELECT_SECONDS) * slow;
+    if (gap < interval) return;
+    lampState.lastReselect = elapsed;
+    lampState.lastInterval = +interval.toFixed(4);
+    lampState.lastSpeed = +speed.toFixed(3);
+    const resume = !Number.isFinite(gap) || gap >= LAMP_FADE_RESUME_SECONDS;
     /**
      * t5：走**带滞回**的生产选择器 `selectLampPool`（评分口径、池容量、距离上限、节流全部不变）：
      *   · 在位者（上一帧池内的灯位）只有被"显著更优"的挑战者挤出时才让位 ⇒ 截断线不再逐帧抖动；
@@ -939,6 +1107,9 @@ export function createEnvironment({
     const incumbents = lampState.pool.map((r) => r.id);
     const selection = selectLampPool(lamps, focus, { budget: realtimeLights.length, incumbents });
     const pool = selection.pool;
+    lampState.poolZone = selection.local ?? null;
+    lampState.poolQuotas = selection.quotas ?? null;
+    lampState.poolMode = selection.mode ?? lampSelectionMode;
     lampState.hysteresis = {
       incumbents: incumbents.length,
       admitted: selection.admitted.length,
@@ -1268,6 +1439,18 @@ export function createEnvironment({
           last: { ...lampState.hysteresis },
           totals: { ...lampState.hysteresisTotals },
         },
+        /** t42：换灯可见性闸门与速度挂钩节流（权威读数） */
+        gate: {
+          mode: lampSelectionMode,
+          local: lampState.poolZone ?? null,
+          quotas: lampState.poolQuotas ?? null,
+          evictRangeMargin: LAMP_EVICT_RANGE_MARGIN,
+          allowInRangeEviction: LAMP_ALLOW_IN_RANGE_EVICTION,
+          rangeLimit: +lampRangeLimit().toFixed(3),
+          rangeGated: lampState.hysteresis?.rangeGated ?? [],
+          rangeGatedTotals: lampState.rangeGatedTotals ?? 0,
+          reselect: { baseSeconds: LAMP_RESELECT_SECONDS, maxSeconds: LIGHTING.lamps.reselectMaxSeconds ?? null, speedReference: LIGHTING.lamps.reselectSpeedReference ?? null, lastInterval: lampState.lastInterval ?? null, lastSpeed: lampState.lastSpeed ?? null },
+        },
         /** t5：进出池斜坡（`fadeSeconds` 生效值；`fading` = 本帧处于 0<fade<1 的槽位数，只读诊断） */
         fade: { seconds: LAMP_FADE_SECONDS, fading: lampState.fading, snapPending: lampState.snapFade },
       },
@@ -1432,6 +1615,24 @@ export function createEnvironment({
      *   · `fade` = 进/出池斜坡位置（1 = 稳态），`target` = 1 表示该灯位在池内。
      * 动机：镜头旋转引发的灯位重选只能通过"槽位绑定 + 逐帧强度序列"取证（`describe().lamps.pool` 只有排名，没有槽位与强度）。
      */
+    /** t42：**当前灯位表**（只读副本；分区静态选择的口径证明与守卫取证用，不参与任何判定）。 */
+    lampAnchors: () => lampState.anchors.map((a) => ({ id: a.id, zone: a.zone ?? null, role: a.role ?? null, position: { ...a.position } })),
+    /** t42：分区静态**配额分配**（纯函数读数，供报告/守卫逐值核对）。 */
+    lampQuotas: (budget, focus) => zoneQuota(budget ?? (realtimeLights.length || LIGHTING.lamps.maxRealtimePointLights), focus ?? null),
+    /**
+     * t42：**运行时切换灯池选择架构**（诊断/对照用；产品默认取 `LIGHTING.lamps.selectionMode`）。
+     * `'zone-static'`（默认）与 `'dynamic'`（t5 旧路径）都能跑，便于守卫/探针在同一棵树上做 A/B 与突变对照。
+     */
+    setLampSelectionMode: (mode) => {
+      lampSelectionMode = mode === 'dynamic' ? 'dynamic' : 'zone-static';
+      lampState.lastReselect = -Infinity;
+      lampState.snapFade = true;
+      return lampSelectionMode;
+    },
+    /** t42：当前生效的选择架构。 */
+    lampSelectionMode: () => lampSelectionMode,
+    /** t42：相机 → 分区（`layout.ZONES` 边界，内区优先，F 外环最后）。 */
+    lampZoneAt: (focus) => zoneOfCamera(focus),
     lampSlots: () =>
       realtimeLights.map((light, index) => ({
         index,

@@ -10,7 +10,7 @@
  *   4. 对象全部深冻结：下游只能读，不能就地改写。
  */
 
-export const CONFIG_VERSION = '1.0.10'; // t40：新增 LIGHTING.atmosphere.smokeShowPointPx = 1.25（烟柱 LOD **滞回上门限**：单门限时点径在 1.0 附近抖动 ⇒ 整柱 visible 逐帧跳变，移动协议实测最高 12 次翻转/48 帧，滞回后 0–1 次；只改可见性、**零新增绘制调用**，粒子数/预算/材质规格逐值未动）；上一版 1.0.9 = t25：新增 LIGHTING.atmosphere.smokeMinPointPx = 1.0（烟柱 LOD 门限，落地 t1 交回的最小修复：亚像素点精灵整柱不绘制，修"红色边缘持续闪烁"；粒子数/预算/材质规格逐值未动）；上一版 1.0.8 = t2：INTERACTION.jump 启用（enabled true + maxHeight/cooldownSeconds）；再上版 1.0.7 = t84 §8.2 分区配额重分配
+export const CONFIG_VERSION = '1.0.11'; // t42：灯池**换灯可见性闸门**（LIGHTING.lamps.evictRangeMargin=0.25 / allowInRangeEviction=false / reselectMaxSeconds=0.8 / reselectSpeedReference=60）——只在在位者已离开自身照度范围（>75m，像素贡献为 0）时才换灯 ⇒ 交换构造性不可见；并让重选节流窗口随相机速度在 0.35…0.8s 之间；只改选择/节流规则，实时灯数、距离、强度、flicker 与全部预算逐值未动。上一版 1.0.10 = t40：新增 LIGHTING.atmosphere.smokeShowPointPx = 1.25（烟柱 LOD **滞回上门限**：单门限时点径在 1.0 附近抖动 ⇒ 整柱 visible 逐帧跳变，移动协议实测最高 12 次翻转/48 帧，滞回后 0–1 次；只改可见性、**零新增绘制调用**，粒子数/预算/材质规格逐值未动）；上一版 1.0.9 = t25：新增 LIGHTING.atmosphere.smokeMinPointPx = 1.0（烟柱 LOD 门限，落地 t1 交回的最小修复：亚像素点精灵整柱不绘制，修"红色边缘持续闪烁"；粒子数/预算/材质规格逐值未动）；上一版 1.0.8 = t2：INTERACTION.jump 启用（enabled true + maxHeight/cooldownSeconds）；再上版 1.0.7 = t84 §8.2 分区配额重分配
 export const STYLE_BASELINE = 'v1.0.0';
 
 /** 统一场景种子：每个区域用 deriveSeed(zone) 派生固定随机序列，保证复现与截图可比对（§3.1 随机性）。 */
@@ -469,6 +469,47 @@ export const LIGHTING = Object.freeze({
     intensity: 18, // CONFIG 1.0.3：12 → 18（下限 ≥12，可按判据上调；硬约束仍 ≤8 实时灯、不投影）
     flickerAmplitude: 0.05,
     flickerSpeed: 1.7,
+    /**
+     * t42：**换灯可见性闸门**（架构级修复的核心，比 t5 的分数滞回更硬）。
+     *
+     * 事实（`src/core/environment.js` 的实时点光）：每盏 `PointLight(…, distance=60, decay=1)` 在**超出
+     * `distance` 后对像素贡献恒为 0**（three 的 cutoff），而灯池只有 `maxRealtimePointLights`(8) / 真机
+     * 容量 6 个名额、灯位却有 152 个 ⇒ **必须**换入换出。
+     *
+     * 旧规则（t5）：只有"挑战者分数比在位者高 `LAMP_HYSTERESIS_MARGIN`"才换 ⇒ 换的两侧**通常都在照度
+     * 范围内**（都 <60 m、分数接近）⇒ 一次换灯 = 一盏实亮灯熄 + 另一盏实亮灯亮 ⇒ **必然可见**。
+     * 新规则（t42）：**只在在位者已离开自己的照度范围**（`距离 > distance × (1 + 本裕量)` = 75 m 外、
+     * 逐像素贡献为 0）时才换 ⇒ 交换在画面上**构造性不可见**；距离变化仍由每帧 falloff 与 0.3 s 斜坡承担。
+     * `allowInRangeEviction: false` = 新规则；`true` 只用于**旧规则对照/突变证明**（守卫 ②）。
+     */
+    evictRangeMargin: 0.25,
+    allowInRangeEviction: false,
+    /**
+     * t42：**灯池选择架构**（本卡的核心判定）。
+     *
+     * `'dynamic'`（t5 及以前）：按**相机距离**给 152 个灯位打分、取前 N ⇒ 相机一动，截断线两侧就换人。
+     *   t5 用"分数滞回 + 身份绑槽 + 0.3s 斜坡"把换灯压到 91 次/14 机位×150 帧（真机 56→11），
+     *   但**换灯本身仍在发生**，而每一盏实时点光照亮的是它**自己周围的地面**（three 的 cutoff 是
+     *   片元↔灯距离，不是相机距离）⇒ 远景机位下"换灯"照样改变可见画面（庭院亮暗换位置）⇒
+     *   参数调优有上限（这是架构问题，不是参数问题）。
+     * `'zone-static'`（t42 默认）：池 = **分区静态配额**（相机所在区先占 `localShare` 份额，其余按固定
+     *   权重序分配），**与相机位置无关** ⇒ 相机在同一分区内做任何运动（旋转/平移）都**不触发换灯**，
+     *   换灯只发生在跨越分区边界时（离散、偶发、由 0.3s 斜坡承担）。代价见
+     *   `docs/report-lamp-architecture.md`：远处分区始终占着名额（相关性地让位给"稳定"）。
+     */
+    selectionMode: 'zone-static',
+    /** 分区静态配额权重（只按比例分配真机容量；不改变容量本身）。 */
+    zoneQuotaWeights: Object.freeze({ B: 3, C: 2, D: 2, E: 2, F: 2 }),
+    /** 相机所在区的名额占比（其余名额按固定权重序分给别的区）。 */
+    zoneLocalShare: 0.5,
+    /**
+     * t42：**重选间隔与相机速度挂钩**（卡面指定手段）——`updateLampSelection` 的节流窗口 =
+     * `base(0.35s) … reselectMaxSeconds`，按相机位移速度在 `reselectSpeedReference`(m/s) 以下线性拉长。
+     * 依据：慢速移动/缓慢环绕时换灯最刺眼（画面近乎静止，只有灯在换）；高速环绕（守卫协议 ≈209 m/s）
+     * 场景本身剧烈变化、换灯不可见 ⇒ 保留 base。**只改节流窗口，不改选择规则与任何预算**。
+     */
+    reselectMaxSeconds: 0.8,
+    reselectSpeedReference: 60,
   }),
   atmosphere: Object.freeze({
     smokeEnabled: true, // 香炉轻烟

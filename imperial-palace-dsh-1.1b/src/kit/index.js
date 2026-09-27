@@ -39,6 +39,7 @@ import { interiorSet as buildInteriorSet, INTERIOR_KINDS, INTERIOR_MATERIALS } f
 import {
   makeTower as buildTower, towerPlan as buildTowerPlan, disposeTower as disposeTowers,
   climbStepMax, climbSequenceReport, faceOverlaps, TOWER_SPECS, CLIMB_SAFETY,
+  makeStoreyBands as buildStoreyBands, storeyBandPlan as buildStoreyBandPlan,
 } from './towers.js';
 
 /**
@@ -47,6 +48,9 @@ import {
  *
  * 版本历史
  * ---------
+ * - **1.0.3**（2026-09-26，t41 中轴楼阁腰檐分层；**只加构件工厂，零既有几何改动**）：
+ *   导出 `makeStoreyBands` / `storeyBandPlan`（按等级在屋身腰位加腰檐 + 檐脊，使楼身看得出分层）。
+ *   **不登记可行走面**（上层可达在本卡 inScope 内被 `faceOverlaps` 判据实测证伪，按卡内条款交回裁定说明）。
  * - **1.0.2**（2026-09-26，t39 塔楼城市级接线；**几何零改动**，只新增导出与工厂名）：
  *   导出 `makeTower` / `towerPlan` / `disposeTower`（+ `climbStepMax` / `climbSequenceReport` / `faceOverlaps` /
  *   `TOWER_SPECS` / `CLIMB_SAFETY`），并把 `kit.makeTower(params)`（绑定 `env`）与
@@ -72,7 +76,7 @@ import {
  *      并回显 `metrics.arch = { radius, rise, crownY, springY, clearance, referenceY, tube }`。
  * - **1.0.0**（t3 首次交付）：参数化构件工厂 + config 令牌材质 + LOD/合批 + 资源登记。
  */
-export const KIT_VERSION = '1.0.2';
+export const KIT_VERSION = '1.0.3';
 
 const BUILDING_FACTORY_NAMES = Object.freeze([
   'hall', 'gateHall', 'sideHall', 'pavilion', 'cornerTower', 'wall', 'courtyardGate', 'corridor', 'terrace', 'stairs', 'bridge',
@@ -81,7 +85,7 @@ const PROP_FACTORY_NAMES = Object.freeze(['tree', 'rockery', 'lantern', 'railing
 /** 室内陈设套件（t61）：一套工厂按 kind 分层覆盖殿/配殿/门殿/角楼。 */
 const INTERIOR_FACTORY_NAMES = Object.freeze(['interiorSet']);
 /** 可登塔楼工厂（t39）：`makeTower` 与 `towerPlan` 同源同轮（面/障碍/机位由同一 plan 派生）。 */
-const TOWER_FACTORY_NAMES = Object.freeze(['makeTower', 'towerPlan', 'disposeTower']);
+const TOWER_FACTORY_NAMES = Object.freeze(['makeTower', 'towerPlan', 'disposeTower', 'makeStoreyBands', 'storeyBandPlan']);
 
 /**
  * 创建构件库。
@@ -177,6 +181,9 @@ export function createKit(ctx = {}) {
 
     // —— 可登塔楼（t39）：几何与登记（walkable/obstacles/viewpoints）由**同一 plan** 派生
     makeTower: (params = {}) => buildTower(env, params),
+    /** t41：腰檐分层（外观多层；不登记可行走面） */
+    makeStoreyBands: (params = {}) => buildStoreyBands(env, params),
+    storeyBandPlan: (params = {}) => buildStoreyBandPlan(params, config),
     towerPlan: (params = {}) => buildTowerPlan(params, config),
     disposeTower: (towers = []) => disposeTowers(towers),
 
@@ -300,6 +307,8 @@ export {
   INTERIOR_MATERIALS,
   /* t39：塔楼工厂与面序列工具（`makeTower` 与 `towerPlan` 同源同轮） */
   buildTower as makeTower,
+  buildStoreyBands as makeStoreyBands,
+  buildStoreyBandPlan as storeyBandPlan,
   buildTowerPlan as towerPlan,
   disposeTowers as disposeTower,
   climbStepMax,

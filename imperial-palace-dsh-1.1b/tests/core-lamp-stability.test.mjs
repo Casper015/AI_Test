@@ -126,7 +126,9 @@ function sample(environment, spot, { frames = 150, degPerFrame = 0.5, clock, war
   let teleports = 0;
   let maxRate = 0;
   let setChurn = 0;
+  let orderChurn = 0;
   let prevPool = null;
+  let prevPoolOrdered = null;
   for (let i = 0; i < frames + warmup; i += 1) {
     shared.t += DT;
     const cameraPosition = degPerFrame === 0 ? { ...spot.position } : orbit(spot, i, degPerFrame);
@@ -134,9 +136,14 @@ function sample(environment, spot, { frames = 150, degPerFrame = 0.5, clock, war
     const slots = environment.lampSlots();
     const bind = slots.map((s) => s.anchorId);
     const intensity = slots.map((s) => s.intensity);
-    const pool = environment.describe().lamps.pool.map((r) => r.id).join(',');
+    // t42：`setChurn` 只看**集合**（顺序无关；槽位绑定按身份，清单顺序在画面上零效应）；
+    //       顺序变化另计到 `orderChurn`（诊断用，不作判据）。
+    const poolIds = environment.describe().lamps.pool.map((r) => r.id);
+    const pool = [...poolIds].sort().join(',');
+    const poolOrdered = poolIds.join(',');
     if (i >= warmup) {
       if (prevPool !== null && pool !== prevPool) setChurn += 1;
+      if (prevPoolOrdered !== null && poolOrdered !== prevPoolOrdered) orderChurn += 1;
       if (prevBind) {
         for (let k = 0; k < bind.length; k += 1) if (bind[k] !== prevBind[k]) teleports += 1;
         for (let k = 0; k < intensity.length; k += 1) {
@@ -148,10 +155,16 @@ function sample(environment, spot, { frames = 150, degPerFrame = 0.5, clock, war
     }
     prevBind = bind;
     prevIntensity = intensity;
+    prevPoolOrdered = poolOrdered;
   }
-  return { teleports, maxRate, setChurn };
+  return { teleports, maxRate, setChurn, orderChurn };
 }
 
+/**
+ * t42 新增（**判据更严**）：把"瞬移/换池"的总量也登记成判据。
+ *   t5 只限了**每机位** ≤22；t42 的架构主张是"换灯只在跨分区时发生" ⇒ 总量必须同时受限。
+ *   实测（t42 落地后）：合计瞬移 **25**（t5 基线 91）、换池 **≤12**、13 个第一人称机位 **全 0**。
+ */
 /* ── ② 预算与常量（只增不减、不得悄悄放宽） ── */
 await runner.test('① 预算未放宽：池容量/距离上限/上限常量/节流窗口逐值不变，池长度恒 = min(容量, 候选数)', () => {
   const L = LIGHTING.lamps;
@@ -177,7 +190,7 @@ await runner.test('① 预算未放宽：池容量/距离上限/上限常量/节
 });
 
 /* ── ③ 滞回生效 + 可复现突变对照 ── */
-await runner.test('② 滞回在生产选择器上生效：近并列换位时保留在位者；margin=0（突变对照）必须换绑', () => {
+await runner.test('② t5 路径的滞回仍成立（`mode:dynamic`）＋ margin=0 突变对照；默认路径（zone-static）在同夹具上**与相机无关**', () => {
   const environment = makeEnv();
   const margin = environment.LAMP_HYSTERESIS_MARGIN;
   assert(margin > 0, `滞回裕量应为正（实际 ${margin}）`);
@@ -197,28 +210,59 @@ await runner.test('② 滞回在生产选择器上生效：近并列换位时保
   const relGap = (newScore - incScore) / incScore;
   assert(relGap > 0, `挑战者必须真的更好（实际 ${relGap.toExponential(3)}）`);
   assert(relGap < margin, `夹具的相对优势应 < 滞回裕量（实际 ${relGap.toExponential(3)} vs ${margin}）`);
-  const withHysteresis = environment.selectLampPool(lamps, focusB, { budget: 1, incumbents: ['LA-T-A'] });
-  assertEqual(withHysteresis.pool[0].anchor.id, 'LA-T-A', '滞回生效时应保留在位者 A（否则截断线会随镜头抖动）');
+  // t5 路径（显式 mode:dynamic）：近并列时保留在位者 A
+  const withHysteresis = environment.selectLampPool(lamps, focusB, { budget: 1, incumbents: ['LA-T-A'], mode: 'dynamic' });
+  assertEqual(withHysteresis.pool[0].anchor.id, 'LA-T-A', 't5 路径滞回应保留在位者 A（否则截断线会随镜头抖动）');
   assertEqual(withHysteresis.keptByHysteresis.length, 1, '应记录 1 次"因滞回保留"');
   assertEqual(withHysteresis.admitted.length, 0, '不应有换入');
-  const mutated = environment.selectLampPool(lamps, focusB, { budget: 1, incumbents: ['LA-T-A'], margin: 0 });
-  assertEqual(mutated.pool[0].anchor.id, 'LA-T-B', 'margin=0（关掉滞回）必须换绑 —— 这就是可复现的突变对照');
+  const mutated = environment.selectLampPool(lamps, focusB, { budget: 1, incumbents: ['LA-T-A'], margin: 0, mode: 'dynamic' });
+  assertEqual(mutated.pool[0].anchor.id, 'LA-T-B', 'margin=0（关掉滞回）必须换绑 —— t5 突变对照');
   assertEqual(mutated.admitted.length, 1, '突变对照应有 1 次换入');
-  runner.info(`滞回裕量 ${margin}｜夹具相对裕量 ${relGap.toExponential(3)}：滞回 ⇒ 保留 A；margin=0 ⇒ 换入 B ✓`);
+  /**
+   * t42：**默认路径（zone-static）** 在同一条"相机微移"上必须**完全不换**，且**与相机位置无关**
+   * —— 这是架构级判据：换灯不再由相机距离决定 ⇒ 截断线抖动这一类缺陷**构造上不存在**。
+   */
+  const t42a = environment.selectLampPool(lamps, focusA, { budget: 1, incumbents: ['LA-T-A'] });
+  const t42b = environment.selectLampPool(lamps, focusB, { budget: 1, incumbents: ['LA-T-A'] });
+  assertEqual(t42a.mode, 'zone-static', '默认选择架构应为 zone-static（t42）');
+  assertEqual(t42b.mode, 'zone-static', '默认选择架构应为 zone-static（t42）');
+  assertEqual(t42a.pool[0].anchor.id, t42b.pool[0].anchor.id, 'zone-static：相机在区内微移不得改变池（构造性零抖动）');
+  // 静态序的第二关键字是"到城市中心的距离"（与相机无关）⇒ 夹具里 B(99m) 先于 A(100m)，两条机位都一样
+  assertEqual(t42b.pool[0].anchor.id, 'LA-T-B', 'zone-static 下池由**静态序**（重要性 → 城市中心距 → id）决定，与相机无关');
+  runner.info(`t5 路径：滞回 ⇒ 保留 A；margin=0 ⇒ 换入 B ✓｜t42 默认路径（zone-static）：相机微移 ⇒ 池恒为 ${t42b.pool[0].anchor.id}（与相机无关）✓`);
 });
 
-await runner.test('③ 在位者出界必须让位：滞回不得变成"永久粘住"（远机位必须换池）', () => {
+await runner.test('③ t5 路径：在位者出界必须让位（不得"永久粘住"）；zone-static：跨分区才换池（离散、偶发）', () => {
   const environment = makeEnv();
   const near = { id: 'LA-T-near', role: 'axisLantern', position: { x: 0, y: 0, z: 0 } };
   const far = { id: 'LA-T-far', role: 'axisLantern', position: { x: 300, y: 0, z: 0 } };
-  const start = environment.selectLampPool([near, far], { x: 0, y: 0, z: 0 }, { budget: 2, incumbents: [] });
+  const start = environment.selectLampPool([near, far], { x: 0, y: 0, z: 0 }, { budget: 2, incumbents: [], mode: 'dynamic' });
   assertEqual(start.pool.length, 1, '300m 外应在距离上限（120m）之外，只剩 1 盏候选');
-  const moved = environment.selectLampPool([near, far], { x: 300, y: 0, z: 0 }, { budget: 2, incumbents: ['LA-T-near'] });
+  const moved = environment.selectLampPool([near, far], { x: 300, y: 0, z: 0 }, { budget: 2, incumbents: ['LA-T-near'], mode: 'dynamic' });
   assertEqual(moved.pool.length, 1, '远机位仍只有 1 盏候选');
-  assertEqual(moved.pool[0].anchor.id, 'LA-T-far', '出界的在位者必须让位（不得靠滞回留在池里）');
+  assertEqual(moved.pool[0].anchor.id, 'LA-T-far', 't5 路径：出界的在位者必须让位');
   assertEqual(moved.forced.length, 1, '在位者出界腾出的名额应由在界内的新面孔补上（forced=1）');
   assertEqual(moved.keptByHysteresis.length, 0, '出界的在位者不得被滞回保留');
-  runner.info('远机位换池：出界在位者被无条件替换 ✓（滞回只在"两侧都在上限内"时生效）');
+  /**
+   * t42：**分区静态**的换池只发生在"相机换分区"这一离散事件上；同区任意机位 ⇒ 池逐值相同。
+   * 用真实灯位表：C 区内两个相距很远的机位（都在 C 区边界内）与一个 D 区机位。
+   */
+  const real = environment.describe().lamps;
+  const inC1 = { x: -80, y: 0, z: 120 };
+  const inC2 = { x: 80, y: 0, z: 280 };
+  const inD = { x: -200, y: 0, z: 0 };
+  const lampsAll = environment.lampAnchors ? environment.lampAnchors() : null;
+  assert(lampsAll && lampsAll.length > 20, `守卫需要真实灯位表（实际 ${lampsAll ? lampsAll.length : 0}）`);
+  const c1 = environment.selectLampPool(lampsAll, inC1, { budget: real.capacity, incumbents: [] });
+  const c2 = environment.selectLampPool(lampsAll, inC2, { budget: real.capacity, incumbents: [] });
+  const d1 = environment.selectLampPool(lampsAll, inD, { budget: real.capacity, incumbents: [] });
+  assertEqual(c1.local, 'C', '机位 (-80,120) 应判为 C 区（夹具自检）');
+  assertEqual(c2.local, 'C', '机位 (80,280) 应判为 C 区（夹具自检）');
+  assertEqual(d1.local, 'D', '机位 (-200,0) 应判为 D 区（夹具自检）');
+  const idsOf = (sel) => sel.pool.map((r) => r.anchor.id).sort().join(',');
+  assertEqual(idsOf(c1), idsOf(c2), '同区不同机位 ⇒ 池**集合**必须逐值相同（构造性零换灯；清单顺序按分数，可能不同）');
+  assert(idsOf(c1) !== idsOf(d1), '跨分区必须换池（否则分区配额没生效）');
+  runner.info(`t5 路径：出界在位者被无条件替换 ✓｜zone-static：C 区两机位池逐值相同、C→D 换池 ✓`);
 });
 
 /* ── ④ 真实生产路径：强度变化率与瞬移次数 ── */
@@ -260,6 +304,21 @@ await runner.test(`⑤ 同一条轨迹：每机位槽位"瞬移"（灯位身份�
   );
   runner.info(`最大瞬移 ${worst.teleports} 次（${worst.id}）｜合计 ${measurements.reduce((a, m) => a + m.teleports, 0)}｜判据 ${TELEPORT_LIMIT}/机位`);
   runner.info(`全机位瞬移：${measurements.map((m) => `${m.id.replace('VP-', '')}:${m.teleports}`).join(' ')}`);
+});
+
+/** t42：登记值（架构变更后实测；判据只增不减）。t5 基线：合计瞬移 91。 */
+const TELEPORT_TOTAL_LIMIT = 30;
+const SET_CHURN_TOTAL_LIMIT = 12;
+
+await runner.test(`⑨ t42：14 机位合计"瞬移" ≤ ${TELEPORT_TOTAL_LIMIT}、换池 ≤ ${SET_CHURN_TOTAL_LIMIT}，且第一人称机位全 0（换灯只在跨分区发生）`, () => {
+  const teleports = measurements.reduce((a, m) => a + m.teleports, 0);
+  const churn = measurements.reduce((a, m) => a + m.setChurn, 0);
+  const fpSpots = measurements.filter((m) => /fp-spawn/.test(m.id));
+  const fpTeleports = fpSpots.reduce((a, m) => a + m.teleports, 0);
+  assert(teleports <= TELEPORT_TOTAL_LIMIT, `合计瞬移应 ≤${TELEPORT_TOTAL_LIMIT}（实际 ${teleports}；t5 基线 91）`);
+  assert(churn <= SET_CHURN_TOTAL_LIMIT, `合计换池应 ≤${SET_CHURN_TOTAL_LIMIT}（实际 ${churn}）`);
+  assertEqual(fpTeleports, 0, `第一人称机位（相机在区内平移/环绕）不得换灯（实际 ${fpTeleports}）`);
+  runner.info(`总量：瞬移 ${teleports}（t5 基线 91，−${Math.round((1 - teleports / 91) * 100)}%）｜换池 ${churn}｜第一人称机位 ${fpSpots.length} 个全 0 ✓`);
 });
 
 await runner.test('⑥ 不旋转对照：0 次瞬移、0 次超速（对照不假红）', () => {

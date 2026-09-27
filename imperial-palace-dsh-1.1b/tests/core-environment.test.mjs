@@ -168,8 +168,16 @@ await runner.test('⑥ 逐灯清单可**直接读**：describe().lamps.pool 为 
     THREE,
   });
   environment.applyPreset(CONFIG.LIGHTING.timePresets[CONFIG.LIGHTING.timePresets.length - 1]); // 夜景（容量最大）
+  /**
+   * t42：本节断言的是 **t90 的"排名函数端到端效应"（近处优先）** —— 它只在 `'dynamic'` 架构成立；
+   * 默认架构已改为 `'zone-static'`（分区静态配额，**与相机无关**，见 t42 的 core-lamp-stability 与
+   * `docs/report-lamp-architecture.md`）。这里显式切到 dynamic ⇒ **t90 的判据一条未删、强度不变**；
+   * 分区静态架构的性质由本文件新增的 ⑦b 与 core-lamp-stability 的 ②/③ 断言。
+   */
+  assertEqual(environment.setLampSelectionMode('dynamic'), 'dynamic', 't90 段必须显式运行在 dynamic 架构上');
   for (let i = 0; i < 4; i += 1) environment.update(1 / 60, i * 0.4, { cameraPosition: focus });
   const d = environment.describe();
+  assertEqual(d.lamps.gate.mode, 'dynamic', 'describe().lamps.gate.mode 应回显 dynamic（t42 新增诊断）');
   const pool = d.lamps.pool;
   assert(Array.isArray(pool) && pool.length > 0, `describe().lamps.pool 应为非空数组（实际 ${JSON.stringify(pool)}）`);
   // 池长度 = min(真机容量, 距离上限内的候选数) ⇒ 只能断言“不超过容量且不少于两盏室内灯”
@@ -368,5 +376,44 @@ await runner.test('t122③：方向性铁律 —— 覆盖 exposure=0.95（低�
 });
 
 /* ========================================================================== */
+
+/**
+ * t42：**灯池架构审查的常驻判据**（分区静态配额）。
+ *   · 池由 `(真机容量, 相机分区)` 唯一决定 ⇒ **同一分区内任意机位、任意帧 ⇒ 池逐值相同**（构造性零换灯）；
+ *   · 跨分区 ⇒ 换池（否则配额没生效）；
+ *   · 相机在分区之外（远景机位）⇒ 全城静态序（同样与相机无关）；
+ *   · 配额之和 = 真机容量（不多不少，**预算未变**）。
+ */
+await runner.test('⑦b t42 分区静态灯池：同区任意机位池逐值相同、跨区换池、配额和 = 容量（构造性零换灯）', () => {
+  const events = createEventBus();
+  const scene = new THREE.Scene();
+  // 用**真实灯位表**（layout.LIGHT_ANCHORS：B24/C14/D2/E2/F7）——分区静态选择的前提是灯位带 zone
+  const environment = createEnvironment({ config: CONFIG, events, scene, registry: { allLightAnchors: () => LAYOUT.LIGHT_ANCHORS }, THREE });
+  environment.applyPreset(CONFIG.LIGHTING.timePresets[CONFIG.LIGHTING.timePresets.length - 1]);
+  environment.update(1 / 60, 0.2, { cameraPosition: { x: 0, y: 0, z: 0 } });
+  const anchors = environment.lampAnchors();
+  assert(anchors.length >= 20, `应有真实灯位表（实际 ${anchors.length}）`);
+  const zoneOf = (p) => environment.lampZoneAt(p);
+  assertEqual(zoneOf({ x: -80, z: 120 }), 'C', '(-80,120) 应判为 C 区');
+  assertEqual(zoneOf({ x: 80, z: 280 }), 'C', '(80,280) 应判为 C 区');
+  assertEqual(zoneOf({ x: -200, z: 0 }), 'D', '(-200,0) 应判为 D 区');
+  assertEqual(zoneOf({ x: 1200, z: -1200 }), 'CITY', '远在包络外的机位应判为 CITY（不硬塞某个区）');
+  const capacity = environment.describe().lamps.capacity;
+  const ids = (rows) => rows.map((r) => r.anchor.id).sort().join(',');
+  const c1 = environment.selectLampPool(anchors, { x: -80, z: 120 }, { budget: capacity, incumbents: [] });
+  const c2 = environment.selectLampPool(anchors, { x: 80, z: 280 }, { budget: capacity, incumbents: [] });
+  const c3 = environment.selectLampPool(anchors, { x: -78, z: 118 }, { budget: capacity, incumbents: [] });
+  const d1 = environment.selectLampPool(anchors, { x: -200, z: 0 }, { budget: capacity, incumbents: [] });
+  assertEqual(c1.mode, 'zone-static', '默认架构应为 zone-static');
+  assertEqual(ids(c1.pool), ids(c2.pool), 'C 区两机位（相距 ≈180m）池必须逐值相同');
+  assertEqual(ids(c1.pool), ids(c3.pool), 'C 区微移 ⇒ 池必须逐值相同');
+  assert(ids(c1.pool) !== ids(d1.pool), '跨分区（C→D）必须换池');
+  assertEqual(c1.pool.length, capacity, '池长应 = 真机容量');
+  const sum = Object.values(c1.quotas).reduce((a, b) => a + b, 0);
+  assertEqual(sum, capacity, `配额之和应 = 真机容量（${sum} vs ${capacity}）`);
+  assertEqual(c1.local, 'C', '配额应把相机区标为 local');
+  assert(c1.quotas.C >= 1, `相机区至少应得 1 个名额（实际 ${c1.quotas.C}）`);
+  runner.info(`分区静态：C 区 3 机位池逐值相同（${c1.pool.length} 盏，配额 ${JSON.stringify(c1.quotas)}）｜C→D 换池 ✓｜CITY 兜底 ✓`);
+});
 
 process.exit(runner.summary());
