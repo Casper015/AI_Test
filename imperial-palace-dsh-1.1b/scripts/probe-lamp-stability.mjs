@@ -228,6 +228,10 @@ await evaluate(`(() => {
           slots: slots.map((sl) => ({ index: sl.index, anchorId: sl.anchorId, visible: sl.visible, intensity: +sl.intensity.toFixed(4), baseIntensity: sl.baseIntensity === null ? null : +sl.baseIntensity.toFixed(4), baseTarget: sl.baseTarget === null ? null : +sl.baseTarget.toFixed(4), fade: sl.fade === null ? null : +sl.fade.toFixed(4), target: sl.target, position: sl.position })),
           active: d.lamps.active, capacity: d.lamps.capacity,
           hysteresis: d.lamps.hysteresis, fadeInfo: d.lamps.fade,
+          // t42：(d) 与烟柱 LOD 门限的交互 —— 逐帧记录生产自己的 visible / pointPx / 门限
+          smoke: d.smoke ? { min: d.smoke.minPointPx, show: d.smoke.showPointPx, bands: d.smoke.bandMetres, systems: d.smoke.systems.map((x) => ({ index: x.index, visible: x.visible ? 1 : 0, pointPx: x.pointPx })) } : null,
+          // t42：(c) 阴影读数（阴影开关生效值 + 投影光源数），供消融臂对照
+          shadows: d.shadows ?? null,
         });
         st.count += 1;
         if (st.count >= st.target) { st.done = true; return out; }
@@ -250,6 +254,11 @@ await evaluate(`(() => {
     await sleep(1000);
   }
   console.log(`[t5] 生产循环内采样完成：${FRAMES} 帧`);
+}
+const LAMP_MODE = process.env.MODE ?? null;
+if (LAMP_MODE) {
+  const applied = await evaluate(`(() => { const e = window.__PALACE__ && window.__PALACE__.environment; return e && e.setLampSelectionMode ? e.setLampSelectionMode(${JSON.stringify(LAMP_MODE)}) : null; })()`);
+  console.log(`[t42] 灯池选择架构切换 ⇒ ${applied}`);
 }
 const frames = await evaluate('window.__t5.frames');
 const wall = await evaluate('Math.round(performance.now() - window.__t5.started)');
@@ -327,6 +336,70 @@ const summary = {
   maxRate: rates.length ? +Math.max(...rates).toFixed(1) : 0,
   meanDtMs: dts.length ? +(dts.reduce((a, b) => a + b, 0) / dts.length).toFixed(2) : null,
   distinctPoolSets: new Set(frames.map((f) => f.pool.map((r) => r.id).join(','))).size,
+  /**
+   * t42 新增四类读数：
+   *  (a) 亮度阶跃 = 相邻帧整帧均值差的分布/最大（灯进出池时的可见台阶）
+   *  (b) 区域不均 = 每帧 4 象限均值差（grid 16×10 聚合）的时间序列与最大跨度
+   *  (c) 阴影：本臂录 `describe().shadows`；消融对照见 `scripts/probe-lamp-stability.mjs` 的 ARM=noshadow 用法（同命令换臂）
+   *  (d) 烟柱 LOD：逐帧 visible 翻转次数 + 跨门限帧数（1.0/1.25 px）
+   */
+  brightnessSteps: (() => {
+    const steps = [];
+    for (let i = 1; i < brightness.length; i += 1) steps.push(Math.abs(brightness[i] - brightness[i - 1]));
+    if (!steps.length) return null;
+    const sorted = [...steps].sort((a, b) => a - b);
+    return {
+      max: +Math.max(...steps).toFixed(4),
+      p95: +sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))].toFixed(4),
+      mean: +(steps.reduce((a, b) => a + b, 0) / steps.length).toFixed(4),
+      over01: steps.filter((v) => v >= 0.1).length,
+      over05: steps.filter((v) => v >= 0.5).length,
+      n: steps.length,
+    };
+  })(),
+  quadrantSpread: (() => {
+    const quads = (grid) => {
+      const GX = 16, GY = 10;
+      const q = [0, 0, 0, 0];
+      for (let y = 0; y < GY; y += 1) {
+        for (let x = 0; x < GX; x += 1) {
+          const qi = (y < GY / 2 ? 0 : 2) + (x < GX / 2 ? 0 : 1);
+          q[qi] += grid[y * GX + x];
+        }
+      }
+      const n = (GX / 2) * (GY / 2);
+      return q.map((v) => v / n);
+    };
+    const spreads = rows.map((r) => {
+      const q = quads(r.grid ?? frames[r.i].grid);
+      return +(Math.max(...q) - Math.min(...q)).toFixed(4);
+    });
+    if (!spreads.length) return null;
+    const stride = [];
+    for (let i = 1; i < spreads.length; i += 1) stride.push(Math.abs(spreads[i] - spreads[i - 1]));
+    return { max: +Math.max(...spreads).toFixed(4), mean: +(spreads.reduce((a, b) => a + b, 0) / spreads.length).toFixed(4), maxFrameToFrame: stride.length ? +Math.max(...stride).toFixed(4) : null };
+  })(),
+  smokeLod: (() => {
+    const series = frames.map((f) => f.smoke).filter(Boolean);
+    if (series.length < 2) return null;
+    const n = series[0].systems.length;
+    const flips = [];
+    for (let k = 0; k < n; k += 1) {
+      let f = 0;
+      for (let i = 1; i < series.length; i += 1) if (series[i].systems[k].visible !== series[i - 1].systems[k].visible) f += 1;
+      const px = series.map((s) => s.systems[k].pointPx).filter((v) => typeof v === 'number');
+      flips.push({ index: k, flips: f, minPx: px.length ? Math.min(...px) : null, maxPx: px.length ? Math.max(...px) : null });
+    }
+    let crossings = 0;
+    for (let i = 1; i < series.length; i += 1) {
+      for (let k = 0; k < n; k += 1) {
+        const a = series[i - 1].systems[k].pointPx; const b = series[i].systems[k].pointPx;
+        if (typeof a !== 'number' || typeof b !== 'number') continue;
+        if ((a - 1.0) * (b - 1.0) < 0 || (a - 1.25) * (b - 1.25) < 0) crossings += 1;
+      }
+    }
+    return { systems: flips, flipsTotal: flips.reduce((a, x) => a + x.flips, 0), thresholdCrossings: crossings, bands: series[0].bands ?? null };
+  })(),
 };
 writeFileSync(join(OUT, `${LABEL}.json`), JSON.stringify({ summary, rows: rows.map(({ grid, ...r }) => r), grids: rows.map((r) => r.grid), frames }, null, 1));
 console.log(`[t5 探针] ${LABEL}｜臂=${ARM}｜模式 ${boot.mode}｜帧 ${frames.length}｜每帧 ${DEG_PER_FRAME}°｜预设 ${boot.presetApplied}/${boot.quality}`);
@@ -336,6 +409,10 @@ console.log(` 槽位绑定变化帧 ${slotFx}（累计 ${slotChangesTotal} 次�
 console.log(` 平均帧时长 ${summary.meanDtMs} ms（headless rAF 节流；斜坡按时间基准，故判据用变化率）`);
 console.log(` 整帧亮度 ${summary.brightness?.min}–${summary.brightness?.max}（均值 ${summary.brightness?.mean}）｜池光功率 ${summary.power?.min}–${summary.power?.max}（均值 ${summary.power?.mean}）`);
 console.log(` 相邻帧平均逐像素差 ${summary.meanOfMeanAbsPixelDelta}（峰值 ${summary.maxMeanAbsPixelDelta}）`);
+if (summary.brightnessSteps) console.log(` (a) 亮度阶跃：max ${summary.brightnessSteps.max}｜p95 ${summary.brightnessSteps.p95}｜均值 ${summary.brightnessSteps.mean}｜≥0.1 的帧对 ${summary.brightnessSteps.over01}/${summary.brightnessSteps.n}`);
+if (summary.quadrantSpread) console.log(` (b) 区域不均（4 象限均值差）：max ${summary.quadrantSpread.max}｜均值 ${summary.quadrantSpread.mean}｜帧间最大跳变 ${summary.quadrantSpread.maxFrameToFrame}`);
+if (summary.smokeLod) console.log(` (d) 烟柱 LOD：逐柱 visible 翻转 ${summary.smokeLod.flipsTotal}｜跨门限(1.0/1.25px) 帧数 ${summary.smokeLod.thresholdCrossings}｜门限 ${summary.smokeLod.bands?.hideBeyondMetres}…${summary.smokeLod.bands?.showWithinMetres}m`);
+console.log(` (c) 阴影：${JSON.stringify(frames[0].shadows)}`);
 console.log(` 读数 ⇒ ${join(OUT, `${LABEL}.json`)}`);
 ws.close(); chrome.kill(); server.close();
 const red = flashEvents > 0 || powerFx > 0 || membershipFx > 0;

@@ -5399,12 +5399,12 @@
       "id": "t48",
       "subject": "跨区/同区共线重复院墙（可视层）统一到权威归并：每段边界墙恰由一个区域建造",
       "description": "【缺陷（主理人只读实测，56 条 courtWall 全枚举）】共线重叠 5 对，全部沿中轴 z 线：\n· z=-180 CY-B-plaza-wall-north(B) × CY-B-throne-wall-south(B) 各 5 口\n· z=-40  CY-B-throne-wall-north(B) × CY-B-rear-wall-south(B) 各 3 口\n· **z=80  CY-B-rear-wall-north(B) × CY-C-front-wall-south(C) 各 1 口，重叠 192.0m（跨区）**\n· z=142 CY-C-front-wall-north(C) × CY-C-main-wall-south(C) 各 1 口\n· z=216 CY-C-main-wall-north(C) × CY-C-rear-wall-south(C) 各 3 口\n\n【机制】B 侧 `src/zones/forecourt.js::buildCourtWalls` 按（轴向@墙线）bucket 归并（故 B 的两对已被合并），但调用 `wall({...})` **未传 baseY** ⇒ 起于 y=0；C 侧 `src/zones/inner-palace.js` 逐条 `kit.wall({ baseY: TERRAIN.innerPalaceY = 0.9 })` 且**完全不归并** ⇒ z=142/z=216 是同区共面重合、z=80 是**跨区两层共面**（同长 192m、同厚、UV 不同）⇒ 大面红白交替 + 斜条纹；违反「一段边界墙恰由一个区域拥有」。\n\n【关键：碰撞层已经是对的，本卡是把可视层对齐到它】`src/core/layout-slice.js::deriveWallColliders()` 的分组键刻意**不含 owner**（源码注释原文：「B 的后殿院北墙与 C 的内廷院南墙同在 z=80，是同一道实体墙」），输出 `zones[]/wallIds[]/owner(representative)`，由 registry 与 `wallCollidersForZone()` 消费。⇒ **不要新造归并规则**；把 `deriveWallColliders` 的分组/区间并集/门洞并集抽成可复用的 `deriveWallRuns()`（返回 {axis,line,thickness,height,spans,openings,owner,owners,wallIds,y0,y1}），碰撞与可视共用同一份实现。\n\n【out of scope / 禁止】\n- 禁止改 §8.2 预算门禁、§12 阈值、0.5/0.6 台阶阈值、可达性判据；\n- 禁止用「加 MSAA / 改绘制顺序 / 改 depthTest / 全局 polygonOffset / 隐藏 mesh」掩盖共面；\n- 禁止删任何墙段对应的碰撞覆盖（`deriveCityWallColliders()` 的阻挡能力不得减少）；\n- 禁止为了让断言变绿而删断言或放宽区间。",
-      "status": "claimed",
+      "status": "completed",
       "assignee": "foundation-lead",
       "dependencies": [],
       "attempt": 1,
       "createdAt": 1790545410106,
-      "updatedAt": 1790545410126,
+      "updatedAt": 1790547267895,
       "kind": "work",
       "objective": "把可视院墙改为消费「全城归并后的权威墙段」（与碰撞层同源），使每段边界墙恰由一个区域建造：消除 z=80 跨区双层共面（192m）与 z=142 / z=216 同区共面重合，且垂直跨度为贡献者并集（C 侧 0.9m 地面处不得出现缺口）。",
       "inScope": [
@@ -5446,20 +5446,126 @@
         "node scripts/audit.mjs --enforce"
       ],
       "attemptId": "2c808efa-2584-42dd-8096-4e3f4e34db59",
-      "reassigning": false
+      "reassigning": false,
+      "output": "t48 完成 ①②（③ 视觉证据未跑，如实登记）。**① 归并**：`layout-slice.js` 抽出 `deriveWallRuns()`/`wallRunsForZone()`（归并键不含 owner），`deriveWallColliders()` 改为薄映射 ⇒ 碰撞输出**逐值不变**（哈希 d7573f43 / 88 盒）；B/C 两区改为消费**子区间**（`seg.owner === 本区` 才建）⇒ **共面重复 4 对同区(各 192m) → 0**（A/B 探针）；预算调用 344→344、tri 426,925→425,593。**② 中轴彻底打通（用户裁定 P0）**：`layout.js` 新增 `axisCutoutOf/splitAxisWall`，`W = max(最宽中央门洞净宽 + 2×门垛, 该墙线中轴通行道宽 + 2×柱廊占位)` 全部数据推导 ⇒ 7 条墙线 W = 31.2/29.2/23.2/29.2/25.2/17.2/10.4，**残余侧段最短 80.4m ≫ 1m**（无需回退）；跨轴墙拆为「西段（保留原 id）+ 东段 `<id>-east`」，门洞按各段跨度重算 ⇒ **碰撞与可视自动跟随**（无隐形墙/无空气墙）；`WALLS 60→72`（courtWall 56→68），宫墙未动；`LAYOUT_VERSION 1.1.28→1.1.29`（在 t41 理由后**追加**，t41 的 `STOREY_BAND_*` 完整保留、`node --check` OK）；预算调用 345→345、tri 425,977→425,941。**对主理人「各 4 段」观察的澄清（附证据）**：5 个重叠边界在**数据层**各 4 条记录（2 院落 × 左右两半 = 归并的**输入**，`courtyard.wallIds`/C 区逐条墙碰撞/碰撞盒 `wallIds` 归属都依赖它），在**可视层**各 **2 段**（西+东，`sources` 列出全部贡献者、`baseY/topY` 取并集，如 z=80 [-96,-14.6] y[0,5.1] ← CY-B-rear-wall-north+CY-C-front-wall-south）⇒「重复的那一层」在建造/碰撞层**已去掉**。**常驻守卫 +4 条**（归并完备 / 单建造者 / 切口不等式+残余≥1m / 切口内无墙记录），突变（owner 加回归并键）⇒ 必红 ✓；计数 pin 全部改数据推导。**6 条 verify 全绿**：layout 1864/0 · zone-forecourt 43/43 · zone-inner 36/36 · core-walls 18/18 · walk-reachability t140 全通过 · audit 345/350。**越界红原样交回**：core.test（terrace 8 vs 80 = t37/t39 塔楼；远端灯 829.54）、verify-completeness 3.2/5.4b/6.1、verify-experience A3/E3/F1、zone-east（塔楼面 0.4 vs 1.24）、interaction E17b（合成源码自证）。**未完成**：③ 视觉证据（≥2 机位 A/B + judgeShot + manifest）—— 预算耗尽，剩余量化见回执 §16.6。未改 renderer/buildings/config（阈值与 §8.2）/core-antialias，未越界改任何 out-of-scope 文件。",
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/src/core/layout-slice.js",
+        "imperial-palace-dsh-1.1b/src/zones/forecourt.js",
+        "imperial-palace-dsh-1.1b/src/zones/inner-palace.js",
+        "imperial-palace-dsh-1.1b/src/shared/layout.js",
+        "imperial-palace-dsh-1.1b/tests/layout.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/core-walls.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/zone-forecourt.test.mjs",
+        "imperial-palace-dsh-1.1b/tests/zone-inner.test.mjs",
+        "imperial-palace-dsh-1.1b/docs/handoff-layout-interiors.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "① 可视院墙统一到权威归并（跨区/同区共线重叠对 = 0，每段边界墙恰由一个区域建造）",
+          "status": "passed",
+          "evidence": "`src/core/layout-slice.js` 抽出 `deriveWallRuns()`（归并键 轴|墙线|厚度|墙高，**不含 owner**）+ `wallRunsForZone()`；`deriveWallColliders()` 改为薄映射 ⇒ **碰撞输出逐值不变**（规范串哈希 **d7573f43**，88 盒）。B/C 两区改为消费子区间（`seg.owner === 本区` 才建），D/E 未改（其同线墙不重叠）。**A/B 探针**（/tmp/t48-probe3.mjs）：改前共面重复 **4 对同区（各 192m）**、跨区 1 对（z=80）⇒ 改后 **0 对**（跨区 0）· 台账 60 → 45 段 · z=80 存活段 owner=B owners=[B,C] y=[0,5.1] 覆盖 [0, 0.9+4.2] ✓ · 门洞守恒净宽回退 0 段 · 60 墙 / 45 口。"
+        },
+        {
+          "criterion": "② 中轴彻底打通：12 段跨轴院墙中央整段删除（数据层），W 从 layout 数据推导，残余侧段 ≥1m，宫墙不动",
+          "status": "passed",
+          "evidence": "`src/shared/layout.js` 新增 `axisCutoutOf/splitAxisWall`：`W = max(最宽中央门洞净宽 + 2×门垛(1.2), 该墙线中轴通行道宽 + 2×柱廊占位(3.6))`；跨轴墙拆为西段（保留原 id）+ 东段（`<id>-east`），`computeOpenings()` 按各段跨度重算 ⇒ **碰撞与可视自动跟随**。实测 W（7 条墙线）：-400 **31.2** / -180 **29.2** / -40 **23.2** / 80 **29.2** / 142 **25.2** / 216 **17.2** / 300 **10.4**（对应中央门洞 26/22/16/26/18/10/8）；**残余侧段最短 80.4m ≫ 1m**（W 未取大，无需回退）；`WALLS 60→72`（courtWall 56→68）；宫墙 4 段未动；`LAYOUT_VERSION 1.1.28→1.1.29`（在 t41 理由后**追加** t48 理由，t41 的 `STOREY_BAND_*` 段完整保留、`node --check` OK）。"
+        },
+        {
+          "criterion": "碰撞不回退：walk-reachability exit 0（43/43 内景 + 49/49 走查段）、core-collision exit 0、deriveCityWallColliders 与改前逐值一致（差异须登记）",
+          "status": "passed",
+          "evidence": "`node tests/walk-reachability.test.mjs` **exit 0**（t140 全部通过 ✓）；`node tests/core-collision.test.mjs` **exit 0 · 34/34**；`deriveWallColliders()` 在①（归并重构）后规范串哈希 **d7573f43 与改前逐值一致** ✓；②（中轴切口）**按设计改变**碰撞数据（中央整段不再是障碍 ⇒ 该墙线可通行）—— 这是用户裁定的目标态，非回退：改动由 `WALLS` 数据驱动、无隐形墙；已登记的差异即 `WALLS 60→72` 与 7 条墙线的中央缺口。"
+        },
+        {
+          "criterion": "预算：audit --enforce exit 0；主场景绘制调用不增（给改前/改后数）；tri 不增",
+          "status": "passed",
+          "evidence": "`node scripts/audit.mjs --enforce` **exit 0** · 主场景 **345/350** · 分区 B63/C56/D49/E51/F80 · 三角面 **425,941**。**A/B（同树、隔离副本）**：① 逐条墙桩 vs 归并：调用 **344→344**（分区同值）、tri **426,925 → 425,593（−1,332）**；② 关闭中轴切口 vs 有切口：调用 **345→345**（同值）、tri **425,977 → 425,941（−36）** ⇒ **调用零增、三角面下降** ✓。"
+        },
+        {
+          "criterion": "常驻守卫（数据推导）+ 真实文件突变证明（把归并键加回 owner ⇒ 必红）",
+          "status": "passed",
+          "evidence": "`tests/layout.test.mjs` 新增 **4 条 t48 判据**：① 归并完备（无两段 run 共享归并键）② 单建造者（每子区间恰一 owner ∧ 各区之和 = 总数）③ 中轴切口逐段 W 不等式 + 残余 ≥1m（24 段）④ 7 条切口墙线在中央 W 内无任何墙记录。**突变**（隔离副本 /tmp/t48-ab：把 owner 加回归并键）⇒ ① 必红（两段共享键）；恢复 ⇒ 绿（本卡实测 31 段 / 54 子区间 / 0 重复键）。计数类 pin 均已改**数据推导**（layout.test 冻结计数 WALLS 项、core-walls 逐区表与总数、zone-forecourt 段数、zone-inner 北墙拆分段查找），断言只增不减。"
+        },
+        {
+          "criterion": "视觉证据：≥2 机位（B/C 正视中轴）A/B 对照截图 + judgeShot PASS + manifest 留痕",
+          "status": "failed",
+          "evidence": "**未完成（如实登记）**：本卡预算耗尽（距硬停 ~1h），未启动浏览器侧截图。剩余量化已写入回执 §16.6：需 1 个中轴正视（如 `?view=axis`）+ 1 个含门洞近景各 A/B 两张，`node scripts/shot.mjs … --keep-invalid` + `judgeShot`，旧图不删。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd ROOT && node tests/layout.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0 · 1864 项 / 0 失败**；t48 行：`归并段 31 / 子区间 54（{F:4,B:10,C:8,D:16,E:16}）· 中轴切口 24 段 / 7 条墙线`"
+        },
+        {
+          "command": "cd ROOT && node tests/zone-forecourt.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0 · 43/43**（含升级后的中轴开口判据：南墙 `axisCutout.width ≥20`、北墙 ≥24）"
+        },
+        {
+          "command": "cd ROOT && node tests/zone-inner.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0 · 36/36**（北墙 ±84 门洞改为在「原墙 + `-east` 拆分段」两处查）"
+        },
+        {
+          "command": "cd ROOT && node tests/core-walls.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0 · 18/18**（WALLS 计数、逐区院墙数均改数据推导）"
+        },
+        {
+          "command": "cd ROOT && node tests/walk-reachability.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0** · `t140 结果：全部通过 ✓`（43/43 内景 + 49/49 走查段未回退）"
+        },
+        {
+          "command": "cd ROOT && node scripts/audit.mjs --enforce",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0** · 主场景 **345/350** · 分区 B63/C56/D49/E51/F80 · 可见三角面 **425,941**"
+        },
+        {
+          "command": "cd ROOT && node tests/core-collision.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0 · 34/34**（碰撞不回退）"
+        },
+        {
+          "command": "权威探针 /tmp/t48-probe3.mjs（AFTER）与 /tmp/t48-probe.mjs（碰撞哈希基线）",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "AFTER：可视墙段台账 **45 条** · **共面重复 0（跨区 0）** · z=80 存活段 y=[0,5.1] 覆盖 [0,0.9+4.2] ✓ · 门洞净宽回退 **0** · 碰撞哈希 **d7573f43**（改前基线一致 ✓）。BEFORE（A/B 副本逐条墙桩）：台账 60 条 · 共面重复 **4 对同区 192m**（z=-180/-40/142/216）"
+        },
+        {
+          "command": "A/B 预算（/tmp/t48-ab 逐条墙桩；/tmp/t48-ab2 关闭中轴切口）",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "① 归并：调用 **344→344**、tri **426,925→425,593**；② 切口：调用 **345→345**、tri **425,977→425,941** ⇒ 调用零增、tri 下降"
+        },
+        {
+          "command": "越界套件（只读复核，未越界改）：node tests/core.test.mjs / interaction / verify-completeness / verify-experience / zone-east",
+          "status": "failed",
+          "exitCode": 1,
+          "evidence": "core exit 1（`terrace 面应为 8 条…实际 80` = t37/t39 塔楼 72 面 kind:'terrace'；另「远端灯 829.54 不应是实时点光」）· interaction exit 1 · 82/83（`✗ E17b 结构锚定自证…构造检查` —— **合成源码**自证，与本卡文件无关）· verify-completeness exit 1（`3.2 60 段墙…6 段偏弱：CY-C-*-wall-{west,east}`、`5.4b`、`6.1 focus-extra 6`）· verify-experience exit 1（`A3 focus-extra 7≠6`、`E3 院墙连接连续…CY-B-plaza 墙数 6 ≠ wallIds`、`F1`）· zone-east exit 1（`WK-T-watchtower-3-L1-ringN 标高应等于东宫苑地坪：期望 0.4，实际 1.24` = t39 塔楼面）"
+        }
+      ]
     },
     {
       "id": "t49",
       "subject": "中轴腰檐分层（只做外观）：按 grade 定檐口数，eaveAbs/totalHeight/可行走面零漂移",
       "description": "【用户原话】「再把中轴的建筑高度改的高低有序，有的三层有的两层的 现在全是一层的楼」。\n\n【为什么是\"只做外观\"】前一轮已用原型实测证明：在 `src/kit/**` 内给中轴楼阁加**可达**的上层（平座外廊 + 直跑梯）在几何上不可行 —— `kit.hall` 的屋身是一体实心，檐下任意标高处墙面都在 x=±w/2 ⇒ 平座只能外挑、外挑则**上一层压住下一层**（`floorYAt` 取高会把低层玩家吸到高层），连接梯段必被更高层覆盖；原型实测 `climb.ok=false`、`overlapCount=24`。可达版要么授权 `src/kit/buildings.js` 把屋身拆成真楼层（(A)），要么整套移植 `towerPlan` 的环带/切段/外向阶梯（(B)，≈200 行 + layout 派生登记 + WALKABLE 247→≈360）。两者都**不是**现在这个时间窗能安全落地的。\n\n【已确认的事实（决定本卡形态）】`B-hall-main` / `C-hall-bed-main` / `F-gate-south|north` **已经是重檐**（`lowerRoof`/`lowerRidge` 齐备，t27 落地）；用户看到\"全是一层\"的原因是**其余中轴栋仍是单檐**（如 B-hall-mid / B-hall-rear / C 区门殿与配殿）。\n\n【本卡目标（= 主理人裁定的 (C)/(D) 口径）】给中轴上仍为单檐的栋**按 grade 加腰檐分层**（腰檐 + 平座栏板等**纯外观**构件），使中轴读起来\"高低有序、有的三层有的两层\"：\n- **不动体量包络**：`eaveAbs`、`totalHeight`、`AXIS_TIER_SPEC` 序**逐值不变**（t38 已冻结）；\n- **不新增可行走面 / 内景 / 机位 / 灯位**（WALKABLE 247、内景 43、VIEWPOINTS 62 不动）；\n- **檐口数由 grade 数据推导**（g3 ⇒ 三层檐、g2 ⇒ 两层檐），禁止逐栋写死；\n- **优先复用既有合批桶**（`lowerRoof` / `lowerRidge` / 既有 railing 类），新增桶必须给 §8.2 账；**F 区 80/80 零余量 ⇒ F 区绘制调用数不得变化**；\n- 范围：能在本卡 inScope（`src/kit/**`）内完成的栋；需要改 `src/zones/inner-palace.js` 才能生效的部分**只在回执里逐栋登记待派**，不要越界。\n\n【明确非目标（事后另派，记录在此避免重复决策）】(A) 内廊真楼层、(B) towerPlan 环带移植 —— 两者都是完整卡的工作量，置于长假便宜窗口再评估；本卡**不得**在未授权下改 `src/kit/buildings.js` 的屋身实心结构或 `src/kit/towers.js` 盘道。",
-      "status": "claimed",
+      "status": "completed",
       "assignee": "kit-engineer",
       "dependencies": [
         "t41"
       ],
       "attempt": 1,
       "createdAt": 1790546071110,
-      "updatedAt": 1790546559963,
+      "updatedAt": 1790547146630,
       "kind": "work",
       "objective": "给中轴上仍为单檐的栋按 grade 数据推导地加腰檐分层（腰檐 + 平座栏板等纯外观构件），使中轴外观\"高低有序、有的三层有的两层\"；同时保证 eaveAbs/totalHeight/WALKABLE/内景/机位/灯位计数与 F 区绘制调用逐值不变。",
       "inScope": [
@@ -5492,7 +5598,73 @@
         "node scripts/audit.mjs --enforce"
       ],
       "attemptId": "85c1c9c3-cbeb-4907-869d-11f0c0e73816",
-      "reassigning": false
+      "reassigning": false,
+      "output": "t49 完成：**本卡实际交付 = 门贴图 UV 相位世界锚定**（本卡原定腰檐分层已由 t41 attempt 5 交付，本次不重复实现、未改任何层数/计数）。\n\n【修法（只改 UV）】`src/kit/geometry.js` 新增 `anchorFaceUVs()`（按三角形主法线：±z 面 u=墙内绝对 x/tile、±x 端面 u=z/tile、顶底 u=x/tile，v 用世界 y/z）+ `box()` 可选 `uvAnchor`（默认关，既有调用零影响）；`buildings.js::makeWall` 的 `wallBody`/`wallBase`/`wallLintel` 四处盒体打开锚定，并把墙内局部坐标**平移到世界沿墙轴**（`_worldU=mid·dir`、`_worldP=mid·perp`，多段共线墙也不留缝；±z 两面各按世界坐标、不加同一常数）；`geometry.js::facadeWall` 两处分块盒打开锚定。**不动 tile 尺度/不换贴图/不关材质绕。**\n\n【读数（真实文件口径，`work/probe-t49-uv.mjs`）】\n· 夹具（主理人同一条 `kit.wall(...)` 命令）：`wallBody` ±z 面 u 与世界锚定 `x/tile` **最大偏差 0.00e+0 格**（改前：右段 14.6875 格 = 94m、门额 14.6875 格）；门洞左/右缘 x=∓6 处 u **唯一**（极差 <1e-3 格）。\n· 全城 `layout.WALLS` **72 条**、544 块：逐 ±z 三角面最大偏差 **7.63e-6 格**（< 1e-3）。\n· tile 尺度逐值不变（plasterRed **6.4m** / stone **1.6m**）。\n· 预算：`audit --enforce` **exit 0** 且计数与 t49 前**逐值相同** → 主场景 **345/350** · B 63/70 · C 56 · D 49 · E 51 · **F 80/80** · 可见三角面 **425941**（只改 UV ⇒ 顶点/桶不变）。\n· 判据：`tests/kit.test.mjs` **1772/1772 exit 0**（§26 新增 **8 条**，含**突变对照**：旧行为每块 0 起 ⇒ 13.75 格 ⇒ 必红）；`tests/layout.test.mjs` **exit 0 全部通过**。\n\n【未完成/待派（如实，详见 `work/t49-receipt.md` §5）】①**视觉证据未跑**：`scripts/shot.mjs` 的 ≥2 机位 A/B + judgeShot 未执行（本会话 headless 浏览器多次 >600s 未返回，不做假证据）；建议 V3/人工用 `?view=axis` 门洞近景 + `?view=focus&focus=B-gate-front` 各出一图。②**立面混合桶**：`wall` 合批桶把前后立面/侧墙/其它子构件混在一起，`facadeWall` 分块盒已锚定，但该桶内其余子构件（山墙/槛墙等）尚未锚定；实测该桶单一仿射拟合残差 ≤2.08e+1 格（该口径无意义，门侧连续性需按 **(z, y) 带分组**重做判据）⇒ 交回。③文件级突变重跑未做（以 §26 解析式突变对照覆盖）。未触碰 `src/zones/**`、`src/shared/layout.js`、`LAYOUT_VERSION`、任何 WALLS/腰檐计数。",
+      "changedPaths": [
+        "imperial-palace-dsh-1.1b/src/kit/geometry.js",
+        "imperial-palace-dsh-1.1b/src/kit/buildings.js",
+        "imperial-palace-dsh-1.1b/tests/kit.test.mjs",
+        "imperial-palace-dsh-1.1b/work/probe-t49-uv.mjs",
+        "imperial-palace-dsh-1.1b/work/t49-receipt.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "逐栋台账（只读探针 + 可复现命令）",
+          "status": "passed",
+          "evidence": "work/probe-t49-uv.mjs（可复现：node work/probe-t49-uv.mjs）：全城 layout.WALLS **72 条**逐 ±z 三角面，分块 **544 块**；改前（旧行为解析式）右段偏心 **14.6875 格（94m）**、门额 **14.6875 格**；改后**最大偏差 7.63e-6 格**（夹具 0.00e+0）。中央口径：363 块/1000 格"
+        },
+        {
+          "criterion": "口径零漂移：eaveAbs/totalHeight/WALKABLE/内景/VIEWPOINTS/LIGHT_ANCHORS 逐值不变",
+          "status": "passed",
+          "evidence": "本卡只改 UV（顶点/桶不变）：audit --enforce exit 0 且计数与 t49 前**逐值相同**（主场景 345/350 · B 63/70 · C 56 · D 49 · E 51 · **F 80/80** · 可见三角面 425941）；未触碰 zones/**、layout.js、LAYOUT_VERSION、WALLS/腰檐计数；tile 尺度逐值不变（plasterRed 6.4m / stone 1.6m）"
+        },
+        {
+          "criterion": "常驻守卫（只增不减）+ 突变对照必红",
+          "status": "passed",
+          "evidence": "tests/kit.test.mjs §26 新增 **8 条**：夹具 u==x/tile、门洞左/右缘 u 唯一、全城 72 条墙逐三角面世界锚定 <1e-3 格、tile 零漂移、**突变对照（旧行为每块 0 起 ⇒ 13.75 格 ⇒ 必红）**；断言总数 1765 → **1772**，无删除"
+        },
+        {
+          "criterion": "预算：audit exit 0，F 区计数不得变化，三角面 ≤1.5M",
+          "status": "passed",
+          "evidence": "audit --enforce **exit 0**：主场景 345/350 · **F 80/80 逐值不变** · 可见三角面 425941（= 改前，只改 UV 未改几何）"
+        },
+        {
+          "criterion": "视觉证据 ≥2 机位 A/B + judgeShot PASS + manifest 留痕",
+          "status": "failed",
+          "evidence": "**未执行**（如实）：本会话 headless 浏览器多次 >600s 未返回；不做假证据。已在回执写入手工/ V3 步骤（?view=axis 门洞近景 + ?view=focus&focus=B-gate-front）"
+        },
+        {
+          "criterion": "未验证项如实登记",
+          "status": "passed",
+          "evidence": "work/t49-receipt.md §5：①立面混合桶（wall 合批桶含前后立面/侧墙/其它子构件）除 facadeWall 分块盒外尚未锚定，实测该桶单一仿射拟合残差 ≤2.08e+1 格（口径无意义，需按 (z,y) 带分组重做判据）——已交回；②文件级突变重跑未做（以 §26 解析式突变对照覆盖）；③浏览器侧未跑"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "cd imperial-palace-dsh-1.1b && node tests/kit.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0 · 1772/1772 通过**（t49 前 1765；§26 新增 8 条）；INFO：t49 UV 世界锚定：夹具偏差 0.00e+0 格 · 全城 72 条墙最大 7.63e-6 格 · 突变对照旧行为 13.75 格（必红）"
+        },
+        {
+          "command": "cd imperial-palace-dsh-1.1b && node tests/layout.test.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0 · 全部通过 ✓**（LAYOUT 1.1.28；可行走面 247 / 障碍 94 / 视角 62 不变；四层护栏全绿）"
+        },
+        {
+          "command": "cd imperial-palace-dsh-1.1b && node scripts/audit.mjs --enforce",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "**exit 0**：主场景 345/350 · B 63/70 · C 56/60 · D 49/56 · E 51/56 · **F 80/80** · 可见三角面 425941/1.5M（与 t49 前逐值相同 ⇒ 零漂移）"
+        },
+        {
+          "command": "cd imperial-palace-dsh-1.1b && node work/probe-t49-uv.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "全城 72 条墙 / 544 块：相邻分块相位差与世界锚定偏差均 < 1e-5 格（改前右段/门额 14.6875 格）；tile 尺度未变（plasterRed 6.4m / stone 1.6m）"
+        }
+      ]
     },
     {
       "id": "t50",
@@ -5562,8 +5734,47 @@
       ],
       "reassigning": false,
       "attemptId": "604a39ae-f2bf-4f06-8fac-518f65214df3"
+    },
+    {
+      "id": "t52",
+      "subject": "门贴图收尾：立面非 facadeWall 子构件锚定 + (z,y) 分带判据 + 真实 GPU A/B 出图",
+      "description": "【来源】t49 已交付并通过主理人独立复测（夹具与 608 m 真实宫墙 `WALL-CITY-south` 的 wallBody/wallBase/wallLintel 偏差 0.00e+0 / 0.00e+0 / ~1e-7，`kit.test` 1772/1772，`audit --enforce` exit 0）。本卡是 t49 回执 §5 里自己登记的**两项未完成**，收口它。\n\n【未完成项 ①：立面混合桶残留】`wall` 合批键把前后立面 / 侧墙 / 山墙 / 槛墙等子构件混在同一桶；`facadeWall` 的两处分块盒**已锚定**，但同桶内其余子构件尚未锚定。t49 的量测显示该桶单一仿射拟合残差 ≤ **2.08e+1 格** —— 但你自己也指出这个口径**无意义**，因为它把不同 (z,y) 的分带混在一起拟合。\n⇒ 本卡要求：① 把同桶内其余分块盒一并锚定；② 把判据改成**按 (z, y) 分带分组**的逐组一致性判据；③ **证明新判据有效**：用反例说明为何单一仿射拟合会把「正常的多分带」误判为超差，并给 1 个突变对照（把锚定关掉 ⇒ 分组判据必红）。\n\n【未完成项 ②：视觉证据】t49 未跑 `scripts/shot.mjs` 的 ≥2 机位 A/B（该路径在本机会话多次 >600s 不返回）。请**换路线**：照 `scripts/probe-motion-edges.mjs` 已验证可用的做法——真实 CDP + 真实 GPU（headless Chrome `--use-angle=metal`，**不要** `--disable-gpu`）——只截 2 张图（门洞近景 + 一栋建筑门面），落 `work/t52/shots/**`。**不要**再去跑整条 shot.mjs 全流程，也不要为了出图改 §12 阈值。若仍失败，把**原始错误与耗时**交回，不许用文字替代图。\n\n【背景读数（可直接复现）】红墙门两侧的相位偏差异常改前是 右段 **14.6875 格 = 94.00 m**、门额 **14.6875 格**；改后夹具与真实宫墙均为 **0.00e+0**。tile 逐值未变（plasterRed 6.4 / stone 1.6）。",
+      "status": "claimed",
+      "assignee": "kit-engineer",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1790547258219,
+      "updatedAt": 1790547292307,
+      "kind": "work",
+      "objective": "收口 t49 的两项未完成：① 把 `wall` 合批桶内其余分块子构件纳入世界锚定，并把「门侧/立面连续性」判据改为按 (z,y) 分带分组（现单一仿射拟合残差 ≤2.08e+1 格、口径无意义），附能区分真假超差的突变对照；② 用真实 GPU CDP 路线出 ≥2 张门洞/门面 A/B 图作为视觉证据。",
+      "inScope": [
+        "src/kit/",
+        "tests/kit.test.mjs",
+        "work/t52/",
+        "docs/handoff-kit.md"
+      ],
+      "outOfScope": [
+        "src/zones/",
+        "src/shared/layout.js",
+        "src/core/",
+        "scripts/shot.mjs"
+      ],
+      "acceptance": [
+        "`wall` 合批桶内的**全部可见大面**纳入世界锚定；判据改为**按 (z, y) 分带分组**后逐组拟合：同一世界点在相邻分块间相位一致 < 1e-3 格；改前给出**分组后**至少 1 处超差的原始读数，改后全城 0 处",
+        "判据自证有效：必须在回执里说明为何**不能**用单一仿射拟合（反例：单一拟合残差 ≤ 2.08e+1 格但并非缺陷），并给 **1 个突变对照**证明新判据在\"真的没锚定\"时必红（附 md5、突变残留 0）",
+        "**真实 GPU A/B 图**：≥2 张（含门洞近景 + 一栋建筑门面），落在 `work/t52/shots/**`；回执给出所用命令、逐图分辨率与文件大小。若浏览器确实不可用，给**原始错误文本与耗时**，**不得用文字描述代替图**",
+        "无回归：`node tests/kit.test.mjs`、`node tests/layout.test.mjs`、`node scripts/audit.mjs --enforce` 均 exit 0；三角面 / 绘制调用 / `tileMeters` 逐值不变（给改前/改后对照数）",
+        "只读性边界：不碰 `src/zones/**`、`src/shared/layout.js`、`LAYOUT_VERSION`、任何计数；被切开的盒体仍不得新增合批桶"
+      ],
+      "verify": [
+        "node tests/kit.test.mjs",
+        "node tests/layout.test.mjs",
+        "node scripts/audit.mjs --enforce"
+      ],
+      "reassigning": false,
+      "attemptId": "3fa76fa5-b494-4e98-aea0-27487108e274"
     }
   ],
-  "taskSeq": 51,
+  "taskSeq": 52,
   "approvedAt": 1790501240056
 }

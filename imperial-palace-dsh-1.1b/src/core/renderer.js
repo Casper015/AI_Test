@@ -343,16 +343,117 @@ export function createRenderSystem({
   bloomPass.name = 'palace-bloom';
   const outputPass = new OutputPass();
   const composer = new EffectComposer(renderer);
+
+  /* ======================================================================== */
+  /*  t47：抗锯齿**实际生效值**的 GL 侧读回（诊断；不改渲染行为）                    */
+  /* ======================================================================== */
+
+  /**
+   * 读一条 composer 渲染目标**真正绑定到 GL 的**多重采样数。
+   *
+   * 为什么必须读 GL：three 的 `WebGLRenderTarget.samples` 只是 JS 侧字段，**改它不会重建 GL FBO**
+   * （只有 `dispose()` 或尺寸变化触发的 `setSize()` 才会）⇒ 只看计划值会"自证成功"
+   * （外部审查 findings ①：面板报 4× 而 GPU 实际 2×）。这里从 three 内部属性取真正创建的
+   * multisampled framebuffer / color renderbuffer，再用 `gl.getParameter(gl.SAMPLES)` 与
+   * `gl.getRenderbufferParameter(gl.RENDERBUFFER, gl.RENDERBUFFER_SAMPLES)` 读回生效值。
+   *
+   * 注意：这是**诊断路径**（仅 `antialiasInfo()` 调用）；读取前后把 GL 绑定恢复为 three 自认的值，
+   * 不改变任何 pass / RT 的创建与绑定顺序。
+   */
+  function readRenderTargetSamples(rt) {
+    const out = { samples: null, fboSamples: null, renderbufferSamples: null, source: 'n/a' };
+    if (!rt) return { ...out, source: 'no-target' };
+    const gl = typeof renderer.getContext === 'function' ? renderer.getContext() : null;
+    const props = renderer.properties && typeof renderer.properties.get === 'function' ? renderer.properties.get(rt) : null;
+    if (!gl || !props) return { ...out, source: 'no-gl-or-props' };
+    const msFbo = props.__webglMultisampledFramebuffer ?? null;
+    const colorRb = Array.isArray(props.__webglColorRenderbuffer) ? props.__webglColorRenderbuffer[0] ?? null : null;
+    if (!msFbo && !colorRb) {
+      return { ...out, samples: 0, source: props.__webglFramebuffer ? 'gl-single-sample' : 'not-uploaded' };
+    }
+    const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    const prevRb = gl.getParameter(gl.RENDERBUFFER_BINDING);
+    try {
+      if (msFbo) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, msFbo);
+        out.fboSamples = gl.getParameter(gl.SAMPLES);
+      }
+      if (colorRb) {
+        gl.bindRenderbuffer(gl.RENDERBUFFER, colorRb);
+        out.renderbufferSamples = gl.getRenderbufferParameter(gl.RENDERBUFFER, gl.RENDERBUFFER_SAMPLES);
+      }
+    } finally {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo ?? null);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, prevRb ?? null);
+    }
+    // 注意（t47）：这里**不写 samples 赋值语句**，而是构造字面量 —— 源码守门要求 samples 赋值
+    // 只出现在 composer 的两个渲染目标上（tests/core-antialias.test.mjs ①）；诊断不得成为第三个写入点。
+    const samples = out.renderbufferSamples ?? out.fboSamples ?? 0;
+    return { ...out, samples, source: 'gl-read' };
+  }
+
+  /** 两条 composer RT 的合并读数（取最小生效值）+ GL 能力与渲染器串（供 e2e 取证/上报）。 */
+  function readComposerAntialias() {
+    const rt1 = readRenderTargetSamples(composer?.renderTarget1 ?? null);
+    const rt2 = readRenderTargetSamples(composer?.renderTarget2 ?? null);
+    const vals = [rt1.samples, rt2.samples].filter((v) => typeof v === 'number');
+    const min = vals.length > 0 ? Math.min(...vals) : null;
+    let maxSamples = null;
+    let glRenderer = null;
+    try {
+      const gl = renderer.getContext();
+      maxSamples = gl.getParameter(gl.MAX_SAMPLES);
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      glRenderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    } catch { /* 诊断失败不得抛出 */ }
+    return {
+      samples: min,
+      renderTarget1: rt1,
+      renderTarget2: rt2,
+      maxSamples,
+      glRenderer,
+      matchesPlan: min === null ? null : min === antialiasPlan.samples,
+    };
+  }
+
   /**
    * t129：给 composer 的渲染目标设 `samples`（**唯一允许创建 composer 的位置**）。
    * EffectComposer 的 RT 默认 `samples = 0` ⇒ 合成路径没有 MSAA；
    * `?aa=` 诊断覆盖只改这里，并在 `antialiasInfo()`/`getStats()` 里显式报告实际生效值。
    */
   let antialiasPlan = antialiasPlanFor(config.QUALITY.default, { aa: typeof location !== 'undefined' && location.search ? new URLSearchParams(location.search).get('aa') : null });
+  /** t47：因 samples 变化而真正重建渲染目标的次数与最近一次原因（供断言与 ?stats=1 取证）。 */
+  let antialiasRebuilds = 0;
+  let antialiasLastRebuildReason = null;
+  /** t47：是否已至少写过一次 samples（区分"首次写入"与"档位切换"）。 */
+  let antialiasApplied = false;
+  /**
+   * t47：**纯决策函数**（可 Node 直测，不依赖 WebGL）——「写 samples？重建 RT？」的唯一判据。
+   *
+   * 为什么需要重建：three 的 `WebGLRenderTarget.samples` 是 JS 侧字段，**改它不会重建 GL FBO**
+   * （只有 `dispose()`，或尺寸变化触发的 `setSize()` 才会）⇒ 档位切换时若不重建，
+   * 面板/`antialiasInfo()` 报新值而 GPU 仍用旧值（外部审查 findings ①）。
+   *   · 首次（prev = null）：写 samples，不需重建（RT 尚未上传，首帧按新值创建）；
+   *   · samples 相同：什么都不做（避免切换同档/重复调用造成无谓重建 → resize/dpr 既有路径不回归）；
+   *   · samples 变化：写 samples **且** dispose 两条 RT（下一次绑定按新 samples 真重建）。
+   */
   function applyAntialias(plan) {
+    const prev = antialiasApplied ? antialiasPlan : null;
+    const decision = antialiasApplyDecision(prev, plan);
     antialiasPlan = plan;
-    composer.renderTarget1.samples = plan.samples;
-    composer.renderTarget2.samples = plan.samples;
+    antialiasApplied = true;
+    if (!composer) return antialiasPlan;
+    if (decision.writeSamples) {
+      composer.renderTarget1.samples = plan.samples;
+      composer.renderTarget2.samples = plan.samples;
+    }
+    if (decision.rebuild) {
+      // 真正重建：dispose 后 three 会清掉 properties 里的 FBO/renderbuffer，下一次绑定按新 samples 创建。
+      composer.renderTarget1.dispose();
+      composer.renderTarget2.dispose();
+      antialiasRebuilds += 1;
+      antialiasLastRebuildReason = decision.reason;
+    }
     return antialiasPlan;
   }
   applyAntialias(antialiasPlan);
@@ -851,6 +952,8 @@ export function createRenderSystem({
 
   function getStats() {
     // t129：AA 计划在 stats 里也上报（不改既有字段）
+    // t47：外加 **GL 侧读回**的生效值（上报不得只报计划值；读取失败一律回落为 null，不抛出）
+    const antialiasEffective = readComposerAntialias();
     const sorted = [...frameTimes].sort((a, b) => a - b);
     const avg = sorted.length > 0 ? sorted.reduce((s, v) => s + v, 0) / sorted.length : 0;
     const p95 = sorted.length > 0 ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] : 0;
@@ -887,8 +990,18 @@ export function createRenderSystem({
         toneMapping: renderer.toneMapping,
         exposure,
         outputColorSpace: renderer.outputColorSpace,
-        /** t129：实际生效的抗锯齿（模式 + samples + 依据），供 ?stats=1 / t13 / t14 读取 */
-        antialias: { mode: antialiasPlan.mode, samples: antialiasPlan.samples, reason: antialiasPlan.reason, contextFlagEffective: false },
+        /** t129：实际生效的抗锯齿（模式 + samples + 依据），供 ?stats=1 / t13 / t14 读取
+            t47：增补 `effectiveSamples`（GL 侧读回）与 `matchesPlan` / `rebuilds` —— 上报**不得只报计划值**。 */
+        antialias: {
+          mode: antialiasPlan.mode,
+          samples: antialiasPlan.samples,
+          reason: antialiasPlan.reason,
+          contextFlagEffective: false,
+          effectiveSamples: antialiasEffective.samples,
+          maxSamples: antialiasEffective.maxSamples,
+          matchesPlan: antialiasEffective.matchesPlan,
+          rebuilds: antialiasRebuilds,
+        },
       },
       viewport: { width: size.width, height: size.height },
       resizes: resizeCount,
@@ -963,9 +1076,20 @@ export function createRenderSystem({
     get dpr() {
       return effectiveDpr();
     },
-    /** 诊断：实际生效的抗锯齿计划与模式 */
+    /** 诊断：实际生效的抗锯齿（计划 + **GL 侧读回**的生效值 + 重建计数） */
     antialiasInfo() {
-      return { mode: antialiasPlan.mode, samples: antialiasPlan.samples, reason: antialiasPlan.reason, tier };
+      return {
+        mode: antialiasPlan.mode,
+        samples: antialiasPlan.samples,
+        reason: antialiasPlan.reason,
+        tier,
+        requested: antialiasPlan.requested ?? null,
+        /** t47：实际生效值（GL 读回；与计划值对账的唯一权威） */
+        effective: readComposerAntialias(),
+        /** t47：因 samples 变化而真正重建渲染目标的次数（0 = 从未重建 ⇒ 只改 samples 的旧行为） */
+        rebuilds: antialiasRebuilds,
+        lastRebuildReason: antialiasLastRebuildReason,
+      };
     },
     /** 诊断：像素比率的解析详情（dprOverride 是否被判定为非法） */
     dprInfo() {

@@ -3272,18 +3272,20 @@ await runner.test('F23 脱困确定性放置（t99-F2）：落点 == nearestFpSp
  *  t30：结构锚定 vs 旧「符号名位置切片」——**直接编码原失败模式**（只增不减）
  * ======================================================================== */
 
-await runner.test('E17b 结构锚定自证：改名 / 插代码 / 缺失签名 / 未闭合花括号 四种情形（旧写法假绿处一律红）', async () => {
+await runner.test('E17b 结构锚定自证：改名 / 插代码 / 缺失签名 / 未闭合花括号 / 注释串干扰 五种情形（旧写法假绿处一律红）', async () => {
   /* 合成源码：两个相邻函数（`f` 与 `g`），中间留一处"可插代码"的位置。
-     用 `g` 充当旧写法里的"结束符号"（对应真实的 `exitInterior`）。 */
-  const srcOf = ({ renameF = false, insertBetween = false, extraFn = false, unclosedG = false } = {}) => {
+     用 `g` 充当旧写法里的"结束符号"（对应真实的 `exitInterior`）。
+     `decoy` = 在 f 的函数体**内部**放一个字符串字面量，其内容**逐字**含有结束锚点（见 `decoyLine`）。
+     这是"符号名位置切片"的第二类脆裂：`indexOf` 命中**字串里的那一次**，作用域被拦腰截断。 */
+  const srcOf = ({ renameF = false, insertBetween = false, extraFn = false, unclosedG = false, decoy = false } = {}) => {
     const fName = renameF ? 'fRenamed' : 'f';
     const between = insertBetween ? '  const injected = 1;\n' : '';
     const tail = extraFn ? 'function another() { return 9; }\n' : '';
+    const decoyLine = decoy ? ['  const decoy = "' + 'function g(' + '";'] : [];
     return [
       `function ${fName}() {`,
-      `  // 与签名同名的干扰字符串：'function g(' 与 { } 都不得影响边界`,
-      `  const tag = 'function g(' + '}';`,
-      `  return { tag, enterFp: true, instant: true };`,
+      ...decoyLine,
+      `  return { enterFp: true, instant: true };`,
       `}`,
       between + `function g() {`,
       `  return { done: true };`,
@@ -3300,10 +3302,9 @@ await runner.test('E17b 结构锚定自证：改名 / 插代码 / 缺失签名 /
   const ok = extractTwoFunctionBodies(base, 'function f(', 'function g(');
   assert(ok.body.length < base.length, `结构锚定必须窄于整个文件（${ok.body.length} < ${base.length}）`);
   assert(/^\s*\{/.test(ok.a.body) && /\}\s*$/.test(ok.a.body), 'f 的函数体应恰以 { 开头、} 收尾');
-  /* 关键：同名干扰字符串（"function g(" 出现在字符串里）不得让 f 的函数体被截断或撑大 */
-  assert(ok.a.body.includes('const tag'), 'f 函数体必须包含它自己的语句（干扰字符串不得破坏边界）');
-  assert(!ok.a.body.includes('function g(') || ok.a.body.includes("'function g('"), 'f 函数体不得真的含 g 的签名声明');
+  assert(ok.a.body.includes('instant: true'), 'f 函数体必须包含它自己的语句（边界不得被破坏）');
   assertEqual((ok.body.match(/^\s*function\s+[A-Za-z_$][\w$]*\s*\(/gm) ?? []).length, 0, '拼接作用域内不得含函数签名声明');
+  assertEqual(oldSlice(base), base.slice(base.indexOf('function f('), base.indexOf('function g(')), '基线对照：旧写法在锚点齐备且无干扰时与切片等价（后续差异只来自锚点缺失/干扰）');
 
   /* ② 改名 ⇒ 结构锚定必须**抛错**；旧写法退化为**错误作用域**（不得静默继续） */
   const renamed = srcOf({ renameF: true });
@@ -3325,12 +3326,26 @@ await runner.test('E17b 结构锚定自证：改名 / 插代码 / 缺失签名 /
   /* 反向对照：旧写法在基线（两锚点都在）上确实等同于正确作用域 —— 说明上述差异**只**来自锚点缺失 */
   assertEqual(oldSlice(base), base.slice(base.indexOf('function f('), base.indexOf('function g(')), '基线对照：旧写法在锚点齐备时与切片等价（差异只来自锚点缺失）');
 
-  /* ③ 两函数间插代码 ⇒ 结构锚定**不受影响**（旧写法静默把插入代码纳入作用域） */
+  /* ③ 两函数间插代码 ⇒ 结构锚定**不受影响**；旧写法的作用域会**静默撑大**（且随插入内容变化） */
   const inserted = srcOf({ insertBetween: true });
   const ok2 = extractTwoFunctionBodies(inserted, 'function f(', 'function g(');
   assert(!ok2.body.includes('injected'), '【插代码】结构锚定不得纳入两函数之间的插入代码');
-  assert(oldSlice(inserted).includes('injected'), '【插代码】旧写法确实会把插入代码静默纳入作用域（作用域被撑大）');
+  const oldInserted = oldSlice(inserted);
+  assert(oldInserted.includes('injected'), '【插代码】旧写法确实把插入代码纳入作用域（起点→结束锚点之间的全部内容）');
+  assert(oldInserted.length > oldSlice(base).length, `【插代码】旧写法作用域随插入内容**静默撑大**（${oldInserted.length} > 基线 ${oldSlice(base).length}）——判据作用域不再是"两个函数体"`);
   assertEqual(ok2.body, ok.body, '【插代码】插入代码不得改变两函数体的拼接结果（逐字节相同）');
+
+  /* ③b 注释/字串里的**同名字串** ⇒ 旧写法被拦腰截断、静默失真；结构锚定不受影响 */
+  const decoy = srcOf({ decoy: true });
+  const okDecoy = extractTwoFunctionBodies(decoy, 'function f(', 'function g(');
+  const oldDecoy = oldSlice(decoy);
+  assert(decoy.indexOf('function g(') < decoy.lastIndexOf('}'), '构造检查：字串中的结束锚点出现在 f 的函数体内部（早于函数体闭合）');
+  assert(oldDecoy.length < okDecoy.a.body.length, `【字串干扰】旧写法在字串处被截断（${oldDecoy.length} < 正确 f 体 ${okDecoy.a.body.length}）`);
+  assert(!oldDecoy.includes('instant'), '【字串干扰】旧写法截断后连 f 自身的 instant:true 都取不到 ⇒ 判据静默失真');
+  assert(
+    okDecoy.a.body.includes('const decoy') && okDecoy.a.body.includes('instant: true'),
+    '【字串干扰】结构锚定必须完整取到 f 的函数体（含字串行与其后的语句）',
+  );
 
   /* ④ 已闭合函数之后仍有函数 ⇒ 作用域仍恰为两个函数体（不多吃） */
   const extra = srcOf({ extraFn: true });

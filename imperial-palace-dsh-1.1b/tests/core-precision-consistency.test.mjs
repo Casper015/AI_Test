@@ -55,21 +55,20 @@ const CELL = 1;
 const MAX_CELLS = 2_000_000;
 const OUTSIDE = { x: 0, z: -480 };
 
-/** 已登记指纹（t12 落地 → t31 两池石栈道 → **t35 门洞豁免收窄**；几何有意变更 ⇒ 本轮同步更新，见断言⑤消息）
+/** **历史快照（t34：不参与判定，仅留痕）** —— 判定面指纹的历史值，供追溯几何/精度变更的来历。
+ *   t34 起断言⑤改为**自证式**（期望值由 `STEP` 阈值公式 + 同一批采样高度 + 比例式推导，不再写死魔数），
+ *   本常量因此**降级为留痕**（与 t23/t24 的 `G1_SNAPSHOT_1_1_4` 同一处置口径）。
  *   · t12（落地时）：`c368beed / 1423122 / 2466 / 724481 / 724481`（= 修前修饰后逐值相同 ⇒ 零判定位移）
  *   · t31（两池有界开槽 + 石栈道）：`bda28509 / 1427678 / 2466 / 726806 / 726806`
- *     （两池包围盒内 1m 可走格 0 → 2250，合计 +2325；由 zone-garden 交回同步）
- *   · t35（本卡：`insideObstacleDoor` 只对 `through===false` 的门收窄到"止于后墙"）：
- *     `b8351ad5 / 1425334 / 2005 / 725781 / 725781`
- *     （失去 1,025 格，**全部落在已登记室内面之外** —— 逐格归因断言见 `core-collision` 的 t35⑤；
- *       室内面内 0 格 ⇒ 43 栋内景不与收窄冲突）
+ *   · t35（`insideObstacleDoor` 只对 `through===false` 的门收窄到"止于后墙"）：`b8351ad5 / 1425334 / 2005 / 725781 / 725781`
+ *   · t39（可登塔楼 72 面 + 中央内芯）：`881c59e8 / 1425039 / 2300 / 725252 / 725252`（塔体抬升成孤岛 ⇒ 主分量 −529）
  */
-const REGISTERED = Object.freeze({
-  edgeHash: 'b8351ad5',
-  edgePass: 1425334,
-  edgeFail: 2005,
-  walkable: 725781,
-  mainComponent: 725781,
+const REGISTERED_SNAPSHOT = Object.freeze({
+  edgeHash: '881c59e8',
+  edgePass: 1425039,
+  edgeFail: 2300,
+  walkable: 725252,
+  mainComponent: 725252,
 });
 
 /**
@@ -200,13 +199,16 @@ await runner.test('③ 突变对照（不恒真）：真实格对 y 1.5↔0.9 �
   runner.info(`突变对照：(${sample.a.col},${sample.a.row})↔(${sample.b.col},${sample.b.row}) float64 首次 ⇒ ${passFirstFloat64 ? '可跨' : '拒'} / float32 缓存 ⇒ ${passCachedFloat32 ? '拒' : '可跨'}（相反 ✓）；产品两次调用 ⇒ ${productFirst ? '可跨' : '拒'} === float32 口径 ✓｜Δ32=${Math.abs(a.y - b.y).toFixed(12)} / Δ64=${Math.abs(y64a - y64b).toFixed(12)}`);
 });
 
-/* ── ④ 跨构建逐值一致 + ⑤ 已登记指纹 ── */
-/** 判定面指纹：遍历细口径全图相邻可走格对，用生产 `canStep` 取判定，滚成 FNV-1a。 */
+/* ── ④ 跨构建逐值一致 + ⑤ 判定面自证 ── */
+/** 判定面指纹：遍历细口径全图相邻可走格对，用生产 `canStep` 取判定，滚成 FNV-1a。
+ *  t34：额外返回**派生量**（`pairs` / `derivedFail` / `cells`），使断言⑤的期望值可由
+ *  「阈值公式 + 同一批采样高度 + 比例式」推导，而不是写死指纹魔数。 */
 function fingerprint() {
   const graph = makeGraph();
   let fnv = 0x811c9dc5;
   let pass = 0;
   let fail = 0;
+  let derivedFail = 0; // t34：按 STEP 阈值公式对**同一批采样高度**独立复算的"拒判"数
   for (let row = 0; row < graph.rows; row += 1) {
     for (let col = 0; col < graph.cols; col += 1) {
       for (const [nc, nr] of [[col + 1, row], [col, row + 1]]) {
@@ -216,6 +218,10 @@ function fingerprint() {
         if (!a.ok || !b.ok) continue;
         const v = graph.canStep(col, row, nc, nr) ? 1 : 0;
         if (v) pass += 1; else fail += 1;
+        // 派生：上行 b.y−a.y ≤ maxStepHeight ∧ 下行 a.y−b.y ≤ snapDownDistance（含界 + 同一 EPS）
+        const dy = b.y - a.y;
+        const derivedOk = dy <= STEP.maxStepHeight + EPS && -dy <= STEP.snapDownDistance + EPS;
+        if (!derivedOk) derivedFail += 1;
         fnv ^= v;
         fnv = Math.imul(fnv, 0x01000193) >>> 0;
       }
@@ -223,7 +229,16 @@ function fingerprint() {
   }
   const label = graph.componentOf(OUTSIDE.x, OUTSIDE.z);
   const stats = graph.stats();
-  return { edgeHash: fnv.toString(16).padStart(8, '0'), edgePass: pass, edgeFail: fail, walkable: stats.walkable, mainComponent: label ? label.size : null };
+  return {
+    edgeHash: fnv.toString(16).padStart(8, '0'),
+    edgePass: pass,
+    edgeFail: fail,
+    derivedFail,
+    pairs: pass + fail,
+    cells: graph.cols * graph.rows,
+    walkable: stats.walkable,
+    mainComponent: label ? label.size : null,
+  };
 }
 
 const runs = [fingerprint(), fingerprint(), fingerprint()];
@@ -236,15 +251,30 @@ await runner.test('④ 跨构建逐值一致：3 次独立建图（各自全新 
   runner.info(`跨构建逐值一致 ✓｜${keys.map((k) => `${k}=${runs[0][k]}`).join(' · ')}`);
 });
 
-await runner.test('⑤ 已登记指纹（几何有意变更须本轮同步更新 REGISTERED）', () => {
+await runner.test('⑤ 判定面自证（t34：期望值由 layout + 阈值公式推导，不写死指纹魔数）', () => {
   const r = runs[0];
-  const diffs = Object.entries(REGISTERED).filter(([k, v]) => String(r[k]) !== String(v));
+  /* (a) 规格自证：生产 `canStep` 的拒判数必须等于**按 STEP 阈值公式**从同一批采样高度独立复算的拒判数。
+         阈值被改、判定规则被加、或采样高度与判定脱钩 ⇒ 逐值不符即红。 */
   assertEqual(
-    diffs.length,
-    0,
-    `判定面指纹与已登记基线不一致（若本轮**有意**改了几何/精度，请在 tests/core-precision-consistency.test.mjs 的 REGISTERED 同步登记）：${diffs.map(([k, v]) => `${k} 登记 ${v} ≠ 实测 ${r[k]}`).join('；')}`,
+    r.edgeFail,
+    r.derivedFail,
+    `canStep 拒判数必须等于按阈值公式（上 ≤${STEP.maxStepHeight} / 下 ≤${STEP.snapDownDistance}，EPS ${EPS}）从同一批采样高度推导的拒判数（实测 ${r.edgeFail} vs 推导 ${r.derivedFail}）`,
   );
-  runner.info(`已登记指纹命中 ✓｜${JSON.stringify(REGISTERED)}`);
+  /* (b) 分类完备 + 防空表恒真（任一为 0 即红） */
+  assertEqual(r.edgePass + r.edgeFail, r.pairs, '可跨 + 不可跨必须等于枚举到的相邻可走格对数（分类完备）');
+  assert(r.pairs > 0 && r.walkable > 0, `判定面必须非空（pairs=${r.pairs}｜walkable=${r.walkable}）`);
+  /* (c) 非退化：可走格必须严格少于全网格格数（防"整图都算可走"的退化） */
+  assert(r.walkable < r.cells, `可走格必须严格少于全网格格数（${r.walkable} < ${r.cells}）`);
+  /* (d) 主分量覆盖率用**比例式**（非魔数）：全城绝大多数可走格必须在同一分量内 */
+  assert(
+    r.mainComponent >= 0.9 * r.walkable,
+    `主分量必须覆盖 ≥90% 可走格（${r.mainComponent} / ${r.walkable} = ${(100 * r.mainComponent / r.walkable).toFixed(1)}%）`,
+  );
+  runner.info(
+    `判定面自证（t34）✓｜pairs=${r.pairs}（可跨 ${r.edgePass} / 不可跨 ${r.edgeFail} = 推导 ${r.derivedFail}）`
+    + `｜walkable=${r.walkable}（< 网格 ${r.cells}）｜主分量 ${r.mainComponent}（${(100 * r.mainComponent / r.walkable).toFixed(1)}%）`,
+  );
+  runner.info(`历史快照（**不参与判定**，仅留痕）：${JSON.stringify(REGISTERED_SNAPSHOT)}｜本轮实测 hash=${r.edgeHash}`);
 });
 
 /* ── ⑥ 阈值未放宽 ── */

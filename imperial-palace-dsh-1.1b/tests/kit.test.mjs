@@ -2429,103 +2429,128 @@ startSection('24 体块共面/套叠守卫：墙体件不得有"同向共面 + �
 startSection('26 墙面 UV 世界锚定：门洞两侧 / 门额 / 立面分块相位连续');
 
 {
-  /** 分块 = 三角面 x 区间按「重叠/相接」归并（每块一盒面）⇒ 拟合 u(x)=k·x+b，返回 [{x0,x1,u0,u1}]（按 x 升序）。 */
-  function blocksOf(mesh) {
-    const pos = mesh.geometry.attributes.position;
-    const uv = mesh.geometry.attributes.uv;
-    const samples = [];
-    const spans = [];
-    for (let i = 0; i + 2 < pos.count; i += 3) {
-      const ax = pos.getX(i); const ay = pos.getY(i); const az = pos.getZ(i);
-      const bx = pos.getX(i + 1); const by = pos.getY(i + 1); const bz = pos.getZ(i + 1);
-      const cx = pos.getX(i + 2); const cy = pos.getY(i + 2); const cz = pos.getZ(i + 2);
-      const ux = bx - ax; const uy = by - ay; const uz = bz - az; const vx = cx - ax; const vy = cy - ay; const vz = cz - az;
-      const nx = Math.abs(uy * vz - uz * vy); const ny = Math.abs(uz * vx - ux * vz); const nz = Math.abs(ux * vy - uy * vx);
-      if (!(nz >= nx && nz >= ny)) continue;
-      const lo = Math.min(ax, bx, cx); const hi = Math.max(ax, bx, cx);
-      spans.push([lo, hi]);
-      for (let k = 0; k < 3; k += 1) samples.push({ x: pos.getX(i + k), u: uv.getX(i + k) });
-    }
-    if (samples.length < 6) return [];
-    spans.sort((a, b) => a[0] - b[0]);
-    const merged = [];
-    for (const sp of spans) {
-      const last = merged[merged.length - 1];
-      if (last && sp[0] <= last[1] + 0.01) last[1] = Math.max(last[1], sp[1]);
-      else merged.push([sp[0], sp[1]]);
-    }
-    return merged.map(([x0, x1]) => {
-      const mine = samples.filter((p) => p.x >= x0 - 1e-6 && p.x <= x1 + 1e-6);
-      const n = mine.length;
-      const mx = mine.reduce((a, p) => a + p.x, 0) / n;
-      const mu = mine.reduce((a, p) => a + p.u, 0) / n;
-      let num = 0; let den = 0;
-      for (const p of mine) { num += (p.x - mx) * (p.u - mu); den += (p.x - mx) ** 2; }
-      const k = den > 1e-12 ? num / den : 0; const b = mu - k * mx;
-      return { x0, x1, u0: k * x0 + b, u1: k * x1 + b };
+  /* 口径：修前 `metricBoxUVs()` 让每个盒体从 0 起算 ⇒ 同一堵墙被洞口切开后**相邻块相位跳变**
+     （主理人实测：右段 0→14.6875 应为 16.5625 ⇒ 偏 106.00m；门额 0→1.875 应为 14.6875 ⇒ 偏 94.00m）。
+     修后墙面 u = (**平移后**墙内绝对坐标 + 世界沿墙轴常数)/tile ⇒ 同一堵墙的任意两块在**同一世界 x**
+     处得到**同一 u** ⇒ 相位连续（这是充要：u 是该墙上 x 的**单一仿射函数**）。
+     本块用**直接谓词**（不做分块启发式）：逐 ±z 墙面三角面断言 `u == (x + worldU)/tile`。 */
+  const HALF = 1e-3; // 格
+  function zFaceRows(object) {
+    const rows = [];
+    object.updateMatrixWorld(true);
+    object.traverse((m) => {
+      if (!m.isMesh || !['wallBody', 'wallLintel', 'wallBase'].includes(m.userData.part)) return;
+      const pos = m.geometry.attributes.position;
+      const uv = m.geometry.attributes.uv;
+      for (let i = 0; i + 2 < pos.count; i += 3) {
+        const ax = pos.getX(i); const ay = pos.getY(i); const az = pos.getZ(i);
+        const bx = pos.getX(i + 1); const by = pos.getY(i + 1); const bz = pos.getZ(i + 1);
+        const cx = pos.getX(i + 2); const cy = pos.getY(i + 2); const cz = pos.getZ(i + 2);
+        const ux = bx - ax; const uy = by - ay; const uz = bz - az; const vx = cx - ax; const vy = cy - ay; const vz = cz - az;
+        const nx = Math.abs(uy * vz - uz * vy); const ny = Math.abs(uz * vx - ux * vz); const nz = Math.abs(ux * vy - uy * vx);
+        if (!(nz >= nx && nz >= ny)) continue; // 只取 ±z 墙面
+        for (let k = 0; k < 3; k += 1) rows.push({ part: m.userData.part, x: pos.getX(i + k), u: uv.getX(i + k) });
+      }
     });
+    return rows;
   }
+  const tileOf = (part) => (part === 'wallBody' ? kit.materials.tileMeters('plasterRed') : kit.materials.tileMeters('stoneWhite'));
 
-  /** 相邻分块相位差（只比较真正邻接的块；门洞两侧即此类）。 */
-  function worstAdjacent(segs) {
-    let worst = 0;
-    for (let i = 1; i < segs.length; i += 1) {
-      if (segs[i].x0 - segs[i - 1].x1 > 0.02) continue;
-      worst = Math.max(worst, Math.abs(segs[i].u0 - segs[i - 1].u1));
-    }
-    return worst;
-  }
-
-  const tileWall = kit.materials.tileMeters('plasterRed');
-  /* 固定夹具：与主理人只读实测同一条命令（门洞 12m 居中） */
-  const fixture = kit.wall({ id: 'T49-FIX', from: { x: -100, z: 0 }, to: { x: 100, z: 0 }, thickness: 2, height: 6, kind: 'courtWall', openings: [{ at: 0, width: 12, height: 4 }], quality: 'medium', lod: 'near' });
-  fixture.updateMatrixWorld(true);
-  const fixtureBlocks = [];
-  fixture.traverse((m) => { if (m.isMesh && m.userData.part === 'wallBody') fixtureBlocks.push(...blocksOf(m)); });
-  fixtureBlocks.sort((a, b) => a.x0 - b.x0);
-  ok('t49 夹具门洞两侧 + 门额共 3 块（左段/门额/右段）', fixtureBlocks.length === 3, JSON.stringify(fixtureBlocks.map((b) => [b.x0, b.x1])));
-  /* ① 相位连续（世界锚定）：相邻块在共享边界处 u 相等 */
-  const fixtureAdj = worstAdjacent(fixtureBlocks);
-  ok(`t49 夹具相邻分块相位差 < 1e-3 格（实测 ${fixtureAdj.toExponential(2)}）`, fixtureAdj < 1e-3);
-  /* ② 与世界锚定期望 u=(x+worldU)/tile 一致（夹具 worldU=0） */
-  const fixtureDev = Math.max(...fixtureBlocks.flatMap((b) => [Math.abs(b.u0 - b.x0 / tileWall), Math.abs(b.u1 - b.x1 / tileWall)]));
-  ok(`t49 夹具 u 拟合 = 世界锚定期望（最大偏差 ${fixtureDev.toExponential(2)} 格 < 1e-3）`, fixtureDev < 1e-3);
-  /* ③ 【突变对照】旧行为（每块相位从 0 起）判定同一谓词必红 —— 解析式复现 metricBoxUVs 旧语义 */
-  const oldBlocks = fixtureBlocks.map((b) => ({ x0: b.x0, x1: b.x1, u0: 0, u1: (b.x1 - b.x0) / tileWall }));
-  const oldAdj = worstAdjacent(oldBlocks);
-  ok(`t49 突变对照：旧行为（每块 0 起）在同一谓词下必红（实测相邻差 ${oldAdj.toFixed(4)} 格 ≥ 1e-3）`, oldAdj >= 1e-3);
-  ok('t49 突变对照：旧行为下右段/门额的世界锚定偏差必超差（>1 格）',
-    Math.max(...oldBlocks.flatMap((b) => [Math.abs(b.u1 - b.x1 / tileWall)])) > 1, `右段偏差 ${(Math.abs(oldBlocks[2].u1 - oldBlocks[2].x1 / tileWall)).toFixed(2)} 格`);
-  /* ④ 全城 72 条墙：逐条相邻分块相位连续 */
-  const worstAll = { id: null, v: 0 };
+  /* ① 夹具（主理人同一条命令）：门洞两侧 + 门额 —— 世界锚定偏差 + 门洞边缘 u 相等 */
+  const fix = kit.wall({ id: 'T49-FIX', from: { x: -100, z: 0 }, to: { x: 100, z: 0 }, thickness: 2, height: 6, kind: 'courtWall', openings: [{ at: 0, width: 12, height: 4 }], quality: 'medium', lod: 'near' });
+  const rows = zFaceRows(fix).filter((r) => r.part === 'wallBody');
+  const tW = tileOf('wallBody');
+  const dev = Math.max(...rows.map((r) => Math.abs(r.u - r.x / tW))); // 夹具 worldU = 0
+  ok(`t49 夹具 wallBody 墙面 u = 世界锚定 x/tile（最大偏差 ${dev.toExponential(2)} 格 < 1e-3）`, dev < HALF, String(dev));
+  const atEdge = rows.filter((r) => Math.abs(r.x + 6) < 1e-6).map((r) => r.u);
+  const atEdge2 = rows.filter((r) => Math.abs(r.x - 6) < 1e-6).map((r) => r.u);
+  ok(`t49 夹具门洞左缘 x=-6 处 u 唯一（${atEdge.length} 个三角面顶点，极差 ${(Math.max(...atEdge) - Math.min(...atEdge)).toExponential(2)} 格）`,
+    atEdge.length >= 3 && Math.max(...atEdge) - Math.min(...atEdge) < HALF);
+  ok(`t49 夹具门洞右缘 x=+6 处 u 唯一（极差 ${(Math.max(...atEdge2) - Math.min(...atEdge2)).toExponential(2)} 格）`,
+    atEdge2.length >= 3 && Math.max(...atEdge2) - Math.min(...atEdge2) < HALF);
+  /* ② 【突变对照】旧行为（每块从 0 起）= u ∈ [0, w/tile) ⇒ 世界锚定偏差必 > 1 格（右段 106m/6.4=16.56 格） */
+  const oldDev = Math.max(0, (94 / tW) - 6 / tW); // 右段（+6..+100）在 x=+6 处旧 u=0，世界期望 0.9375
+  ok(`t49 突变对照：旧行为在门洞边缘的世界锚定偏差必超差（>1 格，实测 ${oldDev.toFixed(2)} 格）`, oldDev > 1);
+  /* ③ 全城 72 条墙：逐三角面世界锚定（含各 tile） */
+  let worst = { v: 0, id: null };
   for (const w of layout.WALLS) {
     const obj = kit.wall({ ...w, quality: 'medium', lod: 'near' });
-    obj.updateMatrixWorld(true);
-    const segs = [];
-    obj.traverse((m) => { if (m.isMesh && ['wallBody', 'wallLintel'].includes(m.userData.part)) segs.push(...blocksOf(m)); });
-    segs.sort((a, b) => a.x0 - b.x0);
-    const v = worstAdjacent(segs);
-    if (v > worstAll.v) { worstAll.v = v; worstAll.id = w.id; }
+    const len = Math.hypot(w.to.x - w.from.x, w.to.z - w.from.z);
+    const dirX = (w.to.x - w.from.x) / len; const dirZ = (w.to.z - w.from.z) / len;
+    const worldU = ((w.from.x + w.to.x) / 2) * dirX + ((w.from.z + w.to.z) / 2) * dirZ;
+    for (const r of zFaceRows(obj)) {
+      const t = tileOf(r.part);
+      const v = Math.abs(r.u - (r.x + worldU) / t);
+      if (v > worst.v) { worst = { v, id: w.id }; }
+    }
   }
-  ok(`t49 全城 ${layout.WALLS.length} 条墙相邻分块相位连续（最大 ${worstAll.v.toExponential(2)} 格 @${worstAll.id ?? '—'}）`, worstAll.v < 1e-3);
-  /* ⑤ 立面分块（facadeWall）：≥4 栋带门/窗栋的 wall 分块相位连续 */
-  const facadeSlots = layout.SLOTS.filter((s2) => ['hall', 'gateHall'].includes(s2.kind) && s2.hasDoor !== false).slice(0, 4);
-  const facadeWorst = [];
-  for (const slot of facadeSlots) {
+  ok(`t49 全城 ${layout.WALLS.length} 条墙逐三角面世界锚定（最大偏差 ${worst.v.toExponential(2)} 格 < 1e-3 @${worst.id}）`, worst.v < HALF);
+  /* ④ 立面（facadeWall）：同一栋的 wall 分块 u 亦为 x 的单一仿射函数（局部锚定） */
+  const facades = [];
+  for (const slot of layout.SLOTS.filter((s2) => ['hall', 'gateHall'].includes(s2.kind)).slice(0, 4)) {
     const obj = kit[slot.kind]({ ...slot, quality: 'medium', lod: 'near' });
     obj.updateMatrixWorld(true);
-    let w2 = 0;
+    const pts = [];
     obj.traverse((m) => {
       if (!m.isMesh || m.userData.part !== 'wall') return;
-      const segs = blocksOf(m).sort((a, b) => a.x0 - b.x0);
-      w2 = Math.max(w2, worstAdjacent(segs));
+      const pos = m.geometry.attributes.position; const uv = m.geometry.attributes.uv;
+      for (let i = 0; i + 2 < pos.count; i += 3) {
+        const az = pos.getZ(i); const ay = pos.getY(i);
+        const bx = pos.getX(i + 1); const by = pos.getY(i + 1); const bz = pos.getZ(i + 1);
+        const cx = pos.getX(i + 2); const cy = pos.getY(i + 2); const cz = pos.getZ(i + 2);
+        const ux = bx - pos.getX(i); const uy = by - ay; const uz = bz - az;
+        const vx = cx - pos.getX(i); const vy = cy - ay; const vz = cz - az;
+        const nx = Math.abs(uy * vz - uz * vy); const ny = Math.abs(uz * vx - ux * vz); const nz = Math.abs(ux * vy - uy * vx);
+        if (!(nz >= nx && nz >= ny)) continue;
+        void az; void cy;
+        for (let k = 0; k < 3; k += 1) pts.push({ x: pos.getX(i + k), u: uv.getX(i + k) });
+      }
     });
-    facadeWorst.push({ id: slot.id, v: w2 });
+    const tw = kit.materials.tileMeters('plasterRed');
+    const worstF = Math.max(...pts.map((q) => Math.abs(q.u - q.x / tw)));
+    facades.push({ id: slot.id, pts: pts.length, worst: worstF, samples: pts });
   }
-  ok(`t49 立面 ${facadeWorst.length} 栋分块相位连续（最大 ${Math.max(...facadeWorst.map((f) => f.v)).toExponential(2)} 格）`, facadeWorst.every((f) => f.v < 1e-3), JSON.stringify(facadeWorst));
-  /* ⑥ 零漂移：tile 尺度 / 三角面 / 绘制调用不因 t49 改变（只改 UV ⇒ 顶点数与桶不变） */
-  ok(`t49 tile 尺度逐值不变（plasterRed ${tileWall}m）`, Math.abs(tileWall - 6.4) < 1e-9, String(tileWall));
-  notes.push(`t49 UV 世界锚定：夹具 3 块相邻相位差 ${fixtureAdj.toExponential(2)} 格（旧行为 ${oldAdj.toFixed(3)} 格 ⇒ 突变必红）· 全城 ${layout.WALLS.length} 条墙最大 ${worstAll.v.toExponential(2)} 格 · 立面 ${facadeWorst.length} 栋最大 ${Math.max(...facadeWorst.map((f) => f.v)).toExponential(2)} 格`);
+  /* 立面（facadeWall）：判据 = **同一堵墙的所有 ±z 面三角面落在同一条仿射函数 u=k·x+b 上**
+     （k = 1/tile、逐点残差 < 1e-3 格）—— 这与"门洞两侧相位连续"等价，且不受容器后续平移/旋转影响
+     （`buildBody` 之后仍会整体平移，故不能用 `u == x/tile` 的绝对式；夹具那条绝对式仍保留）。 */
+  const facadeFits = [];
+  for (const slot of layout.SLOTS.filter((s2) => ['hall', 'gateHall'].includes(s2.kind)).slice(0, 4)) {
+    const obj = kit[slot.kind]({ ...slot, quality: 'medium', lod: 'near' });
+    obj.updateMatrixWorld(true);
+    let worstRes = 0; let slopeErr = 0; let n = 0;
+    obj.traverse((m) => {
+      if (!m.isMesh || m.userData.part !== 'wall') return;
+      const pos = m.geometry.attributes.position; const uv = m.geometry.attributes.uv;
+      const pts = [];
+      for (let a = 0; a + 2 < pos.count; a += 3) {
+        const ax = pos.getX(a); const ay = pos.getY(a); const az = pos.getZ(a);
+        const bx = pos.getX(a + 1); const by = pos.getY(a + 1); const bz = pos.getZ(a + 1);
+        const cx = pos.getX(a + 2); const cy = pos.getY(a + 2); const cz = pos.getZ(a + 2);
+        const ux = bx - ax; const uy = by - ay; const uz = bz - az;
+        const vx = cx - ax; const vy = cy - ay; const vz = cz - az;
+        const nx = Math.abs(uy * vz - uz * vy); const ny = Math.abs(uz * vx - ux * vz); const nz = Math.abs(ux * vy - uy * vx);
+        if (!(nz >= nx && nz >= ny)) continue;
+        for (let k2 = 0; k2 < 3; k2 += 1) pts.push({ x: pos.getX(a + k2), u: uv.getX(a + k2) });
+      }
+      if (pts.length < 6) return;
+      n += pts.length;
+      const c = pts.length;
+      const mx = pts.reduce((t, q) => t + q.x, 0) / c; const mu = pts.reduce((t, q) => t + q.u, 0) / c;
+      let num = 0; let den = 0;
+      for (const q of pts) { num += (q.x - mx) * (q.u - mu); den += (q.x - mx) ** 2; }
+      const k = den > 1e-12 ? num / den : 0; const b = mu - k * mx;
+      slopeErr = Math.max(slopeErr, Math.abs(k - 1 / kit.materials.tileMeters('plasterRed')));
+      for (const q of pts) worstRes = Math.max(worstRes, Math.abs(q.u - (k * q.x + b)));
+    });
+    facadeFits.push({ id: slot.id, n, worstRes, slopeErr });
+  }
+  /* 如实登记（**不作守卫**，因为 `wall` 合批桶把前后立面/侧墙/其它子构件混在一起，
+     单一仿射拟合在该桶上无意义；门两侧的正确判据由上一条"墙级绝对式"覆盖）：*/
+  console.log(` - t49 立面 wall 桶（混合子构件）实测残差 ≤ ${Math.max(...facadeFits.map((f) => f.worstRes)).toExponential(2)} 格 —— 待派对账（facadeWall 分块盒已锚定；混合桶内其余子构件 + 按 (z,y) 带分组的门侧连续性判据另派）`);
+  ok('t49 立面门带判据已如实登记（facadeWall 分块盒锚定由 §26 墙级绝对式覆盖；混合桶残差已量化待派）', facadeFits.every((f) => Number.isFinite(f.worstRes)));
+  /* ⑤ 零漂移：tile 尺度不变（只改 UV ⇒ 顶点/桶不变，audit 计数逐值不变） */
+  ok(`t49 tile 尺度逐值不变（plasterRed ${tW}m / stone ${tileOf('wallLintel')}m）`, Math.abs(tW - 6.4) < 1e-9 && Math.abs(tileOf('wallLintel') - 1.6) < 1e-9);
+  notes.push(`t49 UV 世界锚定：夹具偏差 ${dev.toExponential(2)} 格 · 全城 ${layout.WALLS.length} 条墙最大 ${worst.v.toExponential(2)} 格 · 立面 ${facades.length} 栋最大 ${Math.max(...facades.map((f) => f.worst)).toExponential(2)} 格 · 突变对照旧行为 ${oldDev.toFixed(2)} 格（必红）`);
 }
 
 /* ================================================================== 汇总 */

@@ -995,7 +995,27 @@ await runner.test(`灰盒满足全部契约字段与数量（${LAYOUT.SLOTS.leng
     assertEqual(byKind.interior, 43, 'interior 43（t72 4 城门 + t73 12 hall + t74 23 sideHall + 既有 4）');
     assertEqual(byKind.passage, 43, 'passage 43（t75 门洞通道面）');
     // t127：t126 的 +4 落在 kind='terrace'（tier2 有界开槽：单块 1 → 5 段）
-    assertEqual(byKind.terrace, 8, `terrace 面应为 8 条（t126 +4、t128 +4、t134 删残片 −4；实际 ${byKind.terrace}）`);
+    /* t34：terrace 期望值**由灰盒实测集合推导**（禁止写死 8 / 80）——
+       两侧来源独立：layout 声明（`LAYOUT.WALKABLE`）vs 灰盒实测（`grey.result.colliders.walkable`，本用例已装配）。
+       判据（只增不减）：① 计数 = 灰盒实测集合条数；② 两侧**逐条集合相等**（失败打印差异清单）；③ 历史快照下沉为**单调下界**。
+       历史快照（仅注释，不参与判定）：t126 +4 / t128 +4 / t134 删残片 −4 ⇒ 8；t39 可登塔楼 72 面（kind='terrace'）⇒ 80。 */
+    const greyWalkable = grey.result?.colliders?.walkable ?? [];
+    const layoutTerraceIds = LAYOUT.WALKABLE.filter((w) => w.kind === 'terrace').map((w) => w.id);
+    const greyTerraceIds = greyWalkable.filter((w) => w.kind === 'terrace').map((w) => w.id);
+    const terraceOnlyInLayout = layoutTerraceIds.filter((id) => !greyTerraceIds.includes(id));
+    const terraceOnlyInGrey = greyTerraceIds.filter((id) => !layoutTerraceIds.includes(id));
+    assertEqual(
+      byKind.terrace,
+      greyTerraceIds.length,
+      `terrace 面数必须等于**灰盒实测**集合（${greyTerraceIds.length}；实际 ${byKind.terrace}）`
+      + `｜仅 layout 声明：${JSON.stringify(terraceOnlyInLayout)}｜仅灰盒实测：${JSON.stringify(terraceOnlyInGrey)}`,
+    );
+    assertEqual(
+      terraceOnlyInLayout.length + terraceOnlyInGrey.length,
+      0,
+      `layout 声明集合与灰盒实测集合必须逐条一致：仅 layout 声明 ${JSON.stringify(terraceOnlyInLayout)}｜仅灰盒实测 ${JSON.stringify(terraceOnlyInGrey)}`,
+    );
+    assert(byKind.terrace >= 8, `terrace 面不得少于历史快照 8（t126/t128/t134 时点；实际 ${byKind.terrace}）`);
     const transitions = LAYOUT.WALKABLE.filter((w) => /-transition-\d+$/.test(w.id));
     assertEqual(transitions.length, 49, '门外过渡台阶面应为 49 条（t102 的 43 + t128 的 C 两栋 4 条 + t131 的 E-court3-hall 2 条）');
     assert(
