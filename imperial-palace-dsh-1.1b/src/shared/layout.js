@@ -25,7 +25,7 @@ import {
   deepFreeze,
 } from './config.js';
 
-export const LAYOUT_VERSION = '1.1.19'; // t151：C 两殿门外加法下坡带（未被覆盖窗口内 1.9/1.4） // t145：C 两殿台基接近走廊有界开槽（0.9↔1.3 恢复相邻） // t134：删除 4 片开槽残片，使门带不再被更高面取高（门洞节点高度回到 1.5/1.7） // t131：通路存在守卫 + 加法补 E-court3-hall 门外台阶 // t128：C 两栋遮蔽开槽（第二次授权减法）+ 遮蔽常驻守卫 + C 侧分级台阶 // t126：tier2 有界开槽（两条坡道走廊，主理人授权的减法例外）+ 遮蔽普查 // t121：过渡台阶足印进深 ≥1.05m（cellSize:1 网格可见），18 栋门外分级过渡 // t119：ZONES.drawCallBudget 对齐唯一权威源 config.BUDGET.drawCalls.perZone（C60/D56/E56） // t117：门洞可通行性声明与实际一致（passable/blockedBy 具名登记） // t103：10 座开敞亭可通行化（hasDoor→exceptDoor）+ B 两座入口门槛 // t102：按 t100 权威 Δ 清单登记门外过渡台阶（仅登记几何，不宣称可达） // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
+export const LAYOUT_VERSION = '1.1.20'; // t158：float32 裕量级差（1.92/1.45 + 1.3/1.0）+ 过渡矩形规范化 // t151（t157 曾试 1.95/1.5 但会覆盖 transition-2 中心 ⇒ 已回退，配方见回执） // t151：C 两殿门外加法下坡带（未被覆盖窗口内 1.9/1.4） // t145：C 两殿台基接近走廊有界开槽（0.9↔1.3 恢复相邻） // t134：删除 4 片开槽残片，使门带不再被更高面取高（门洞节点高度回到 1.5/1.7） // t131：通路存在守卫 + 加法补 E-court3-hall 门外台阶 // t128：C 两栋遮蔽开槽（第二次授权减法）+ 遮蔽常驻守卫 + C 侧分级台阶 // t126：tier2 有界开槽（两条坡道走廊，主理人授权的减法例外）+ 遮蔽普查 // t121：过渡台阶足印进深 ≥1.05m（cellSize:1 网格可见），18 栋门外分级过渡 // t119：ZONES.drawCallBudget 对齐唯一权威源 config.BUDGET.drawCalls.perZone（C60/D56/E56） // t117：门洞可通行性声明与实际一致（passable/blockedBy 具名登记） // t103：10 座开敞亭可通行化（hasDoor→exceptDoor）+ B 两座入口门槛 // t102：按 t100 权威 Δ 清单登记门外过渡台阶（仅登记几何，不宣称可达） // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
 
 /* =============================================================================
  * 一、包络、区域边界与外墙（§2.3）
@@ -993,17 +993,11 @@ function buildInteriorSliceA() {
     }
   }
   for (const spec of C_SIDE_MAIN_STEPS) {
-    /* 自通道面外端（west: x=-56.6 / east: x=+56.6）向外铺两级：1.3（靠门）→ 1.7 由通道面本身提供 */
     const slot = SLOT_BY_ID[spec.id];
-    const outer = spec.from; // 门面（west: -50 朝东 / east: +50 朝西）
-    const ys = [1.3, 0.9];
-    for (let i = 0; i < ys.length; i += 1) {
-      const near = 1.05 * i; const far = 1.05 * (i + 1);
-      const a = spec.dir > 0 ? Math.ceil(outer + far) : Math.floor(outer - far);
-      const b = spec.dir > 0 ? outer + near : outer - near;
-      const minX = Math.min(a, b); const maxX = Math.max(a, b);
-      walkables.push(WK(`WK-${spec.id}-transition-${i + 1}`, spec.zone, 'ground', `${slot.name}门外过渡 ${i + 1}/2`,
-        minX, maxX, spec.z0, spec.z1, ys[i]));
+    for (let i = 0; i < spec.ys.length; i += 1) {
+      const [a, b] = spec.rects[i];
+      walkables.push(WK(`WK-${spec.id}-transition-${i + 1}`, spec.zone, 'ground', `${slot.name}门外过渡 ${i + 1}/${spec.ys.length}`,
+        Math.min(a, b), Math.max(a, b), spec.z0, spec.z1, spec.ys[i]));
     }
   }
   for (const pid of PAVILION_THRESHOLDS) {
@@ -1092,8 +1086,13 @@ const PAVILION_THRESHOLDS = Object.freeze(['B-pavilion-gate-west', 'B-pavilion-g
    ⇒ 在该未被覆盖的窗口内补 2 级下坡（1.9 / 1.4，每级 0.5 ≤ 0.5），下端接既有 transition-1(1.3) 与 ground(0.9)。
    **加法优先**：此处加法不会被取高（窗口未被覆盖），故不必再动台基（t150 已证仅回撤不足）。 */
 const C_DESCENT_BANDS = Object.freeze([
-  { id: 'C-side-west-main', zone: 'C', xs: [[-46, -44], [-48, -46]], ys: [1.9, 1.4], z0: 155, z1: 181 },
-  { id: 'C-side-east-main', zone: 'C', xs: [[44, 46], [46, 48]], ys: [1.9, 1.4], z0: 155, z1: 181 },
+  /* t157：级差改为 **1.95 / 1.5**（原 1.9/1.4 与台基 2.4 恰好相差 **0.50**）——
+     图侧高度存于 **Float32Array** ⇒ `2.4000000953674316 − 1.8999999761581421 = 0.5000001192 > 0.5`
+     ⇒ `canStep` 上行被拒（下行 ≤0.6 可过）⇒ **单向带（进得去出不来）**。
+     改为 1.95/1.5 后逐跳 float32 级差 ≈ **0.45 / 0.45 / 0.20**，双向均有裕量。 */
+  /* t158：级差 1.92/1.45 —— 原 1.9/1.4 与台基 2.4 恰差 0.50，float32 下为 0.5000001192 > 0.5 ⇒ canStep 拒上行 ⇒ 8 处单向带。 */
+  { id: 'C-side-west-main', zone: 'C', xs: [[-46, -44], [-48, -46]], ys: [1.92, 1.45], z0: 155, z1: 181 },
+  { id: 'C-side-east-main', zone: 'C', xs: [[44, 46], [46, 48]], ys: [1.92, 1.45], z0: 155, z1: 181 },
 ]);
 
 /* t131：**加法**补 `E-court3-hall` 的门外分级台阶 —— 其通道面 1.3 与 E 区地坪 0.4 相差 0.9 > 0.5，
@@ -1104,8 +1103,10 @@ const T131_EXTRA_STEPS = Object.freeze([
 ]);
 
 const C_SIDE_MAIN_STEPS = Object.freeze([
-  { id: 'C-side-west-main', zone: 'C', from: -50, dir: 1, z0: 155, z1: 181 },
-  { id: 'C-side-east-main', zone: 'C', from: 50, dir: -1, z0: 155, z1: 181 },
+  /* t158：改为**显式规范矩形**（原隐式算术在第二级产生 minX>maxX 的畸形值 ⇒ 对 floorYAt 隐形但“中心”落在带内 ⇒ ⓠ 护栏红）。
+     两级互不重叠 ⇒ 互不内含；级差 1.3 / 1.0 / 1.45 / 1.92 逐跳 ≤0.48（float32 安全）。 */
+  { id: 'C-side-west-main', zone: 'C', rects: [[-50, -48.9], [-49.0, -47.9]], ys: [1.3, 1.0], z0: 155, z1: 181 },
+  { id: 'C-side-east-main', zone: 'C', rects: [[48.9, 50], [47.9, 49.0]], ys: [1.3, 1.0], z0: 155, z1: 181 },
 ]);
 
 const INTERIOR_SLICE_A = buildInteriorSliceA();

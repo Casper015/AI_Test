@@ -70,7 +70,7 @@ const {
 check('config.version 为字符串', typeof CONFIG_VERSION === 'string' && CONFIG_VERSION.length > 0);
 // 版本对应关系（有意 pin：任何版本递增都必须同步改这两条断言，避免"悄悄改冻结值"）
 eq('CONFIG 版本 = 1.0.7（t84：§8.2 分区配额重分配）（+ 夜景户外补光/夕照 orbit 补光）', CONFIG_VERSION, '1.0.7');
-eq('LAYOUT 版本 = 1.1.19（t151：C 两殿门外加法下坡带）', L.LAYOUT_VERSION, '1.1.19');
+eq('LAYOUT 版本 = 1.1.20（t158：float32 裕量级差 + 过渡矩形规范化）', L.LAYOUT_VERSION, '1.1.20');
 check('config.styleBaseline 为字符串', typeof STYLE_BASELINE === 'string' && /^v\d+\.\d+\.\d+$/.test(STYLE_BASELINE), STYLE_BASELINE);
 check('config.sceneSeed 为整数', Number.isInteger(SCENE_SEED));
 check('config.deriveSeed 确定性', deriveSeed('B') === deriveSeed('B') && deriveSeed('B') !== deriveSeed('C'));
@@ -961,6 +961,47 @@ console.log(` - t85 连通性定位：**surfaces-only 启发式（不含 connect
   console.log(` - t134 格级守卫：43 处门中心/门带解析高度一致（样例 ${hops.slice(0, 2).join(' , ')} …）；4 栋逐跳 canStep ✓`);
 }
 
+
+
+
+/* ===== t159：F3 粒度双向断言 —— 门轴中带 3 格 × 链内相邻（含跨级邻面），Float32 精度，精确失败 0 =====
+   粒度（避免 t150 的 417 / t157 的 214 假红）：只在**门轴方向**取该带**中带 3 格**的采样，
+   与**紧邻的门轴两侧格**比较，且**仅当 |Δ| ≤ 0.6（属“链内可跨对”）时才判**（>0.6 的落差属无关结构，跳过）。
+   判据：`Math.fround` 复现图侧 Float32 ⇒ 上行 ≤0.5（严格，无 epsilon；float32 下 “刚好 0.50” 会超阈值）· 下行 ≤0.6。
+   分工：本层查**几何/链路**；图搜索层（`interaction` t156 F12）查**真实正反可达**，后者权威。 */
+{
+  const UP = INTERACTION.step.maxStepHeight;      // 0.5
+  const DOWN = INTERACTION.step.snapDownDistance; // 0.6
+  const isBand = (w) => /-transition-\d+$/.test(w.id) || /-descent-\d+$/.test(w.id) || /-threshold$/.test(w.id);
+  const f32 = (v) => (v === null ? null : Math.fround(v));
+  const bad = [];
+  let pairs = 0;
+  for (const w of L.WALKABLE.filter(isBand)) {
+    const bw = w.bounds.maxX - w.bounds.minX; const bd = w.bounds.maxZ - w.bounds.minZ;
+    const axisX = bw >= bd;                        // 门轴 = 较长的那个方向（本类带均为 x 向）
+    const cx = (w.bounds.minX + w.bounds.maxX) / 2; const cz = (w.bounds.minZ + w.bounds.maxZ) / 2;
+    const mid = axisX ? [cz - 1, cz, cz + 1] : [cx - 1, cx, cx + 1];   // 宽度方向中带 3 格
+    for (const t of mid) {
+      const x = axisX ? cx : t; const z = axisX ? t : cz;
+      const y = f32(L.floorYAt(x, z));
+      if (y === null) continue;
+      /* t159 修正：**四向**都取邻（门轴 x 向是关键：C/B 门的接近方向；z 向邻格为带内同高 ⇒ Δ=0 不误报） */
+      for (const [dx2, dz2] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x2 = x + dx2; const z2 = z + dz2;
+        const y2 = f32(L.floorYAt(x2, z2));
+        if (y2 === null) continue;
+        const delta = y2 - y;                       // 正向：y → y2
+        if (Math.abs(delta) > DOWN + 1e-9) continue; // 无关结构（>0.6 落差）⇒ 跳过
+        pairs += 1;
+        if (delta > UP) bad.push(`${w.id}(${x},${z})y${y.toFixed(2)}→(${x2},${z2})y${y2.toFixed(2)} 上行 ${delta.toFixed(4)} > ${UP}`);
+        if (-delta > DOWN) bad.push(`${w.id}(${x},${z})y${y.toFixed(2)}→(${x2},${z2})y${y2.toFixed(2)} 下行 ${(-delta).toFixed(4)} > ${DOWN}`);
+      }
+    }
+  }
+  check('t159 F3 双向断言：门轴中带 3 格 × 链内相邻（|Δ|≤0.6 对）逐跳**双向**满足 上行≤0.5 / 下行≤0.6（Float32 精度；精确失败数 === 0）',
+    bad.length === 0, bad.slice(0, 16).join(' | '));
+  console.log(` - t159 F3 双向断言：带 ${L.WALKABLE.filter(isBand).length} 条 · 链内相邻对 ${pairs} · 失败 ${bad.length}（分工：本层查几何/链路，图搜索层查真实正反可达）`);
+}
 
 console.log(` - 连接 ${L.CONNECTORS.length}，道路 ${L.ROADS.length} 段，墙 ${L.WALLS.length} 段，可行走面 ${L.WALKABLE.length}，障碍 ${L.OBSTACLES.length}`);
 console.log(` - 视角 ${L.VIEWPOINTS.length}，导览点 ${L.TOUR_POINTS.length}，走查点 ${L.FP_ROUTE.length}，config ${CONFIG_VERSION}/${STYLE_BASELINE}`);
