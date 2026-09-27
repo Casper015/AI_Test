@@ -909,7 +909,9 @@ export function decodePngStats(file, options = {}) {
     guardReasons.push(`__NO_SKY_VIEW__${authoritativePolicy?.note ?? '权威背景占比 ≈0'}（口径依据：渲染侧 ?stats=1 的 backgroundColorHex）`);
     skyMask = null; skyPixels = 0; autoBg = null; autoSpread = 0;
   }
-  if (bg && contentShare >= MASK_MAX_CONTENT) {
+  /* t119：内景视角**本就无真天空/无背景候选** ⇒ 背景掩码防护不适用于内景（外景不豁免；`--allow-no-sky` 禁令不动）。
+     这是与 :921「未识别到真天空」并列的**另一条**未覆盖路径（t92 工具侧 32 行误判 FAIL 的原因）。 */
+  if (!isInteriorView && bg && contentShare >= MASK_MAX_CONTENT) {
     guardReasons.push(`掩码可疑：存在背景候选 rgb(${bg.r},${bg.g},${bg.b})，但内容占比 ${(contentShare * 100).toFixed(2)}% ≥ ${(MASK_MAX_CONTENT * 100).toFixed(0)}%（容差边界极可能失效）`);
   }
   if (!bg && !noSkyView) {
@@ -918,8 +920,18 @@ export function decodePngStats(file, options = {}) {
       : (skyDrift > SKY_DRIFT_MAX
         ? `候选色 rgb(${autoBg.r},${autoBg.g},${autoBg.b}) 在扫描带内**垂直漂移 ${skyDrift.toFixed(1)} > ${SKY_DRIFT_MAX}**（雾/远景几何的深度渐变特征，不是天空）`
         : `候选天空区域仅 ${(skyShare * 100).toFixed(2)}% < ${(SKY_MIN_SHARE * 100).toFixed(0)}% 或色散 ${autoSpread} > ${SKY_MAX_SPREAD}`);
-    if (!isInteriorView && !ALLOW_NO_SKY) guardReasons.push(`未识别到**真天空**（${why}）：判据不能靠退回整帧口径得出；确属无天空画面请显式加 --allow-no-sky`);
-  } else if (skyShare < MASK_MIN_BG_SHARE && !noSkyView) {
+    /* t124：**§12.1.1「无天空视角」正式分支** —— 当**掩码自身报告"全画面为内容、背景占比 0% < 0.5%"**
+       （`bg === null` 且 `contentShare ≥ MASK_MAX_CONTENT`）时，这不是"掩码坏了"，而是文档已登记的**预期分支**：
+       输出 ℹ️ 注明依据、**不再据此判 FAIL**（§12 三项阈值照旧生效 ⇒ 真超标仍会 FAIL）。
+       **边界**：只对"掩码报告零背景"成立；任何检出背景候选（`bg !== null`）的外景**照旧受同防护**；
+       `--allow-no-sky` 仍禁用；内景豁免（t119）不动。 */
+    const maskSaysNoBackground = (bg === null && contentShare >= MASK_MAX_CONTENT);
+    if (!isInteriorView && !ALLOW_NO_SKY && !maskSaysNoBackground) {
+      guardReasons.push(`未识别到**真天空**（${why}）：判据不能靠退回整帧口径得出；确属无天空画面请显式加 --allow-no-sky`);
+    } else if (maskSaysNoBackground) {
+      guardReasons.push('__NO_SKY_VIEW__' + `§12.1.1 无天空视角（正式口径）：掩码报告**全画面为内容**（背景占比 0% < 0.5%，候选 sky 缺失：${why}）⇒ 整帧即内容；阈值与分类不变`);
+    }
+  } else if (!isInteriorView && skyShare < MASK_MIN_BG_SHARE && !noSkyView) {
     guardReasons.push(`天空占比过低：真天空区域仅 ${(skyShare * 100).toFixed(2)}% < ${(MASK_MIN_BG_SHARE * 100).toFixed(0)}%`);
   }
   if (bg && contentShare <= 0.02) {

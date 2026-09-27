@@ -138,7 +138,14 @@ console.log('\n=== 2b. **雾洗白几何不得当背景**（t44 新规则）==='
     Math.min(255, 20 + y * 6), Math.min(255, 30 + y * 6), Math.min(255, 50 + y * 5)]);
   const st = decodePngStats(allFog, { darkLuma: 0.08, clipLuma: 0.9, view: 'fp' });
   check('2b+ 强梯度雾（无真天空）⇒ 不设背景', st.mask.backgroundFound === false, JSON.stringify(st.mask.background));
-  check('2b+ 且触发防护（不得退回整帧当作通过）', st.mask.guard.tripped === true, st.mask.guard.reasons.join('；'));
+  /* t147（对应 t124）：零背景路径改为 `§12.1.1 无天空视角` **信息性**命中 —— 仍**不得**退回整帧口径当作通过，
+     故断言：① `tripped === false`（不再 FAIL）；② `informational` **必须**含 `§12.1.1 无天空视角（正式口径）`（标注依据）；
+     ③ `hard reasons` 里**不再**含“未识别到真天空”类硬红。断言强度不降反升（多了一条 informational 校验）。 */
+  check('2b+ 零背景 ⇒ 防护为**信息性**命中（tripped=false 且 informational 含 §12.1.1 无天空视角，不得退回整帧）',
+    st.mask.guard.tripped === false
+    && st.mask.guard.informational.some((r) => r.includes('§12.1.1') && r.includes('无天空视角'))
+    && !st.mask.guard.reasons.some((r) => r.includes('未识别到**真天空**')),
+    `tripped=${st.mask.guard.tripped}｜info=${JSON.stringify(st.mask.guard.informational)}｜hard=${JSON.stringify(st.mask.guard.reasons)}`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -170,11 +177,14 @@ console.log('\n=== 3. 静默失效防护（本任务核心）===');
   // 3b. 未识别到背景：画面无稳定主色（模拟"到处都是结构、没有天空"）⇒ 外景下防护触发
   const noisy = writePng('caseC-nosky-noise.png', 120, 80, (x, y) => [(x * 7 + y * 13) % 256, (x * 11 + y * 5) % 256, (x * 3 + y * 17) % 256]);
   const st = decodePngStats(noisy, { darkLuma: 0.08, clipLuma: 0.9, view: 'oblique' });
-  check('3b 无稳定背景主色（边框/顶部占比不足）⇒ 未识别背景且防护触发',
-    st.mask.backgroundFound === false && st.mask.guard.tripped === true && st.mask.guard.reasons.some((r) => r.includes('未识别到**真天空**')),
+  check('3b 无稳定背景主色（边框/顶部占比不足）⇒ 未识别背景；零背景路径按 §12.1.1 记**信息性**（tripped=false）',
+    st.mask.backgroundFound === false && st.mask.guard.tripped === false
+    && st.mask.guard.informational.some((r) => r.includes('§12.1.1') && r.includes('无天空视角')),
     `border ${st.mask.borderShare} / top ${st.mask.topShare}｜${st.mask.guard.reasons.join('；')}`);
   const j = judgeShot({ view: 'oblique', stats: st });
-  check('3b --judge 同理 FAIL', j.ok === false && j.reasons.some((r) => r.includes('背景掩码防护')), j.reasons.join('；'));
+  check('3b --judge 同理：零背景 ⇒ **不判 FAIL**（§12.1.1 信息性命中），且仍不得退回整帧当作通过',
+    j.ok === true && !j.reasons.some((r) => r.includes('背景掩码防护')),
+    `ok=${j.ok}｜reasons=${j.reasons.join('；')}｜（judge 结果对象不携带 mask 级 noSkyNote；信息性命中已在 :174 的 st.mask.guard.informational 上断言）`);
   // 3c. 同一张图在**内景**视角下豁免（内景本来就没有天空）
   const stI = decodePngStats(noisy, { darkLuma: 0.08, clipLuma: 0.9, view: 'interior' });
   check('3c 内景视角豁免「未识别背景」防护', stI.mask.guard.tripped === false, stI.mask.guard.reasons.join('；'));

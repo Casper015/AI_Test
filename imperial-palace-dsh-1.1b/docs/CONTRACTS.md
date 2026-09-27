@@ -4,14 +4,14 @@
 >
 > | 项目 | 版本 |
 > | --- | --- |
-> | 契约版本 | `CONTRACTS v1.0.15` |
+> | 契约版本 | `CONTRACTS v1.0.20` |
 > | 风格基线 | `STYLE_BASELINE v1.0.0`（见 `docs/STYLE_GUIDE.md`） |
 > | `src/shared/config.js` | `CONFIG_VERSION 1.0.6` |
 > | `src/shared/layout.js` | `LAYOUT_VERSION 1.0.0` |
 > | `src/kit/index.js` | `KIT_VERSION 1.0.1` |
 > | 参考 | `imperial-palace-plan.md` §2.3 §3.1 §6.1 §6.2 §6.3 §6.4 §7.1 §8.2 |
 >
-> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.15` ⇄ `CONFIG_VERSION 1.0.6` ⇄ `LAYOUT_VERSION 1.0.0` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
+> **版本对应关系（当前有效组合）**：`CONTRACTS v1.0.20` ⇄ `CONFIG_VERSION 1.0.6` ⇄ `LAYOUT_VERSION 1.0.0` ⇄ `KIT_VERSION 1.0.1` ⇄ `STYLE_BASELINE v1.0.0`。
 > 以上四项均以**运行时读出值**为准并用命令核对（见 §3.4.8 末尾与 `docs/handoff-contracts-fix.md`）：
 > `node -e "Promise.all([import('./src/shared/config.js'),import('./src/shared/layout.js'),import('./src/kit/index.js')]).then(([c,l,k])=>console.log(c.CONFIG_VERSION,l.LAYOUT_VERSION,k.KIT_VERSION))"` → `1.0.3 1.0.0 1.0.1`。
 > 下游回报必须写明这组版本；不匹配即视为旧版产物。
@@ -48,6 +48,11 @@
 > - **v1.0.12（t81 / T1.28；F6 裁定 (a)）**：§5.2 内景机位口径递增为「**每栋可进入建筑 1 个 `interior` 机位**」（集合 43 栋 = 殿 14 + 配殿/配房 23 + 门殿 6；排除 4 角楼 / 10 亭 / 10 院门），映射由 `INTERIOR_BY_SLOT` 显式给出；新增 §5.2.1「与 `LAYOUT 1.1.4` 实际值对照」表（interior 43 / walkable 112 / viewpoints 61 / FP_ROUTE 50 / CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14）并写明取代关系；**历史条目只追加、旧口径保留并附时点声明**；连通性归 t77、几何开门归 t69/三区/t66，**本版本不宣称“均已可进入”**。
 > - **v1.0.14（t97 / T1.34）**：新增 §5.2.2 —— `door.sillY` = **门外门槛面标高**（`sillY = zoneGroundY(zone) + 本地台基`）；修复 24 栋 C/D/E 漏加区域地坪；`WK-*-interior.y` / `WK-*-door-passage.y` / `INTERIOR_BY_SLOT.groundY` 三者逐栋相等（43/43）；例外表 `DOOR_SILL_EXCEPTIONS` 3 类 6 条（F 四城门双标高 + `C-hall-bed-main` + `C-gate-inner` 绝对标高 wart）。LAYOUT 1.1.8。
 > - **v1.0.15（t103 / T1.38）**：新增 §4.1.1（`door.center` 为建筑中心 / **`door.facade` 为门外锚点**，`y` 与 `sillY` 同源；贴门取地面一律用 `facade`）；§5.2.1 与 §6.4 的 `WALKABLE` 由 **112 → 157**（+43 门外过渡台阶 t102 + 2 亭入口门槛 t103）；**10 座开敞亭可通行化**（`hasDoor:true` ⇒ `OBSTACLES.blocks='exceptDoor'`，与院门同类）。
+> - **v1.0.16（t118 / T1.42）**：新增 **§5.2.3** —— 登记 `door.passable`（门洞实际可通行性声明）与 `door.blockedBy`（具名阻挡者 id，默认 `null`），并写明核心约束「**门洞可通行性声明必须与实际一致**；登记几何门洞 ≠ 可通行；被具名障碍阻断必须记 `blockedBy`；消费方一律读该字段、不得自行推断；不可通行不得退化为静默整足迹阻挡」。附 t117 实例（`D-court3/E-court3-pavilion`：`width=8m` 但 `passable=false`、`blockedBy=WB-{D,E}-pond`）。**历史只追加**。
+> - **v1.0.17（t128 / T1.48）**：新增 **§4.1.2**（`probeDoorClearance` / `probeDoorClearanceReport` 的公开签名、口径、语义与“必须用基线派生水体”的坑）；`§5.2.1` / `§6.4` 的 `WALKABLE` 由 **157 → 169**（t126 tier2 有界开槽净 +4、t128 C-bed-terrace 有界开槽净 +4 + C 侧 4 级台阶）；新增**遮蔽常驻守卫**口径（任何可行走面被更高面完全内含 ⇒ 红，全城期望 **0** 条）。历史只追加。
+> - **v1.0.18（t133 / T2.34）**：并入两端已备妥文案 —— **§12.1.2 可行走面成对不变式**（① 任何可行走面不得被更高可行走面完全内含（平面投影）；② 每处内景门洞的「门外接近面 → 通道面 → 室内面」链必须存在且相邻可跨；承载断言 `tests/layout.test.mjs:839`（t128）与 `:905`（t131，标题原文见该节），并写明为**改几何的护栏**）与 **§12.5 诊断通道纪律与过曝排查顺序**（`?env=` 只改显式键 + A/B 自检同向 + 过曝先量 Bloom 的四步顺序；与 §12.1.1 自洽）。**未改任何阈值、判据或断言**；历史只追加。
+> - **v1.0.19（t135 / T1.51）**：新增 **§12.1.3「格级取高」守卫**（不变式：门洞通道面/室内面的图节点高度必须等于其自身 `y`；与 §12.1.2 的遮蔽/通路两条并列为**三条「改几何的护栏」**），并登记其**承载断言实际坐标** `tests/layout.test.mjs:930`（`t134`）与精度口径（逐栋、精确、失败打印清单），附 `t132` 探针口径来源与复跑命令；同时**更正 §12.1.2 的坐标引用**（`:688`→`:839`、`:882`→`:905`，仅坐标、语义未改）。历史只追加。
+> - **v1.0.20（t141 / T1.54）**：新增 **§12.1.4「结果级」可达性口径**（四条护栏的终点：全城有门槽位「不可达 = 0」），并列登记四层承载断言（面 `layout.test.mjs:839` / 链 `:905` / 格 `:930` / 结果 `tests/walk-reachability.test.mjs`）与口径诚实性（细 `cellSize:1` **需显式提额** `maxCells:3_000_000`；默认 40 万上限下整城 1m **抛错**——原文 `可行走图规模过大：841×1121 > 400000`；粗 `cellSize:2`），并登记实测基线与耗时。历史只追加。
 > **数值唯一来源**：所有色板、模数、间距、时长、标高、预算、种子只能取自 `src/shared/config.js`；
 > 所有建筑槽位、院落、连接、道路、可行走面、障碍、视角只能取自 `src/shared/layout.js`。
 > 禁止在区域/核心/UI 代码里散落硬编码数值；需要新数值时先登记（递增版本）再消费。
@@ -429,6 +434,21 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 - **纪律**：任何“贴门取地面 / 测量门外 Δ / 登记过渡”的工具**必须以 `facade` 为基准**；以 `center` 起算会穿过建筑进深 14–21m（t100 口径 v1/v2/v3 三次作废的根因，详见 `docs/report-completeness.md §15.6`）。
 - **历史只追加**：本语义在 `LAYOUT ≤1.1.8` 不存在此字段，自 `1.1.9`（t102）起登记。
 
+### 4.1.2 门洞净宽**实测出口**：`probeDoorClearance` / `probeDoorClearanceReport`（`CONTRACTS v1.0.17`，t128 并入 t127 交付）
+
+```js
+import { probeDoorClearance, probeDoorClearanceReport } from 'src/core/layout-slice.js';
+probeDoorClearance(slotId, { step = 0.1, feetY = null })            // → 净宽（米） | null
+probeDoorClearanceReport(slotId, { step = 0.1, feetY = null })      // → { reason, doorWidth, doorAxis,
+                                                                    //     bandHalfWidth, clearWidth, samples,
+                                                                    //     blockedSamples, passable, blockedBy, facade,
+                                                                    //     declaredBlockerResolved, approachBlockedAt, points[] }
+```
+- **口径**：门带横向 = **垂直于 `door.axis`**；带宽 `door.width / 2 − radius`；在 `door.center` 平面**逐 `step`（默认 0.1m）**采样；脚高取采样点 `floorYAt()`（可用 `feetY` 覆盖）；**一律走谓词层 `obstacleBlocksPoint()`**（不得另起第二套判定）。
+- **语义**：有效 ⇒ 净宽｜**无门 / 非 `exceptDoor` ⇒ `0`**｜**无效 slotId ⇒ `null`**｜**空串 ⇒ `TypeError`**（**不得静默当 0**）。
+- ⚠️ **必须写进契约的坑（“同一概念两个数据源”又一实例）**：判定与“声明阻挡者”解析**必须使用 `assembleBaselineObstacles()` 的基线派生水体**；**raw `OBSTACLES` 的水体记录没有派生 `bounds`** ⇒ 用它会把**被水体挡住的门误读为可通行**（t127 首次实测 `D/E-court3-pavilion` 得 **7.2m**，改基线后为 **0**）。
+- **用途（纪律）**：`door.passable` / `door.blockedBy`（§4.1.1 / §5.2.3）是**声明**，**必须被该实测出口守住**——`passable:false ⇒ 实测 0`；`passable:true ⇒ 实测 ≥ max(1.1m, width×0.5)`（`tests/layout.test.mjs` 常驻断言）。
+
 ### 4.2 等级-屋顶白名单（机器守卫，`CONFIG 1.0.1` 起）
 
 每个槽位必须同时满足：
@@ -485,7 +505,7 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 | 量 | 旧文本口径 | **当前实测（`LAYOUT 1.1.4`）** | 取代关系 |
 | --- | --- | --- | --- |
 | `interior` 机位 | B/C 各 1（共 2） | **43**（每栋可进入建筑 1 个） | §5.2 已改，旧口径降为历史真值 |
-| `WALKABLE` 条数 | 28 | **157**（112 + **43 门外过渡台阶 t102** + **2 亭入口门槛 t103**） | t103 按当前树实测更新（旧值 112 降为历史真值） |
+| `WALKABLE` 条数 | 28 | **169**（112 + 43 门外过渡台阶 t102 + 2 亭入口门槛 t103 + **t126 tier2 开槽净 +4** + **t128 C-bed-terrace 开槽净 +4** + **C 侧 4 级台阶**） | t128 按当前树实测更新（112 / 157 为历史真值） |
 | `VIEWPOINTS` | 20 | **61**（zone 7 / fp-spawn 5 / interior 43 / focus-extra 6） | 取代旧普查值 |
 | `FP_ROUTE` | 9 | **50**（9 基础 + 41 门内走查点 + …由派生统一给出） | 取代旧普查值 |
 | `CONNECTORS` | 32 | **32**（未变；**建筑自身的门不是 connector**） | 不变 |
@@ -510,6 +530,32 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
   | `C-gate-inner` | `sillY=1.8` / 内景地面 0.9 | 该槽位 `baseY=0.9` 存的是**绝对标高**（其余为相对偏移）⇒ 绝对标高 wart（t83 登记、t97 并入例外表） |
 
 > **历史只追加**：旧口径（`sillY = 本地台基`，无区域地坪）在 `LAYOUT ≤1.1.7` 期间为真值，自 `1.1.8`（t97）起由上式取代；历史条目保留不删改。
+
+#### 5.2.3 `door.passable` / `door.blockedBy` 语义（`CONTRACTS v1.0.16`，t118 / 源自 t117）
+
+`S()` 派生出的门规范对象（`SLOT.door`）除几何字段（`axis` / `center` / `width` / `height` / `sillY` / `facade`）外，
+**还必须有可通行性声明**：
+
+| 字段 | 类型 | 语义 |
+| --- | --- | --- |
+| `door.passable` | `boolean` | **该门洞的实际可通行性声明**。`true` = 可经此门洞进出；`false` = 不可通行（**必须**同时有具名 `blockedBy`） |
+| `door.blockedBy` | `string \| null` | **具名阻挡者 id**（默认 `null`）。门洞被某个整足迹障碍（如水体、假山）占据时，记该障碍的 `id`（如 `WB-D-pond`） |
+
+**核心约束（必须遵守）**：
+1. **“门洞可通行性声明必须与实际一致”** —— 登记了**几何门洞**（`door.width > 0`）**不等于**声明可通行；
+2. 若门洞实际被具名障碍阻断，**必须**记 `blockedBy`，**不得**留下“登记可通行、实际不可通行”的误导性数据（该数据会污染提示、巡游与验证口径）；
+3. **消费方（提示 / 验证 / 巡游 / 取景）一律读 `passable` 与 `blockedBy`，不得自行从几何推断可通行性**；
+4. “不可通行”**不得**退化为静默的整足迹阻挡（`blocks:'all'` 且无原因）——具名 `blockedBy` 就是可见原因（与 §6.1 的“未走进必须有具名原因”一致）。
+
+**实例（t117 落地，运行时实测）**：
+
+| 亭 | `door.width` | `door.passable` | `door.blockedBy` | 原因 |
+| --- | --- | --- | --- | --- |
+| `D-court3-pavilion` | 8m | **`false`** | **`WB-D-pond`** | 亭体整体位于水池足迹 `x[-188,-124] z[16,68]` 内，门外 0.5–8m 候选点全在水面 ⇒ 实际净宽 0.0m |
+| `E-court3-pavilion` | 8m | **`false`** | **`WB-E-pond`** | 同上（水体 `x[124,188] z[16,68]`） |
+| 其余 8 座亭 | 8m | `true` | `null` | 门洞带内无整足迹障碍 |
+
+> **历史只追加**：本字段自 `LAYOUT 1.1.11`（t117）起存在；`LAYOUT ≤1.1.10` 期间门规范**无**可通行性声明（当时下游只能自行推断，正是 t77-F5 的成因）。历史条目保留、不删改。
 
 ### 5.3 八种模式（同一相机装置，`config.CAMERA.viewModes`）
 
@@ -594,7 +640,7 @@ totalHeight = eaveHeight + roofRise (+ 重檐抬升)
 - 跳跃：**禁用**（`config.INTERACTION.jump.enabled = false`），避免掉出宫城；`clampToEnvelope = true`，玩家不得离开 `[±420, ±560]` 外侧地形范围，也不得越过城墙。
 - 第一人称/相机：`camera.near` 不是碰撞替代品。
 
-### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，当前 **157 面**：ground/terrace/interior 43/bridgeDeck/gardenGround/outerTerrain/**passage 43**/**过渡台阶 43（t102）**/**亭门槛 2（t103）**）
+### 6.4 可行走面清单（权威来源 `layout.WALKABLE`，当前 **169 面**：ground/terrace/interior 43/bridgeDeck/gardenGround/outerTerrain/**passage 43**/**过渡台阶 47（t102 43 + t128 4）**/**亭门槛 2（t103）**；t126/t128 两次**有界开槽**使 tier 类由 1→5 段 ×2（净 +8））
 
 外侧地形 4 段 + 墙外岸台 4 段 + 四桥桥面 + 南/北门内侧带 + 御花园地坪 + B 广场/主殿侧地面/三层台基顶/金銮殿内景地面/主殿北地面 + C 后宫地面/寝殿台基顶/寝殿内景地面 + D/E 侧院地坪。
 
@@ -945,6 +991,67 @@ data-palace-ready-src="sync-frames"
 > 权威色 `#171f2f`、画面占比 5.16% ⇒ 内容 94.8%、**暗区 26.52% ≤30% PASS**；而像素法把 `rgb(8,16,34)`（Δ=15，非清屏色）当天空 ⇒ 2.39%（**偏乐观**）。
 > 两种读法都 PASS，但**语义以权威口径为准**；`Δ=15` 的不一致已作为开放项登记（见 `docs/handoff-shot-mask-nosky.md`）。
 
+> **§12.1.2 可行走面成对不变式（`CONTRACTS v1.0.18`，t133 并入；承载者 = `t128`/`t131` 的常驻守卫）**
+>
+> ① **任何可行走面不得被更高可行走面完全内含（平面投影）** —— 承载断言 `tests/layout.test.mjs:839`（`t128` 加入；全城期望 **0** 条）。
+> ② **每处内景门洞的「门外接近面 → 通道面 → 室内面」链必须存在且相邻可跨** —— 承载断言 `tests/layout.test.mjs:882`，
+> 标题原文「`t131`：通路存在守卫（门洞三段链：门外接近面 → 通道面 → 室内面）」。
+>
+> **这两条是"改几何的护栏"**：任何布局几何改动（新增面 / 开槽 / 补台阶 / 改标高）**必须先过这两条**；违反即测试红，
+> **不得**以放宽阈值、改 `>=` 或删除断言的方式通过。关联口径：§5.2.1 / §6.4 的 `WALKABLE` 计数随布局递增，
+> core 侧冻结 pin（`tests/core.test.mjs`）需同步（见 §6.4）。
+> **注**：低层通路面被高层台地面盖住的机制属生产语义（`layout.floorYAt` 对同位置取**最高面**）；改取高规则属**高影响面**变更，
+> 必须先量化（只读探针 `scripts/probe-walk-rule.mjs` + 报告 `docs/report-walk-rule.md`：全城 1m 扫描 235 对 / 真正受影响 4 个门洞）。
+
+#### 12.1.3 「格级取高」守卫（第 3 条护栏，`CONTRACTS v1.0.19`，t135 并入 t134 交付）
+
+**不变式**：**内景门洞的「通道面 / 室内面」在图上的节点高度（`walk-graph.sample().surfaceY`，经 `layout.floorYAt` 的「同位置取 `max(s.y)`」口径得出）必须等于其自身 `y`** —— 不得被同平面位置上的**更高可行走面**取高。
+
+**三条护栏并列为「改几何的护栏」**（缺一不可；**违反即红**；**不得放宽阈值 / 不得改 `>=` / 不得删断言**）：
+| # | 不变式 | 承载断言（实际值，实读） |
+| --- | --- | --- |
+| ① 遮蔽 | 任何可行走面**不得被更高可行走面完全内含**（平面投影） | `tests/layout.test.mjs:839`（`t128`；标题原文见 §12.1.2） |
+| ② 通路 | 每处内景门洞的「**门外接近面 → 通道面 → 室内面**」链必须存在且相邻可跨 | `tests/layout.test.mjs:905`（`t131`） |
+| ③ **格级取高** | **门洞通道面 / 室内面的图节点高度必须等于其自身 `y`**（差必须在可跨带内） | **`tests/layout.test.mjs:930`（`t134`）** |
+
+**③ 的承载断言（实读原文与口径）**：
+- 标题原文：`t134 格级守卫：43 处内景的「门中心 / 门带中点」解析高度与其自身 y 的差**必须在可跨带内**（不得被更高面取高出带；精确，缺一即红）`；
+- 同节另有 **4 栋专项**（`B-side-{west,east}-main` / `C-side-{west,east}-main`）：`门中(解析高度) → 通道面 → 室内` **逐跳 `canStep` 为真**（上 ≤ `maxStepHeight 0.5` / 下 ≤ `snapDownDistance 0.6`）；
+- **精度口径**：**逐栋（43 处全覆盖、4 栋专项不抽样）**、**精确断言 `bad.length === 0`**（**非"≤N"**）、失败时**打印逐栋清单**（`栋id:门中心解析高度 ≠ 室内 y`）；
+- **口径说明**：判据是"解析高度与自身 `y` 的**差在可跨带内**"，**不是逐值相等** —— 这样 `ROADS` 坡道造成的**合法小差**（4 城门 0.47/0.73 vs 0.4）不被误判，而 `3.0 vs 1.5`（Δ1.5 > 0.5）这类**超带取高**仍必红。
+
+**口径来源（`t132` 只读探针，可复跑）**：
+```bash
+node scripts/probe-walk-rule.mjs          # 只读探针（不改任何文件）
+```
+其结论：访问格 **79,738**；"低面被高面压住"命中 **84,233** 次；**(低面, 高面) 对 235**（其中低面属通路类 `passage/interior/threshold/transition/terrace` 的 **34**）；门洞链（63 门洞 × 两套 `cellSize`）**链上面被压 24**，但**真正不可达仅 4** ⇒ **"被压 ≠ 必然不可达"**；那 4 处（`B-side-{west,east}-main`、`C-side-{west,east}-main`）已由 `t134` 的**有界开槽（删除 4 片残片）**消除，本守卫即为其**常驻护栏**。
+
+> **历史只追加**：本节自 `CONTRACTS v1.0.19` 起存在；`§12.1.2`（v1.0.18）原引用的 `layout.test.mjs:688` / `:882` 因两轮落地**行号漂移**，本次**只更正坐标引用（→ `:839` / `:905`）**，**条款语义未改**。
+
+#### 12.1.4 「结果级」可达性口径（四条护栏的**终点**，`CONTRACTS v1.0.20`，t141 并入 t140 交付）
+
+**不变式（终点口径）**：**生产 solver + 真实建图的「门外可达点 → 通道面 → 室内」链路必须可走**；
+⇒ **全城有门槽位「图中不可达 = 0」**（已声明 `door.blockedBy` 者除外，且**必须**有具名阻挡者）。
+
+**四条护栏并列（层级：面 → 链 → 格 → 结果；缺一不可；违反即红；不得放宽阈值 / 不得改 `>=` / 不得删断言）**：
+| # | 层级 | 不变式 | 承载断言（文件 / 行） |
+| --- | --- | --- | --- |
+| ① | 面级 | 任何可行走面**不得被更高可行走面完全内含**（平面投影） | `tests/layout.test.mjs` **`:839`**（t128） |
+| ② | 链级 | 每处门洞「门外接近面 → 通道面 → 室内面」链**存在且相邻可跨** | `tests/layout.test.mjs` **`:905`**（t131） |
+| ③ | 格级 | 门中心 / 门带中点的**解析高度**与自身 y 之差**在可跨带内** | `tests/layout.test.mjs` **`:930`**（t134） |
+| ④ | **结果级** | 生产 solver + 真实建图下**逐门真能走到** ⇒「不可达 = 0」 | **`tests/walk-reachability.test.mjs`（t140）** |
+
+**④ 的口径（如实登记，不得冒充）**：
+- **细口径** = 整城 `cellSize:1`，**必须显式提额 `maxCells: 3_000_000`**；
+  **默认 40 万上限下整城 1m 会抛错** —— 实测报错原文：`可行走图规模过大：841×1121 > 400000`（t116 已证，t141 复证）。
+- **粗口径** = 整城 `cellSize:2`（默认上限内）。
+- 两条口径**分别精确断言、结果并列打印**；**不得**用粗口径结论代表细口径结论。
+- 断言为**精确式**（`不可达 = 0`，**非** `≤N`）；失败时打印逐栋清单（slotId + 原因码 + 门外/门中/室内两侧解析高度 + 是否已声明 `blockedBy` + 门带是否被更高面覆盖）。
+- **实测基线（`LAYOUT 1.1.17`）**：有门槽位 **63** · 不可达（细）**0** / （粗）**0** · 存在「门带被更高面覆盖」**0** · 影响可达性 **0**。
+- **实测耗时**：`node tests/walk-reachability.test.mjs` ≈ **24.7s**（细 + 粗两条口径、63 门 × 两条 `path` 查询；`createWalkGraph` 本身 <1ms 级，耗时在查询）；加入 `tests/run.mjs`（其清单为**自动发现 `*.test.mjs`**，无需手工登记）后总耗时约 **235s**。
+
+> **历史只追加**：本节自 `CONTRACTS v1.0.20` 起存在；`§12.1.2`（t133）与 `§12.1.3`（t135）的原条款与语义未改。
+
 ### 12.2 判据阈值（按视角类别分档）
 
 | 类别 | 适用视角 | 内容均值 | **内容暗区** | 内容高光截断 |
@@ -1002,3 +1109,22 @@ data-palace-ready-src="sync-frames"
 `C golden` 56.05%、`C dusk` 53.52%、`C night` 40.77%（均 > 30%）——根因是 kit 的隔扇窗**不透光** + 金砖基色极暗，
 室内拿不到日光；最小修法属 kit 侧（可透光/自发光窗扇 + 殿堂内补光灯位），详见 `docs/handoff-config-1.0.3.md`
 与 `docs/handoff-criteria-sync.md`。
+
+---
+
+### 12.5 诊断通道纪律与过曝排查顺序（`CONTRACTS v1.0.18`，t133 并入；源自 t122 / t106 实测）
+
+1. **诊断参数不得改变被测语义**：`?env=` 只覆盖**显式给出的键**（`sun / ambient / hemi / exposure / lampIntensity / lampDistance / lampIntensityScale / fogNear / fogFar`），
+   其余预设字段（**含 `bloom`**）**逐键保留**；未知键被忽略。实现为逐键 spread（`src/core/environment.js` 的 `presetOf`），
+   并有常驻断言（`tests/core-environment.test.mjs` 的 t122 三用例：三组最小对照 / 8 组覆盖 × `bloom` 7 字段逐值不变 / 方向性铁律）。
+2. **`?env=` 归因前必须做 A/B 自检**：同格跑「无覆盖 / 有覆盖」两组，比较 `describe().exposure`、`describe().bloom.effectiveStrength`
+   与**画面均值/截断** —— **两者必须同向**（实测例：`?env=exposure=0.95` ⇒ exposure 1.06 → 0.95、`bloom` 0.3/0.15 **不变**、
+   整帧均值 0.4063 → **0.3817（更暗）**）。若不同向，**先怀疑对照基准**（不同格 / 不同机位 / 其中一次未入内景体积），而不是被测对象。
+3. **内景过曝排查四步顺序**：
+   ① **先量 Bloom**（bloom-off 对照：金銮殿内景 `dusk` **5.67% → 0.00%，−5.67pp = 100% 来源**）；
+   ② 再查 `describe().bloom` 的内景上限档（小院房 0.3 / 大空间 0.5；`effectiveStrength = baseStrength × (1 − (1 − scale) × blend)`）；
+   ③ 然后才是 `src/kit` 自发光（实测 **±0.02pp ≈ 0**）与材质/令牌；
+   ④ 最后才考虑几何（台基/台阶）。
+4. **与 §12.1.1 自洽**：真天空掩码仍是背景判据的**唯一依据**、`--allow-no-sky` 禁令不变；
+   本节只规定"诊断通道纪律与过曝归因顺序"，**不改任何阈值或判据**。
+

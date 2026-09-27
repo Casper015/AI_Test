@@ -176,7 +176,7 @@ await runner.test('§3.3/§4/§5/§6/§8.3 全部字段通过；数量与 layout
   assertEqual(contract.stats.buildings, 14, '建筑数量必须等于 layout 分配数（14）');
   assertEqual(contract.stats.connectors, 2, '本人 owner 的通道数');
   assertEqual(contract.stats.walkable, zoneLayout.walkable.length, '可行走面数（应与切片一致）');
-  assertEqual(contract.stats.walkable, 17, '可行走面数 = 1 地面 + 8 室内 + 8 门洞通道（t62/t75）');
+  assertEqual(contract.stats.walkable, 25, '可行走面数 = 1 地面 + 8 室内 + 8 门洞通道（t62/t75）+ 8 D 区门外过渡台阶（t102）');
   assertEqual(contract.stats.ramps, 1, '坡道数（RD-D-garden-ramp 的 Δy）');
   assertEqual(contract.stats.viewpoints, 3 + 8, '机位数 = 3 原有 + 8 内景机位');
   runner.info(`D 区：${contract.stats.meshes} 网格 / ${contract.stats.triangles} 三角面 / ${drawCallCount(built.root)} 绘制批次（≤${BUDGET.drawCalls.perZone.D}）`);
@@ -669,16 +669,19 @@ runner.section('9. 预算与实例化');
 
 // t62：47 栋内景（用户新增需求）使各区新增约 +9~12 桶；D 区初始配额 40 已由主理人按 §8.2 批准重分配（t84 落数值）。
 // 本测试同时守住"初始配额"与"已批准配额"两个数，t84 落地后 `Math.max` 自动跟随 config。
-const D_BUDGET_INITIAL = BUDGET.drawCalls.perZone.D;      // 40（初始诊断目标）
-const D_BUDGET_APPROVED = 56;                              // §8.2 重分配（captain 裁定 t84；以 config 落地为准）
-const D_BUDGET_EFFECTIVE = Math.max(D_BUDGET_INITIAL, D_BUDGET_APPROVED);
+/* t93：分区配额**唯一权威源** = `CONFIG.BUDGET.drawCalls.perZone`（audit.mjs 亦读此处）。
+   下方 40 仅为**历史诊断目标**（§8.2 重分配前的初始配额），只用于 info 打印，**不参与断言**；
+   断言一律与 `perZone.D` 严格比较（不设 `max()` 临时余量 —— 与 t92 对 E 区的收紧同口径）。 */
+const D_BUDGET_DIAGNOSTIC_INITIAL = 40;                   // 历史值（文档化，仅打印）
+const D_BUDGET_APPROVED = BUDGET.drawCalls.perZone.D;      // t93：唯一权威源（原临时常量 56，已收口）
+const D_BUDGET_EFFECTIVE = BUDGET.drawCalls.perZone.D;     // t93：严格等于权威源（不再 max() 临时余量）
 
-await runner.test(`D 区绘制批次 ≤ 已批准预算 ${D_BUDGET_EFFECTIVE}（初始配额 ${D_BUDGET_INITIAL}；medium 档，audit 同口径）`, () => {
+await runner.test(`D 区绘制批次 ≤ 已批准预算 ${D_BUDGET_EFFECTIVE}（初始配额 ${D_BUDGET_DIAGNOSTIC_INITIAL}；medium 档，audit 同口径）`, () => {
   const measured = drawCallCount(built.root);
   assert(measured <= D_BUDGET_EFFECTIVE, `绘制批次 ${measured} 超过已批准预算 ${D_BUDGET_EFFECTIVE}`);
   const kitCount = kit.countDrawCalls(built.root);
   assert(kitCount <= D_BUDGET_EFFECTIVE, `kit 口径 ${kitCount} 超已批准预算`);
-  runner.info(`D 区 ${measured} 批次：超初始配额 ${D_BUDGET_INITIAL}（诊断目标）${measured - D_BUDGET_INITIAL} 桶，在已批准 ${D_BUDGET_APPROVED} 内（整城门禁由 audit 保证）`);
+  runner.info(`D 区 ${measured} 批次：超初始配额 ${D_BUDGET_DIAGNOSTIC_INITIAL}（诊断目标）${measured - D_BUDGET_DIAGNOSTIC_INITIAL} 桶，在已批准 ${D_BUDGET_APPROVED} 内（整城门禁由 audit 保证）`);
   assert(built.stats.drawCalls.preMerge > built.stats.drawCalls.postMerge, '合批必须真的减少批次');
   runner.info(`合批：${built.stats.drawCalls.preMerge} → ${built.stats.drawCalls.postMerge} 批次（audit 口径 ${measured}）；三角面 ${built.stats.triangles}`);
 });

@@ -37,6 +37,7 @@ const { createKit } = await loadModule('src/kit/index.js');
 const { validateZoneResult } = await loadModule('src/core/context.js');
 const { zoneLayoutFor } = await loadModule('src/core/layout-slice.js');
 const zoneModule = await loadModule('src/zones/east-courts.js');
+const { obstacleBlocksPoint } = await loadModule('src/core/layout-slice.js'); // t92：阻挡判定用谓词层唯一真相源
 
 const ZONE = 'E';
 const zone = zoneLayoutFor(ZONE);
@@ -51,21 +52,9 @@ const STEP = INTERACTION.step;
 
 /** 第一人称可行性：玩家是半径 0.35 / 高 1.8 的圆柱；门洞处按 door 的净宽与净高放行。 */
 function blockedAt(x, z, feetY) {
+  // t92：委托谓词层唯一真相源（与 core/FP 求解器同源：足迹圆 ∩ 包围盒 + y0/y1 + 门洞净宽与 sillY/台阶语义）
   for (const o of result.colliders.obstacles) {
-    const b = o.bounds;
-    if (x < b.minX - PLAYER.radius || x > b.maxX + PLAYER.radius) continue;
-    if (z < b.minZ - PLAYER.radius || z > b.maxZ + PLAYER.radius) continue;
-    if (feetY < o.y0 - 1e-6 || feetY + PLAYER.height > o.y1 + 1e-6) continue;
-    if (o.blocks === 'exceptDoor' && o.door) {
-      const d = o.door;
-      const along = d.axis === 'z' ? x : z;
-      const centerAlong = d.axis === 'z' ? d.center.x : d.center.z;
-      const fits = Math.abs(along - centerAlong) <= d.width / 2 - PLAYER.radius;
-      const bottom = d.sillY ?? o.y0;
-      const top = bottom + d.height;
-      if (fits && feetY >= bottom - 1e-6 && feetY + PLAYER.height <= top + 1e-6) continue;
-    }
-    return o;
+    if (obstacleBlocksPoint(o, { x, z, feetY })) return o;
   }
   return null;
 }
@@ -380,7 +369,8 @@ await runner.test('可行走面 1 面回显 layout、坡道斜率 ≤ rampMaxSlo
       assertClose(w.y, src.y, 1e-6, `${w.id} 标高必须回显 layout`);
       assertClose(info.groundY, w.y, 1e-6, `${w.id} 布景地面必须等于 layout 注册的室内地面`);
       assert(w.y >= groundY - 1e-6, `${w.id} 内景地面不得低于庭院地坪`);
-    } else if (w.kind === 'passage') {
+    } else if (w.kind === 'passage' || /-transition-/.test(w.id)) {
+      // t79 起的入口过渡面：id 带 -transition-（kind 仍是 ground），标高介于庭院地坪与内景地面之间
       // t75 门洞通道面：门槛标高 = 该栋台基地坪（室外侧由外伸段搭到庭院地面）
       assert(w.y >= groundY - 1e-6, `${w.id} 通道面不得低于庭院地坪`);
       assert(w.y <= groundY + MODULES.eaveHeight, `${w.id} 通道面标高超限`);
@@ -413,7 +403,17 @@ await runner.test('第一人称可通：出生点 → 院门 → 院墙门洞 �
   }
   // 反例：主屋不可进入、水池不可踏入、影壁确实挡路
   const hall = LAYOUT.getSlot('E-court1-hall');
-  assert(blockedAt(hall.x, hall.z, groundY), '主屋（不可进入）必须阻挡');
+  // t92：t73/t74 后本区 9 栋（含四座主屋）已注册内景且 visitable ⇒ 主屋现在"可进入"，
+  // 反例改为：无内景登记的亭/水榭必须阻挡（而非拿已可进入的主屋当反例）。
+  // 反例①：无内景的亭/水榭是**四面开敞**结构（不在 colliders 里整体阻挡），故不再拿它当"必须阻挡"的反例；
+  //        改为断言它们不在内景集合内（语义正确），而"实体阻挡"由水池/院墙实心段承担。
+  for (const id of ['E-court3-pavilion', 'E-court4-pavilion']) {
+    assert(!(result.stats.interiors ?? []).some((i) => i.slotId === id), `${id} 不应有内景登记`);
+  }
+  const hallInterior = result.stats.interiors.find((i) => i.slotId === 'E-court1-hall');
+  assert(hallInterior, '主屋应已注册内景（t74）');
+  const hallCenter = { x: (hallInterior.bounds.minX + hallInterior.bounds.maxX) / 2, z: (hallInterior.bounds.minZ + hallInterior.bounds.maxZ) / 2 };
+  assert(!blockedAt(hallCenter.x, hallCenter.z, hallInterior.groundY), '主屋室内中心应可站立（已可进入）');
   const pond = LAYOUT.WATER_BODIES.find((w) => w.id === 'WB-E-pond');
   assert(blockedAt((pond.bounds.minX + pond.bounds.maxX) / 2, (pond.bounds.minZ + pond.bounds.maxZ) / 2, groundY), '水池必须阻挡');
   // 影壁确实挡路（正面不可穿），但可绕行
@@ -493,7 +493,7 @@ await runner.test('内景进入最终绘制批次 + 每栋 2 条室内灯位（�
     assert(parts.has(part), `合批后的绘制批次缺少内景部位 ${part}（实际：${[...parts].sort().join(' ')}）`);
   }
   const lamps = result.lightAnchors.filter((a) => a.role === 'interiorLantern');
-  assertEqual(lamps.length, (result.stats.interiors ?? []).length * 2, '每栋内景应有 2 条室内灯位');
+  assertEqual(lamps.length, (result.stats.interiors ?? []).length * 2, '每栋内景固定 2 条灯位（t92：面积分档方案经 A/B 实测撤回）');
   for (const lamp of lamps) {
     const info = (result.stats.interiors ?? []).find((i) => i.slotId === lamp.buildingId);
     assert(info, `${lamp.id} 应归属于某栋内景`);

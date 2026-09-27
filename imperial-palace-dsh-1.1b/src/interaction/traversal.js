@@ -308,7 +308,7 @@ export function createTraversalAudit({ solver, layout = LAYOUT, config = CONFIG,
     return { allowed: false, reason: 'oneWayTrap', region: regionOfIndex(cell.index), from: { x: from.x, z: from.z }, to: { x: to.x, z: to.z } };
   }
 
-  /** 最近的安全可行走点（脱困用；确定性搜索，无随机）。 */
+  /** 最近的安全可行走格（**仅诊断/展示**；脱困的实际落点由 core 的 `nearestFpSpawn` 决定）。 */
   function nearestSafePoint(x, z, maxCells = 40) {
     const cell = graph.toCell(x, z) ?? graph.nearestCell(x, z) ?? anchor;
     let best = null;

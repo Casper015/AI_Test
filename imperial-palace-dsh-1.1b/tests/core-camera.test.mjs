@@ -325,6 +325,39 @@ await runner.test('同一 zone 内两个内景：按 viewpointId 解析得到**�
   runner.info(`B 区两内景：${boxHall.id}(${boxHall.minX}..${boxHall.maxX}) vs ${boxMid.id}(${boxMid.minX}..${boxMid.maxX})，resolvedBy=${boxHall.resolvedBy}/${boxMid.resolvedBy}`);
 });
 
+await runner.test('突变证明：还原"按区取第一个内景面"的旧实现 ⇒ 同区两内景用例**必然失败**（机器校验，不靠人工叙述）', () => {
+  // t65 之前的实现（真实还原，不只是注释）：按 `zone` 过滤 `WALKABLE(kind:'interior')` 取**第一个**面。
+  const legacyBoundsForArea = (area) => {
+    const surfaces = LAYOUT.WALKABLE.filter((w) => w.kind === 'interior' && (area == null || w.zone === area));
+    const s = surfaces[0] ?? null;
+    return s ? { id: s.id, zone: s.zone, ...s.bounds, y: s.y } : null;
+  };
+  const hall = viewpointById('VP-B-interior');
+  const mid = viewpointById('VP-B-hall-mid-interior');
+  assert(hall && mid && hall.area === mid.area, '用例前提：两个机位同属一区 B');
+
+  // 旧实现下：两个机位都只能拿到"区内第一个内景面" ⇒ 完全同一个盒（相机被夹进别的建筑）
+  const legacyHall = legacyBoundsForArea(hall.area);
+  const legacyMid = legacyBoundsForArea(mid.area);
+  assert(legacyHall && legacyMid, '旧实现应能取到该区第一个内景面');
+  assert(sameBox(legacyHall, legacyMid), '旧实现（按区）必然给两个机位同一个盒 —— 这正是它无法支持一区多内景的原因');
+  // 旧实现下"同区两内景盒必须不同"这条断言必定失败 ⇒ 用同一条断言函数实跑一遍取证
+  let oldImplFailed = false;
+  try {
+    assert(!sameBox(legacyHall, legacyMid), '同区两内景必须得到**不同**的盒');
+  } catch {
+    oldImplFailed = true;
+  }
+  assert(oldImplFailed, '旧实现下该断言必须失败（否则突变证明无效）');
+  // 并且旧实现给出的盒对其中至少一个机位是**错的**（≠ 它自己注册的室内面）
+  const nowHall = interiorBoundsFor({ viewpointId: hall.id });
+  const nowMid = interiorBoundsFor({ viewpointId: mid.id });
+  assert(!sameBox(nowHall, nowMid), '新实现必须给出两个不同的盒');
+  assert(legacyHall.id !== nowMid.id, `旧实现把 ${mid.id} 解析到了 ${legacyHall.id}（错误建筑）`);
+  assert(nowMid.id === 'WK-B-hall-mid-interior' && nowHall.id === 'WK-B-hall-main-interior', '新实现应各自解析到自己注册的室内面');
+  runner.info(`突变证明：旧实现(B) → ${legacyHall.id}（两机位同盒，且 ${mid.id} 必错）；新实现 → ${nowHall.id} / ${nowMid.id}；旧实现下"两盒不同"断言实跑失败=${oldImplFailed}`);
+});
+
 await runner.test('slotId / surfaceId / 直接 WK-/VP- id 三种显式寻址与 viewpointId 等价', () => {
   const boxVp = interiorBoundsFor({ viewpointId: 'VP-B-hall-mid-interior' });
   const boxSlot = interiorBoundsFor({ slotId: 'B-hall-mid' });
@@ -337,6 +370,41 @@ await runner.test('slotId / surfaceId / 直接 WK-/VP- id 三种显式寻址与 
   assertEqual(interiorBoundsFor({ viewpointId: 'VP-不存在' }), null, '无效机位 id 应明确返回 null（不得静默取别的内景）');
   assertEqual(describeInteriorTarget({ slotId: 'B-hall-mid' }).resolvedBy, 'slotId', 'describeInteriorTarget 应给出解析来源');
   runner.info('四种显式寻址等价；无效 id → null；解析来源字段可用');
+});
+
+await runner.test('43 栋全量：每个 slotId ⇒ 解析出 layout 注册的该栋机位与室内面（建筑→机位映射逐条一致）', () => {
+  const slots = Object.keys(LAYOUT.INTERIOR_BY_SLOT);
+  assertEqual(slots.length, 43, `layout 应登记 43 栋内景（实际 ${slots.length}）`);
+  const mismatched = [];
+  for (const slotId of slots) {
+    const record = LAYOUT.INTERIOR_BY_SLOT[slotId];
+    const box = interiorBoundsFor({ slotId });
+    if (!box) { mismatched.push(`${slotId}:无盒`); continue; }
+    if (box.id !== record.walkableId) mismatched.push(`${slotId}:面 ${box.id} ≠ ${record.walkableId}`);
+    if (box.viewpointId !== record.viewpointId) mismatched.push(`${slotId}:机位 ${box.viewpointId} ≠ ${record.viewpointId}`);
+    if (box.slotId !== slotId) mismatched.push(`${slotId}:归属 ${box.slotId}`);
+    if (box.ambiguous !== false) mismatched.push(`${slotId}:显式寻址不应 ambiguous`);
+    // 反向：机位 id ⇒ 同一条记录
+    const byVp = interiorBoundsFor({ viewpointId: record.viewpointId });
+    if (!byVp || byVp.id !== box.id) mismatched.push(`${slotId}:机位反查不一致`);
+  }
+  assertEqual(mismatched.length, 0, `43 栋映射必须逐条一致（${mismatched.slice(0, 4).join('；')}）`);
+  runner.info(`43 栋 slotId ⇄ viewpointId ⇄ WK 面 三条寻址逐条一致；INTERIOR_SURFACE_COUNT=${LAYOUT.WALKABLE.filter((w) => w.kind === 'interior').length}`);
+});
+
+await runner.test('全链路（UI 实际负载）：只给 buildingId ⇒ 经 layout 映射进入该建筑自己的内景', () => {
+  const { events, store, rig, settle } = makeCore();
+  const record = LAYOUT.INTERIOR_BY_SLOT['D-court1-hall'];
+  events.request(EVENTS.requestViewMode, { mode: 'interior', source: 'test', buildingId: 'D-court1-hall' });
+  assertEqual(store.view.interiorSlotId, 'D-court1-hall', 'buildingId 应作为 slotId 进入 store（控制器只搬运标识符）');
+  settle();
+  const d = rig.describe();
+  assertEqual(d.mode, 'interior', '应进入 interior 模式');
+  assertEqual(d.interiorViewpointId, record.viewpointId, '应按 layout 映射进入该建筑的内景机位');
+  assertEqual(d.interiorSlotId, 'D-court1-hall', 'describe() 应回报该建筑');
+  const box = interiorBoundsFor({ slotId: 'D-court1-hall' });
+  assert(insideBox(box, d.position) && insideBox(box, d.target), '相机位置与目标都应在该建筑自己的室内盒内');
+  runner.info(`buildingId=D-court1-hall ⇒ ${d.interiorViewpointId}（box=${box.id}，resolvedBy=${d.interiorResolvedBy}）`);
 });
 
 await runner.test('全链路：interior 请求携带 viewpointId ⇒ state.view.interiorViewpointId ⇒ 相机按该机位夹取', () => {

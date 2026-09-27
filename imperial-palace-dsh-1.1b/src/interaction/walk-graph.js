@@ -14,6 +14,8 @@ import { CONFIG } from '../shared/config.js';
 import * as LAYOUT from '../shared/layout.js';
 
 const EPS = 1e-6;
+/** t142：台阶阈值含等号（契约）；容差仅吸收浮点噪声，与 core/walk-solver 同值。 */
+const BOUNDARY_EPS = 1e-9;
 
 /**
  * 构造栅格可行走图。
@@ -36,6 +38,7 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
   /** 单元缓存：-1 未知 / 0 不可走 / 1 可走。 */
   const cells = new Int8Array(cols * rows).fill(-1);
   const heights = new Float32Array(cols * rows);
+  let labelCache = null; // t148：componentOf 的全图标注缓存（图不可变 ⇒ 可复用）
   const index = (col, row) => row * cols + col;
   const toCol = (x) => Math.round((x - area.minX) / cellSize);
   const toRow = (z) => Math.round((z - area.minZ) / cellSize);
@@ -59,8 +62,8 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     const a = sample(col, row);
     const b = sample(nextCol, nextRow);
     if (!a.ok || !b.ok || a.y === null || b.y === null) return false;
-    if (b.y - a.y > step.maxStepHeight + EPS) return false;
-    if (b.y - a.y < -step.snapDownDistance) return false;
+    if (b.y - a.y > step.maxStepHeight + BOUNDARY_EPS) return false; // t142：含界（恰等阈值可跨）
+    if (a.y - b.y > step.snapDownDistance + BOUNDARY_EPS) return false; // t142：含界（恰等阈值可跨）
     return true;
   }
 
@@ -133,7 +136,8 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
       cursor = parents[cursor];
     }
     nodes.reverse();
-    return {
+  
+  return {
       ok: true,
       visited,
       cells: nodes.length,
@@ -217,6 +221,29 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     }
   }
 
+  /**
+   * t148：**连通分量访问器**（纯暴露，零行为变更）。
+   * 复用内部 `flood`/`nearestCell`：首次调用时做 **1 次** `flood(全图标注)`，之后每次调用 O(1)。
+   * 返回 `{ ok, cell, root, size }`：`ok` = 该点有最近格且与 `from`（默认起点 0,-480 之外）同属一个分量…
+   * 说明：`root/size` 来自**同一次 flood**，`path()` 的行为与耗时特征**不变**（未改其实现）。
+   */
+  function labelAll(from = null) {
+    const anchor = nearestCell(from?.x ?? 0, from?.z ?? -480);
+    if (!anchor) return null;
+    if (labelCache && labelCache.anchor.col === anchor.col && labelCache.anchor.row === anchor.row) return labelCache;
+    const { parents, visited } = flood(anchor);
+    labelCache = { anchor, parents, visited };
+    return labelCache;
+  }
+  function componentOf(x, z, from = null) {
+    const cell = nearestCell(x, z);
+    if (!cell) return { ok: false, cell: null, root: null, size: 0 };
+    const cache = labelAll(from);
+    if (!cache) return { ok: false, cell, root: null, size: 0 };
+    const parent = cache.parents[index(cell.col, cell.row)];
+    return { ok: parent !== -2, cell, root: parent === -2 ? null : parent, size: cache.visited };
+  }
+
   return {
     cols,
     rows,
@@ -225,6 +252,7 @@ export function createWalkGraph(solver, { layout = LAYOUT, cellSize = 4, bounds 
     sample,
     canStep,
     nearestCell,
+    componentOf, // t148：连通分量访问器（1 次 flood 标注 + O(1) 成员判定）
     flood,
     reverseFlood,
     worldAt,

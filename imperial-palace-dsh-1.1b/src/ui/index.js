@@ -326,11 +326,12 @@ export function createUI({
 
   /* ------------------------------------------------------------------ 提示条 */
   /**
-   * t87：防卡死兜底条 —— 连续受阻 ≥ `stuckSeconds` 时出现，提供**一键**回到最近安全可行走点。
+   * t87/t123：防卡死兜底条 —— 连续受阻 ≥ `stuckSeconds` 时出现，提供**一键**返回**最近的已登记出生点**
+ * （文案与实现一致：实现即 `registry.nearestFpSpawn(卡死点)`；不写「安全点」以免与实现不符）。
    * 只在真正的"走不动"时显示（由 interaction.traversalState() 驱动），`?ui=0&shot=1` 下整个 root 隐藏故自动消失。
    */
   const stuckText = h('span', { class: 'palace-stuck__text', text: '' });
-  const stuckButton = button('回到最近安全点（G）', {
+  const stuckButton = button('返回最近的已登记出生点（G）', {
     variant: 'primary',
     attrs: { 'data-ui-part': 'escape', title: '确定性回到最近的已登记出生点（不会穿墙）' },
     on: { click: () => interaction.escapeToSafePoint('panel:escape') },

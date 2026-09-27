@@ -25,7 +25,7 @@ import {
   deepFreeze,
 } from './config.js';
 
-export const LAYOUT_VERSION = '1.1.10'; // t103：10 座开敞亭可通行化（hasDoor→exceptDoor）+ B 两座入口门槛 // t102：按 t100 权威 Δ 清单登记门外过渡台阶（仅登记几何，不宣称可达） // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
+export const LAYOUT_VERSION = '1.1.18'; // t145：C 两殿台基接近走廊有界开槽（0.9↔1.3 恢复相邻） // t134：删除 4 片开槽残片，使门带不再被更高面取高（门洞节点高度回到 1.5/1.7） // t131：通路存在守卫 + 加法补 E-court3-hall 门外台阶 // t128：C 两栋遮蔽开槽（第二次授权减法）+ 遮蔽常驻守卫 + C 侧分级台阶 // t126：tier2 有界开槽（两条坡道走廊，主理人授权的减法例外）+ 遮蔽普查 // t121：过渡台阶足印进深 ≥1.05m（cellSize:1 网格可见），18 栋门外分级过渡 // t119：ZONES.drawCallBudget 对齐唯一权威源 config.BUDGET.drawCalls.perZone（C60/D56/E56） // t117：门洞可通行性声明与实际一致（passable/blockedBy 具名登记） // t103：10 座开敞亭可通行化（hasDoor→exceptDoor）+ B 两座入口门槛 // t102：按 t100 权威 Δ 清单登记门外过渡台阶（仅登记几何，不宣称可达） // t97：S() 内补区域地坪（door.sillY = 区域地坪 + 本地台基；24 栋 C/D/E 基准统一）
 
 /* =============================================================================
  * 一、包络、区域边界与外墙（§2.3）
@@ -165,7 +165,7 @@ export const ZONES = deepFreeze([
     file: 'src/zones/inner-palace.js',
     bounds: b(CENTRAL_X.minX, CENTRAL_X.maxX, INNER_PALACE_Z.minZ, INNER_PALACE_Z.maxZ),
     groundY: TERRAIN.innerPalaceY,
-    drawCallBudget: 50,
+    drawCallBudget: 60,
     boundaryZone: false,
     tiles: [{ id: 'T-C', bounds: b(-100, 100, 80, 300), groundY: TERRAIN.innerPalaceY }],
     axisOrder: 2,
@@ -178,7 +178,7 @@ export const ZONES = deepFreeze([
     file: 'src/zones/west-courts.js',
     bounds: b(ENVELOPE.minX, CENTRAL_X.minX, FORECOURT_Z.minZ, INNER_PALACE_Z.maxZ),
     groundY: TERRAIN.sideCourtY,
-    drawCallBudget: 40,
+    drawCallBudget: 56,
     boundaryZone: false,
     tiles: [{ id: 'T-D', bounds: b(-300, -100, -400, 300), groundY: TERRAIN.sideCourtY }],
     axisOrder: 0,
@@ -191,7 +191,7 @@ export const ZONES = deepFreeze([
     file: 'src/zones/east-courts.js',
     bounds: b(CENTRAL_X.maxX, ENVELOPE.maxX, FORECOURT_Z.minZ, INNER_PALACE_Z.maxZ),
     groundY: TERRAIN.sideCourtY,
-    drawCallBudget: 40,
+    drawCallBudget: 56,
     boundaryZone: false,
     tiles: [{ id: 'T-E', bounds: b(100, 300, -400, 300), groundY: TERRAIN.sideCourtY }],
     axisOrder: 0,
@@ -349,6 +349,11 @@ function S(id, name, kind, zone, x, z, w, d, opts = {}) {
             note: '门外锚点 = 通道面进深轴外端中心（外墙面向外 6.0m）',
           },
           width: doorWidth,
+          /* t117：门洞的**可通行性声明**必须与实际一致 —— 若门外被具名障碍（如水体）占据，
+             则 `passable:false` + `blockedBy:<障碍 id>` 显式登记，供下游/提示/验证统一读取；
+             否则 `passable:true`、`blockedBy:null`（默认）。 */
+          passable: opts.doorBlockedBy == null,
+          blockedBy: opts.doorBlockedBy ?? null,
           height: Math.min(9, +(MODULES.eaveHeight * 0.7).toFixed(2)),
           sillY: +(zoneGroundY(zone) + baseY).toFixed(2),
         } // t97/F10：sillY = 区域地坪 + 本地台基（门外门槛面）；t102/F3：新增 facade 门外锚点
@@ -401,7 +406,7 @@ export const SLOTS = deepFreeze([
   S('D-court3-hall', '服务院主屋', 'hall', 'D', -262, 2, 24, 56, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: -262, z: 2 }, width: 6.0, height: 3.03, sillY: 0.9 }, bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'east', usage: '服务院主屋', courtyard: 'CY-D-court3' }),
   S('D-court3-house', '服务院南房', 'sideHall', 'D', -176, -38, 40, 18, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: -176, z: -38 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '服务院配房', courtyard: 'CY-D-court3' }),
   S('D-court3-gate', '服务院院门', 'courtyardGate', 'D', -118, 2, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '服务院院门（通道口）', courtyard: 'CY-D-court3' }),
-  S('D-court3-pavilion', '水池亭', 'pavilion', 'D', -150, 58, 14, 14, { hasDoor: true, bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '服务院水池上的亭子', courtyard: 'CY-D-court3' }),
+  S('D-court3-pavilion', '水池亭', 'pavilion', 'D', -150, 58, 14, 14, { doorBlockedBy: 'WB-D-pond', hasDoor: true, bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '服务院水池上的亭子', courtyard: 'CY-D-court3' }),
   S('D-court4-hall', '西后殿', 'hall', 'D', -262, 188, 24, 56, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: -262, z: 188 }, width: 6.0, height: 3.03, sillY: 0.9 }, bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'east', usage: '西后院正堂', courtyard: 'CY-D-court4' }),
   S('D-court4-house', '西后南配房', 'sideHall', 'D', -176, 148, 40, 18, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: -176, z: 148 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '西后院配房', courtyard: 'CY-D-court4' }),
   S('D-court4-gate', '西后院院门', 'courtyardGate', 'D', -118, 188, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'east', usage: '西后院院门（通道口）', courtyard: 'CY-D-court4' }),
@@ -418,7 +423,7 @@ export const SLOTS = deepFreeze([
   S('E-court3-house', '生活南房', 'sideHall', 'E', 176, -24, 40, 18, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: 176, z: -24 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '生活院南房', courtyard: 'CY-E-court3' }),
   S('E-court3-gate', '生活院门', 'courtyardGate', 'E', 118, 20, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'west', usage: '生活院院门（通道口）', courtyard: 'CY-E-court3' }),
   S('E-court3-annex', '生活院东耳房', 'sideHall', 'E', 280, 20, 16, 40, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'x', center: { x: 280, z: 20 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 3, terraceH: 0.5, roofType: 'gable', grade: 1, facing: 'west', usage: '生活院东侧耳房', courtyard: 'CY-E-court3' }),
-  S('E-court3-pavilion', '生活院水榭', 'pavilion', 'E', 150, 42, 14, 14, { hasDoor: true, bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '生活院水池水榭', courtyard: 'CY-E-court3' }),
+  S('E-court3-pavilion', '生活院水榭', 'pavilion', 'E', 150, 42, 14, 14, { doorBlockedBy: 'WB-E-pond', hasDoor: true, bays: 3, terraceH: 0.5, roofType: 'pyramidal', grade: 1, usage: '生活院水池水榭', courtyard: 'CY-E-court3' }),
   S('E-court4-hall', '东后殿', 'hall', 'E', 260, 200, 26, 56, { hasDoor: true, visitable: true, doorWidth: 6.0, door: { axis: 'x', center: { x: 260, z: 200 }, width: 6.0, height: 3.03, sillY: 0.9 }, bays: 5, terraceH: 0.9, roofType: 'gableHip', grade: 2, facing: 'west', usage: '东后院正堂', courtyard: 'CY-E-court4' }),
   S('E-court4-house', '东后南厢', 'sideHall', 'E', 180, 150, 44, 18, { hasDoor: true, visitable: true, doorWidth: 4.2, door: { axis: 'z', center: { x: 180, z: 150 }, width: 4.2, height: 2.25, sillY: 0.5 }, bays: 5, terraceH: 0.5, roofType: 'gable', grade: 1, usage: '东后院厢房', courtyard: 'CY-E-court4' }),
   S('E-court4-gate', '东后院院门', 'courtyardGate', 'E', 118, 200, 10, 20, { bays: 1, terraceH: 0.4, roofType: 'gable', grade: 1, facing: 'west', usage: '东后院院门（通道口）', courtyard: 'CY-E-court4' }),
@@ -970,6 +975,30 @@ function buildInteriorSliceA() {
     }
     walkables.push(WK(`WK-${id}-door-passage`, slot.zone, 'passage', `${slot.name}门洞通道`, minX, maxX, minZ, maxZ, groundY));
   }
+  for (const spec of T131_EXTRA_STEPS) {
+    const slot = SLOT_BY_ID[spec.id];
+    for (let i = 0; i < spec.ys.length; i += 1) {
+      const near = 1.05 * i; const far = 1.05 * (i + 1);
+      const a = spec.dir > 0 ? Math.ceil(spec.from + far) : Math.floor(spec.from - far);
+      const b = spec.dir > 0 ? spec.from + near : spec.from - near;
+      walkables.push(WK(`WK-${spec.id}-transition-${i + 1}`, spec.zone, 'ground', `${slot.name}门外过渡 ${i + 1}/${spec.ys.length}`,
+        Math.min(a, b), Math.max(a, b), spec.z0, spec.z1, spec.ys[i]));
+    }
+  }
+  for (const spec of C_SIDE_MAIN_STEPS) {
+    /* 自通道面外端（west: x=-56.6 / east: x=+56.6）向外铺两级：1.3（靠门）→ 1.7 由通道面本身提供 */
+    const slot = SLOT_BY_ID[spec.id];
+    const outer = spec.from; // 门面（west: -50 朝东 / east: +50 朝西）
+    const ys = [1.3, 0.9];
+    for (let i = 0; i < ys.length; i += 1) {
+      const near = 1.05 * i; const far = 1.05 * (i + 1);
+      const a = spec.dir > 0 ? Math.ceil(outer + far) : Math.floor(outer - far);
+      const b = spec.dir > 0 ? outer + near : outer - near;
+      const minX = Math.min(a, b); const maxX = Math.max(a, b);
+      walkables.push(WK(`WK-${spec.id}-transition-${i + 1}`, spec.zone, 'ground', `${slot.name}门外过渡 ${i + 1}/2`,
+        minX, maxX, spec.z0, spec.z1, ys[i]));
+    }
+  }
   for (const pid of PAVILION_THRESHOLDS) {
     const slot = SLOT_BY_ID[pid]; const b = slot.bounds; const t = slot.baseY; // 亭地面（相对本区）
     const zoneG = zoneGroundY(slot.zone);
@@ -1001,7 +1030,11 @@ function buildInteriorSliceA() {
     const groundY = INTERIOR_PASSAGE_FLOOR[id] ?? INTERIOR_LEGACY_FLOOR[id] ?? (zoneGroundY(slot.zone) + slot.baseY);
     const n = Math.max(2, Math.ceil(Math.abs(delta) / 0.5));
     const run = Math.max(Math.abs(delta) / 0.62, n * 0.6);
-    const stepLen = run / n;
+    /* t121：**每级足印进深 ≥ CELL_FLOOR_DEPTH(1.05m)** —— cellSize:1 的走查网格只认**格心**，
+       0.8m 级的台阶带可能不含任何格心（t121 实测 43 条里 31 条为 0 格心）⇒ 图上不可见。
+       加宽是**加法**（向外延伸），y 序列与逐级 ≤0.5 不变，且总跑长只会变长（坡更缓）。 */
+    const CELL_FLOOR_DEPTH = 1.05;
+    const stepLen = Math.max(run / n, CELL_FLOOR_DEPTH);
     const halfW = (slot.door.width ?? slot.doorWidth) / 2;
     const outward = DIR_VEC[slot.facing]; // 门外方向
     const ax = slot.door.axis; // 'x' | 'z'
@@ -1011,17 +1044,20 @@ function buildInteriorSliceA() {
       const far = near + stepLen;
       const y = groundY - delta * ((i + 1) / n); // t102：i=0 贴通道面（低于内景地面一个台阶），最外级落在门外地面
       let minX; let maxX; let minZ; let maxZ;
+      /* t121：外沿**吸附到整数格界**（向外取 ceil/floor）⇒ 每条台阶带必含 cellSize:1 的格心（≥1 个格），
+         避免"坡道存在但走查网格看不见"。内沿仍贴通道面外端（保持与通道面接续）。 */
+      const snapOut = (v, outwardNegative) => (outwardNegative ? Math.floor(v) : Math.ceil(v));
       if (ax === 'z') {
         const base = face;
-        const a = outward.z < 0 ? base - far : base + near;
-        const bnd = outward.z < 0 ? base - near : base + far;
-        minZ = Math.min(a, bnd); maxZ = Math.max(a, bnd);
+        const outer = snapOut(outward.z < 0 ? base - far : base + far, outward.z < 0);
+        const a = outward.z < 0 ? base - near : base + near;
+        minZ = Math.min(a, outer); maxZ = Math.max(a, outer);
         minX = slot.x - halfW; maxX = slot.x + halfW;
       } else {
         const base = face;
-        const a = outward.x < 0 ? base - far : base + near;
-        const bnd = outward.x < 0 ? base - near : base + far;
-        minX = Math.min(a, bnd); maxX = Math.max(a, bnd);
+        const outer = snapOut(outward.x < 0 ? base - far : base + far, outward.x < 0);
+        const a = outward.x < 0 ? base - near : base + near;
+        minX = Math.min(a, outer); maxX = Math.max(a, outer);
         minZ = slot.z - halfW; maxZ = slot.z + halfW;
       }
       /* kind 用既有合法值 `ground`（台阶本就是地面级可行走面）；**不复用新 kind** —— `WALKABLE_KINDS`
@@ -1041,6 +1077,20 @@ function passageEdgeBySlot(slot) {
 /* t103：B 两座亭（Δ0.6 > 0.5m 台阶阈值）的**加法门槛**——保留既有铺面，另加一级 0.3m 门槛，
    使 广场(0) → 门槛(0.3) → 亭地面(0.6) 相邻高差各 0.3 ≤ 0.5。 */
 const PAVILION_THRESHOLDS = Object.freeze(['B-pavilion-gate-west', 'B-pavilion-gate-east']);
+
+/* t128：C 两栋（开槽后暴露的）通道面 ↔ C 区地坪（0.9）之间的**加法分级台阶** —— 1.3 → 1.7，
+   每级 0.4 ≤ 0.5，进深 ≥1.05m 且外沿吸附整数格界（t121 口径：cellSize:1 必须含格心）。 */
+/* t131：**加法**补 `E-court3-hall` 的门外分级台阶 —— 其通道面 1.3 与 E 区地坪 0.4 相差 0.9 > 0.5，
+   而它**不在 t100 的 18 栋内**（当时记为“Δ 超阈但已可达”）⇒ 新加的“通路存在守卫”首个捕获项。
+   加法（新增面），不动任何既有几何。 */
+const T131_EXTRA_STEPS = Object.freeze([
+  { id: 'E-court3-hall', zone: 'E', from: 238, dir: -1, z0: 7, z1: 33, ys: [0.85, 0.4] },
+]);
+
+const C_SIDE_MAIN_STEPS = Object.freeze([
+  { id: 'C-side-west-main', zone: 'C', from: -50, dir: 1, z0: 155, z1: 181 },
+  { id: 'C-side-east-main', zone: 'C', from: 50, dir: -1, z0: 155, z1: 181 },
+]);
 
 const INTERIOR_SLICE_A = buildInteriorSliceA();
 
@@ -1064,12 +1114,33 @@ export const WALKABLE = deepFreeze([
   WK('WK-B-terrace-strip-west', 'B', 'ground', '主殿西侧地面', -100, -88, -168, -64, TERRAIN.terraceGroundY),
   WK('WK-B-terrace-strip-east', 'B', 'ground', '主殿东侧地面', 88, 100, -168, -64, TERRAIN.terraceGroundY),
   WK('WK-B-terrace-tier1', 'B', 'terrace', '主殿台基一层顶', -88, 88, -168, -64, MODULES.terraceTierHeight),
-  WK('WK-B-terrace-tier2', 'B', 'terrace', '主殿台基二层顶', -72, 72, -158, -74, MODULES.terraceTierHeight * 2),
+  /* t126：**有界开槽**（主理人明确授权的**减法例外**）——
+     `B-side-west-main` / `B-side-east-main` 的坡道走廊上，原 tier2 整块把过渡台阶
+     `transition-1@2.0` / `transition-2@2.5` **完全内含**（平面投影）⇒「最高面优先」的解析在该走廊只见 3.0，
+     链退化为 1.5 → 3.0（Δ1.5）；**加法已被证明必然无效**（新增台阶同样被内含）⇒ 才动这一处减法。
+     开槽范围：仅两条门洞走廊（宽度=门洞净宽、长度=坡道走廊全程），tier2 其余区域**原样保留**。 */
+  WK('WK-B-terrace-tier2-south', 'B', 'terrace', '主殿台基二层顶（南段，t126 开槽后）', -72, 72, -158, -129, MODULES.terraceTierHeight * 2),
+  WK('WK-B-terrace-tier2-north', 'B', 'terrace', '主殿台基二层顶（北段，t126 开槽后）', -72, 72, -103, -74, MODULES.terraceTierHeight * 2),
+  /* t134：**删除 t126/t128 开槽的残片** `WK-B-terrace-tier2-west` —— B 西残片（真覆盖者：门带被取高到 3.0）；沿用有界开槽模式（不降台地高度、其余区域原样）。 */
+  WK('WK-B-terrace-tier2-mid', 'B', 'terrace', '主殿台基二层顶（中段，t126 开槽后）', -62, 62, -129, -103, MODULES.terraceTierHeight * 2),
+  /* t134：**删除 t126/t128 开槽的残片** `WK-B-terrace-tier2-east` —— B 东残片；沿用有界开槽模式（不降台地高度、其余区域原样）。 */
   WK('WK-B-terrace-tier3', 'B', 'terrace', '主殿台基三层顶', -56, 56, -148, -84, MODULES.terraceTotalHeight),
   WK('WK-B-hall-main-interior', 'B', 'interior', '金銮殿内景地面', -36, 36, -134, -98, MODULES.terraceTotalHeight),
   WK('WK-B-ground-north', 'B', 'ground', '主殿北地面', -100, 100, -64, 80, TERRAIN.terraceGroundY),
   WK('WK-C-ground', 'C', 'ground', '后宫庭院地面', -100, 100, 80, 300, TERRAIN.innerPalaceY),
-  WK('WK-C-bed-terrace', 'C', 'terrace', '寝殿台基顶', -72, 72, 137, 199, 2.4),
+  /* t128：**第二次有界开槽**（主理人比照 t126 授权的**减法例外**）——
+     `WK-C-side-{west,east}-main-door-passage@1.7` 原被本块 tier（2.4）**完全内含** ⇒「最高面优先」看不到门洞通道面。
+     加法同样无效（新增面会被内含）⇒ 仅在这两条通道走廊开槽，其余区域原样保留。 */
+  WK('WK-C-bed-terrace-south', 'C', 'terrace', '寝殿台基顶（南段，t128 开槽后）', -72, 72, 137, 155, 2.4),
+  WK('WK-C-bed-terrace-north', 'C', 'terrace', '寝殿台基顶（北段，t128 开槽后）', -72, 72, 181, 199, 2.4),
+  /* t134：**删除 t126/t128 开槽的残片** `WK-C-bed-terrace-west` —— C 西残片（真覆盖者：门中/室内被取高到 2.4）；沿用有界开槽模式（不降台地高度、其余区域原样）。 */
+  /* t145：**第三次有界开槽**（主理人授权，严格限定该接近走廊）——
+     `WK-C-ground`(0.9) 与 `transition-1`(1.3) 本应可跨（+0.4），但两者之间的格**顶层被本段台基 2.4 覆盖**
+     ⇒ 图上出现「2.4 → 1.3 = −1.10 dropTooDeep」的断点（`t143` 逐格底数据）。
+     **为何不是补台阶**：断点处中间格顶层已被台基覆盖，补台阶会被**同样覆盖**（`t125/t126` 已证“加法在此必然无效”）⇒ 只能减法。
+     本槽仅把中段两端各收 3.9m（x: ±47.9 → ±44），使 0.9 与 1.3 的格相邻；**台基高度未降、其余区域原样**。 */
+  WK('WK-C-bed-terrace-mid', 'C', 'terrace', '寝殿台基顶（中段，t128 开槽后；t145 再收两端）', -44, 44, 155, 181, 2.4),
+  /* t134：**删除 t126/t128 开槽的残片** `WK-C-bed-terrace-east` —— C 东残片；沿用有界开槽模式（不降台地高度、其余区域原样）。 */
   WK('WK-C-bed-interior', 'C', 'interior', '寝殿内景地面', -27, 27, 154, 182, 2.4),
   WK('WK-D-ground', 'D', 'ground', '西宫苑地坪', -300, -100, -400, 300, TERRAIN.sideCourtY),
   WK('WK-E-ground', 'E', 'ground', '东宫苑地坪', 100, 300, -400, 300, TERRAIN.sideCourtY),

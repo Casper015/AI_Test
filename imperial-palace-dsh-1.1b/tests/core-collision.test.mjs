@@ -223,6 +223,115 @@ await runner.test('t86：门洞墙面侧翼实心处**必须被阻挡**（t76 �
   runner.info(`侧翼实心 3/3 被挡：${rows.join(' | ')}`);
 });
 
+await runner.test('t65：43 栋逐栋 —— 从登记入口可**真实走入**自己的内景（图搜索 + 真实碰撞数据），2 栋 layout 冲突如实登记', async () => {
+  const { createWalkSolver } = await loadModule('src/interaction/walk-solver.js');
+  const { createWalkGraph } = await loadModule('src/interaction/walk-graph.js');
+  const solver = createWalkSolver({ config: CONFIG, layout: LAYOUT });
+  const graph = createWalkGraph(solver, { cellSize: 2 });
+  const interiors = LAYOUT.WALKABLE.filter((w) => w.kind === 'interior');
+  assertEqual(interiors.length, 43, `可进入内景应为 43 栋（实际 ${interiors.length}）`);
+  // 已知 layout 冲突（回执 §2.4）：这两栋的东向门洞外侧紧贴主殿台基第二层（门外地面 3.0 vs 门洞 1.5，
+  // 落差 1.5m > 台阶阈值 0.5m）⇒ 数据侧走不进门。**不得静默跳过**：下面显式断言它们确实走不进且原因是台阶。
+  // t142：B-side-west-main 已可真实走入内景（t65 报「在例外表内却已可达」）⇒ 收窄例外表（加强，非放宽）
+  // t142：B-side-east-main 也已可真实走入内景 ⇒ 例外表再收窄（加强，非放宽）
+  const KNOWN_BLOCKED = new Set([]);
+  const allBoxes = interiors.map((w) => ({ id: w.id, ...w.bounds }));
+  const walkIn = [];
+  const blocked = [];
+  for (const surface of interiors) {
+    const record = slice.interiorRecordForSurfaceId(surface.id);
+    assert(record?.slotId, `${surface.id} 应能解析出建筑 slotId`);
+    const slot = LAYOUT.SLOT_BY_ID[record.slotId];
+    const cx = (surface.bounds.minX + surface.bounds.maxX) / 2;
+    const cz = (surface.bounds.minZ + surface.bounds.maxZ) / 2;
+    // ① 室内中心可站立，且支撑高度 = 该内景注册地坪（真实碰撞数据）
+    assert(solver.probe(cx, cz).ok, `${record.slotId} 室内中心必须可站立`);
+    // 支撑高度：多数等于该内景注册地坪；配殿与主殿台基/月台在 xz 重叠时取**最高面**（t74 语义）⇒ 只会更高
+    const supportY = solver.groundAt(cx, cz);
+    assert(supportY >= surface.y - 0.05, `${record.slotId} 室内支撑高度不得低于注册地坪（实测 ${supportY} vs ${surface.y}）`);
+    assert(supportY <= surface.y + 8, `${record.slotId} 室内支撑高度异常（实测 ${supportY}）`);
+    // ② 从登记入口外侧 1.2m 走进室内中心
+    const dx = slot.entrance.x - slot.x;
+    const dz = slot.entrance.z - slot.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const outside = { x: slot.entrance.x + (dx / len) * 1.2, z: slot.entrance.z + (dz / len) * 1.2 };
+    const p = graph.path(outside, { x: cx, z: cz });
+    const end = p.ok ? p.path[p.path.length - 1] : null;
+    const goalIn = end ? end.x >= surface.bounds.minX - 1.2 && end.x <= surface.bounds.maxX + 1.2 && end.z >= surface.bounds.minZ - 1.2 && end.z <= surface.bounds.maxZ + 1.2 : false;
+    if (KNOWN_BLOCKED.has(record.slotId)) {
+      assert(!(p.ok && goalIn), `${record.slotId} 在已知例外表内，却已可走入门内（请更新例外表）`);
+      const step = solver.groundAt(outside.x, outside.z) - surface.y;
+      assert(step > CONFIG.INTERACTION.step.maxStepHeight, `${record.slotId} 走不进的原因应是台基落差（实测 ${step.toFixed(2)}m ≤ 阈值）`);
+      blocked.push({ id: record.slotId, step: +step.toFixed(2) });
+      continue;
+    }
+    assert(p.ok && goalIn, `${record.slotId} 应能从登记入口真实走入自己的内景（reason=${p.reason ?? 'goalSnapOutside'}）`);
+    // ③ 入径不得串到**别的**内景盒内（一区多内景最容易出错的点）
+    for (const q of p.path) {
+      for (const box of allBoxes) {
+        if (box.id === surface.id) continue;
+        const insideOther = q.x > box.minX && q.x < box.maxX && q.z > box.minZ && q.z < box.maxZ;
+        assert(!insideOther, `${record.slotId} 的入径经过另一个内景 ${box.id}（一区多内景串栋）`);
+      }
+    }
+    walkIn.push(record.slotId);
+  }
+  // t142：期望值由例外表推导（例外为空 ⇒ 43/43），不再硬编码，避免"例外已失效但期望仍写 41"的陈旧形态
+  const EXPECTED_WALKIN = 43 - KNOWN_BLOCKED.size;
+  assertEqual(walkIn.length, EXPECTED_WALKIN, `可从入口真实走入的内景应为 ${EXPECTED_WALKIN} 栋（43 减去 ${KNOWN_BLOCKED.size} 条例外；实际 ${walkIn.length}）`);
+  assertEqual(blocked.length, KNOWN_BLOCKED.size, '已知冲突栋数应与登记一致');
+  runner.info(`真实走入内景 ${walkIn.length}/43（例外 ${blocked.map((b) => `${b.id} 阶差 ${b.step}m`).join(' / ')}：layout 台基贴门洞，见回执 §2.4）`);
+});
+
+await runner.test('t65：43 栋逐栋 —— 室内四向真实走查（0.25m 小步）不穿墙、不掉出', () => {
+  const solver = createFpSolver({ config: CONFIG });
+  /**
+   * 点是否位于该建筑**门洞净空带**内（门宽 + 玩家半径余量，沿门轴外延 6m 覆盖门洞出口段）。
+   * 用于"越出室内盒的采样点必须是从门洞出去的"——即排除穿墙。
+   */
+  const inDoorway = (door, bounds, x, z) => {
+    if (!door) return false;
+    const halfWidth = door.width / 2 + 0.35 + 0.5;
+    if (door.axis === 'z') return Math.abs(x - door.center.x) <= halfWidth && z >= bounds.minZ - 6 && z <= bounds.maxZ + 6;
+    return Math.abs(z - door.center.z) <= halfWidth && x >= bounds.minX - 6 && x <= bounds.maxX + 6;
+  };
+  const EYE = CONFIG.CAMERA.fpEyeHeight;
+  const interiors = LAYOUT.WALKABLE.filter((w) => w.kind === 'interior');
+  const failures = [];
+  let totalSteps = 0;
+  for (const surface of interiors) {
+    const record = slice.interiorRecordForSurfaceId(surface.id);
+    const cx = (surface.bounds.minX + surface.bounds.maxX) / 2;
+    const cz = (surface.bounds.minZ + surface.bounds.maxZ) / 2;
+    const spanX = (surface.bounds.maxX - surface.bounds.minX) / 2 + 4;
+    const spanZ = (surface.bounds.maxZ - surface.bounds.minZ) / 2 + 4;
+    for (const [dirX, dirZ, distance] of [[1, 0, spanX], [-1, 0, spanX], [0, 1, spanZ], [0, -1, spanZ]]) {
+      let x = cx;
+      let z = cz;
+      const steps = Math.ceil(distance / 0.25);
+      for (let i = 0; i < steps; i += 1) {
+        const r = solver.step({ x, y: surface.y + EYE, z }, dirX, dirZ, 0.25, {});
+        x = r.x;
+        z = r.z;
+        totalSteps += 1;
+        // 掉出可行走面 / 落到别的层高
+        const surfaceY = LAYOUT.floorYAt(x, z);
+        // 允许重叠面（配殿与主殿台基重叠时取最高面，t74 语义）；不允许无面或掉层
+        if (surfaceY === null || surfaceY < surface.y - 0.6) failures.push(`${record.slotId} 掉出室内面（${dirX},${dirZ} → y=${surfaceY} vs ${surface.y}）`);
+      }
+      // 越出室内盒的点必须落在门洞净空内，否则 = 穿墙
+      const leftBox = x < surface.bounds.minX - 0.8 || x > surface.bounds.maxX + 0.8 || z < surface.bounds.minZ - 0.8 || z > surface.bounds.maxZ + 0.8;
+      if (leftBox) {
+        const entry = baselineById.get(`OB-${record.slotId}`);
+        const inDoor = inDoorway(entry?.door, entry?.bounds ?? {}, x, z);
+        if (!inDoor) failures.push(`${record.slotId} 越出室内盒且不在门洞内（${dirX},${dirZ} → ${x.toFixed(2)},${z.toFixed(2)}）`);
+      }
+    }
+  }
+  assertEqual(failures.length, 0, `四向走查不得穿墙/掉出（${failures.slice(0, 4).join('；')}）`);
+  runner.info(`43 栋 × 4 向 × 0.25m 小步 = ${totalSteps} 步：无穿墙、无掉出（越出室内盒的采样点全部落在门洞净空内）`);
+});
+
 await runner.test('t86：全部 43 栋可进入建筑逐栋验证 —— 门洞通道不被墙盒阻挡、侧翼实心必挡', () => {
   const registry = makeRegistry();
   const obstacles = registry.allObstacles();

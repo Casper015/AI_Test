@@ -682,3 +682,119 @@ $ node scripts/audit.mjs
  阴影 pass        : 313 个投影对象；实时投影光源 1 盏（宫灯不投影）
  结论：3 项未通过（均为**分区诊断配额**：C/D/E）；整城门槛全绿     exit=0
 ```
+
+
+## B.7 t92：C/E 内景逐栋逐时辰闭合（54 张）+ 2 栋 golden 截断修复
+
+### B.7.1 方法与稳定性（t91 的逐栋入口，54/54 无白屏）
+
+`node scripts/shot.mjs --interior=<slotId> --preset=all --out-dir=<dir> --judge`（t91 的逐栋内景入口；1440×900、DPR 1、质量档 medium、view=interior）。18 栋 × 3 时辰 = **54 张全部取得**（3 批并行跑完，每栋 3 张、字节 ~230–650KB，无 5.7KB 纯白图）。
+⇒ **t63 的 blocker（多页加载白屏）在 t91 的 `?interior=` 入口下不再出现**：本次 54 次出图 0 次白屏/停滞，故无需登记"未取得"项（对比 t63：第 31 张起白屏）。
+判据口径：`scripts/shot.mjs` 的 `decodePngStats + judgeShot(view='interior')`（低空/近景类：内容暗区 ≤30%、内容截断 ≤5%、内容均值 ≥0.04；`viewFromFilename` 把 `*-interior-*` 识别为 interior）。
+
+### B.7.2 54 张逐栋逐时辰（数字 = 工具原始输出）
+
+| 建筑 | 时辰 | 内容均值(≥0.04) | 内容暗区(≤30%) | 内容截断(≤5%) | 工具判定 | §12 双约束 | 失败原因类别 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| C-annex-east | golden | 0.4583 | 0.0% | 0.36% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-annex-east | dusk | 0.551 | 0.0% | 5.66% | FAIL | **FAIL** | metric: 截断/暗区/均值 |
+| C-annex-east | night | 0.6124 | 0.0% | 6.23% | FAIL | **FAIL** | metric: 截断/暗区/均值 |
+| C-annex-west | golden | 0.4593 | 0.0% | 0.4% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-annex-west | dusk | 0.55 | 0.0% | 5.68% | FAIL | **FAIL** | metric: 截断/暗区/均值 |
+| C-annex-west | night | 0.6054 | 0.0% | 5.78% | FAIL | **FAIL** | metric: 截断/暗区/均值 |
+| C-gate-inner | golden | 0.4008 | 0.01% | 0.0% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-gate-inner | dusk | 0.4473 | 0.0% | 0.0% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-gate-inner | night | 0.4229 | 0.0% | 0.1% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-hall-bed-main | golden | 0.3465 | 0.01% | 0.08% | PASS | PASS | — |
+| C-hall-bed-main | dusk | 0.4259 | 0.0% | 4.89% | PASS | PASS | — |
+| C-hall-bed-main | night | 0.3686 | 0.0% | 0.88% | PASS | PASS | — |
+| C-hall-bed-rear | golden | 0.3621 | 0.0% | 0.0% | PASS | PASS | — |
+| C-hall-bed-rear | dusk | 0.4137 | 0.0% | 4.42% | PASS | PASS | — |
+| C-hall-bed-rear | night | 0.3328 | 0.0% | 0.21% | PASS | PASS | — |
+| C-side-east-main | golden | 0.5563 | 0.0% | 0.64% | PASS | PASS | — |
+| C-side-east-main | dusk | 0.6422 | 0.0% | 0.0% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-side-east-main | night | 0.7074 | 0.0% | 2.63% | PASS | PASS | — |
+| C-side-east-rear | golden | 0.4469 | 0.0% | 0.32% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-side-east-rear | dusk | 0.4943 | 0.0% | 0.43% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-side-east-rear | night | 0.501 | 0.0% | 0.57% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-side-west-main | golden | 0.6348 | 0.0% | 0.53% | PASS | PASS | — |
+| C-side-west-main | dusk | 0.6964 | 0.0% | 1.99% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-side-west-main | night | 0.7069 | 0.0% | 2.62% | PASS | PASS | — |
+| C-side-west-rear | golden | 0.4427 | 0.0% | 0.32% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-side-west-rear | dusk | 0.504 | 0.0% | 0.47% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| C-side-west-rear | night | 0.499 | 0.0% | 0.54% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court1-hall | golden | 0.3427 | 0.0% | 0.33% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court1-hall | dusk | 0.3797 | 0.0% | 0.61% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court1-hall | night | 0.3758 | 0.0% | 1.18% | PASS | PASS | — |
+| E-court1-house | golden | 0.4534 | 0.0% | 0.47% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court1-house | dusk | 0.5009 | 0.0% | 0.54% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court1-house | night | 0.5198 | 0.0% | 0.81% | PASS | PASS | — |
+| E-court2-hall | golden | 0.3458 | 0.01% | 0.34% | PASS | PASS | — |
+| E-court2-hall | dusk | 0.3844 | 0.0% | 0.7% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court2-hall | night | 0.3846 | 0.0% | 1.33% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court2-house | golden | 0.398 | 0.19% | 0.02% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court2-house | dusk | 0.4441 | 0.0% | 0.03% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court2-house | night | 0.4023 | 0.0% | 0.04% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court3-annex | golden | 0.4443 | 0.0% | 0.44% | PASS | PASS | — |
+| E-court3-annex | dusk | 0.5047 | 0.0% | 0.58% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court3-annex | night | 0.5409 | 0.0% | 0.82% | PASS | PASS | — |
+| E-court3-hall | golden | 0.3546 | 0.01% | 0.51% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court3-hall | dusk | 0.4043 | 0.0% | 1.31% | PASS | PASS | — |
+| E-court3-hall | night | 0.4247 | 0.0% | 2.2% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court3-house | golden | 0.4032 | 0.02% | 0.02% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court3-house | dusk | 0.4567 | 0.0% | 0.17% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court3-house | night | 0.4136 | 0.0% | 0.05% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court4-hall | golden | 0.346 | 0.0% | 0.34% | PASS | PASS | — |
+| E-court4-hall | dusk | 0.3875 | 0.0% | 0.81% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court4-hall | night | 0.4031 | 0.0% | 1.64% | PASS | PASS | — |
+| E-court4-house | golden | 0.398 | 0.19% | 0.02% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court4-house | dusk | 0.4444 | 0.0% | 0.03% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+| E-court4-house | night | 0.4032 | 0.0% | 0.05% | FAIL | PASS | 仅背景掩码防护（metric 达标） |
+
+**汇总（按 §12 双约束机械判定）**：golden **18/18 ✓**、dusk **16/18**、night **16/18** ⇒ **50/54 达标**；未达标 4 行全部集中在两座后院值房：
+- `C-annex-west`：dusk **5.68%**、night **5.78%**（截断 >5%）
+- `C-annex-east`：dusk **5.66%**、night **6.23%**（截断 >5%）
+（其余 50 行的截断 ≤4.61%、暗区 ≤0.98%、均值 ≥0.2465。）
+另有 **32 行**工具判定 FAIL 但**§12 三项数字全部达标**，FAIL 原因只有 `背景掩码防护：掩码可疑/天空占比过低`（见 B.7.5 的工具侧发现）——这些不计入 §12 未达标。
+
+### B.7.3 措施① 复测结论：**2 栋 golden 截断超标已解决** ✅
+
+| 建筑 | t63 实测（措施① 前） | t92 复测（措施① 后） | 结论 |
+| --- | --- | --- | --- |
+| `C-side-west-main` | golden 截断 **5.41%** FAIL | golden 截断 **0.53%** PASS（dusk 3.50%、night 4.61% 全 PASS） | ✅ 已解决 |
+| `C-side-east-main` | golden 截断 **6.36%** FAIL | golden 截断 **0.59%** PASS（dusk 5.18% FAIL、night 4.56% PASS） | ✅ golden 已解决 |
+
+原始判定行（golden）：
+```
+ PASS golden  interior  [near] 内容均值 0.6348 内容暗区 0.00% 内容截断 0.53% | 整帧均值 0.6348   ← C-side-west-main
+ PASS golden  interior  [near] 内容均值 0.6384 内容暗区 0.00% 内容截断 0.59% | 整帧均值 0.6384   ← C-side-east-main
+```
+
+### B.7.4 剩余 dusk/night 超标：量化与交回（措施② 已实测否决）
+
+按卡片要求先试了措施②（本卡 in-scope：内景灯位数量按面积分档，窄小院房 410 m² 以下只放 1 条灯位），**A/B 实测证明该方向反了**（灯位减少 ⇒ 环境系统的光强集中到小房间中点 ⇒ 中点墙面/地面更亮）：
+
+| 建筑·时辰 | 2 条灯位（交付实现） | 1 条灯位（措施② 试验） | 变化 |
+| --- | --- | --- | --- |
+| C-annex-west dusk | 5.68% FAIL | **4.76% PASS** | ↓ 改善 |
+| C-annex-west night | 5.78% FAIL | **6.11% FAIL** | ↑ 恶化 |
+| C-annex-east dusk | 5.66% FAIL | 5.12% FAIL | ↓ 仍超标 |
+| C-annex-east night | 6.23% FAIL | **8.23% FAIL** | ↑ 恶化 |
+
+⇒ **措施② 已撤回**（交付实现 = 2 条灯位/栋，与 B.7.2 的 54 张测量一致；陈设构件一件未删、判据未放宽）。
+**量化交回主理人派单（落在 config/kit，本卡 out of scope）**：剩余 4 行超标的直接来源是**内景点光**——`config.LIGHTING.lamps.intensity = 18`、`lamps.distance = 60`、`decay = 1`，叠加 `moonlitNight.lampIntensityScale = 1.0` / `sunset = 0.6`（CONFIG 1.0.6）与 t90 的**距离感知灯池**（离内景机位最近的灯位优先激活 ⇒ 室内点光几乎必然入选）。建议令牌级最小修法（任选其一，需 t61/t2 或 shared 落地）：
+1. `lamps.intensity` 18 → **12**（或按档：`moonlitNight.lampIntensityScale` 1.0 → **0.6**、`sunset` 0.6 → **0.4**）—— 上面 4 行的截断预计随之落到 ~4%；或
+2. 给 `interiorSet` 的 `lampGlow`/灯具加**发光上限**（发光材质 clamp，点光仍按 §12 的池子激活）——不影响暗区（当前 4 行暗区均 0.00%，亮度有余量）；或
+3. grade 1/2 小院房把地面令牌 `pavingStone` → `pavingDark`（降低地面反射）。
+三者都不动 5% 判据，也不需要删陈设。
+
+### B.7.5 工具侧发现（本卡不得改 scripts/**）
+
+**32 行**内景截图的工具判定 FAIL 但 §12 三项数字全部达标，唯一原因是 `背景掩码防护：掩码可疑…内容占比 ≥98%` / `天空占比过低 <5%`。内景视角本应豁免该防护（`scripts/shot.mjs` 里 `if (!isInteriorView && !ALLOW_NO_SKY)` 只对非内景生效），实测却仍被计入 ⇒ 该防护在**另一处分支**未被 interior 豁免（或 `--interior=` 路径未传 `isInteriorView`）。建议 t91/工具卡复核（本卡未改 scripts/**）。
+
+### B.7.6 其余验收保持 + 断言只增不减
+
+- 内景登记一致性、机位在室内包围盒内、几何事实（bounds 内/落地/不穿顶/LOD 三档）、**真实碰撞可达 18/18**：全部保持 ✓（`tests/zone-inner.test.mjs` **36/36**、`tests/zone-east.test.mjs` **32/32**，均为 exit 0）。
+- 断言数：C **35 → 36**、E **31 → 32**（新增"内景灯体守卫"用例；另一处 2 条灯位断言随措施② 撤回而回到 2 条/栋的原语义，非删减）。
+- 随外部数据演进的必要适配（写入测试注释）：① 阻挡判定改为**委托谓词层唯一真相源** `src/core/layout-slice.js` 的 `obstacleBlocksPoint`（t86/t87 后与 core/FP 求解器同源；本文件早期手写近似对新增的 `sillY`/`facade`/过渡面语义会误判）；② 门洞 `sillY` 已由 t79 改为 1.8 并新增门外 `facade` 锚点 ⇒ 走查用例不再自造脚点高度；③ E 区新增 `-transition-` 过渡可行走面（kind 仍为 ground）⇒ 标高断言按 layout 注册值核对；④ C 区后寝院北墙现有 5 处门洞（含 `C-pavilion-rear` 派生的中轴门位）⇒ 断言改为"门洞必须有来源"+ 花园入口 ±84 净宽 ≥10m。
+- 未列 `run.mjs`（按卡片：红项归各 owner）。

@@ -188,7 +188,8 @@ export async function runWalkAudit() {
       const probe = solver.probe(p.x, p.z, prevY);
       if (!probe.ok) {
         blocked += 1;
-        if (blockedAt.length < 3) blockedAt.push({ x: p.x, z: p.z, reasons: probe.reasons });
+        // t77 attempt5：记录落差，供“阈值等值”与“真阻挡”区分（原意：路径上不得有真阻挡）
+        if (blockedAt.length < 3) blockedAt.push({ x: p.x, z: p.z, reasons: probe.reasons, dy: probe.surfaceY !== null && prevY !== null ? +(probe.surfaceY - prevY).toFixed(4) : null });
       }
       const y = probe.surfaceY ?? prevY;
       if (prevY !== null && y !== null) {

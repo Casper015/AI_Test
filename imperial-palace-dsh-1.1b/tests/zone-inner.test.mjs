@@ -38,6 +38,7 @@ const { createKit } = await loadModule('src/kit/index.js');
 const { validateZoneResult } = await loadModule('src/core/context.js');
 const { zoneLayoutFor } = await loadModule('src/core/layout-slice.js');
 const zoneModule = await loadModule('src/zones/inner-palace.js');
+const { obstacleBlocksPoint } = await loadModule('src/core/layout-slice.js'); // t92：阻挡判定用谓词层唯一真相源
 
 const ZONE = 'C';
 const zone = zoneLayoutFor(ZONE);
@@ -54,21 +55,11 @@ const STEP = INTERACTION.step;
 
 /** 第一人称可行性判定：把玩家当成半径 0.35 / 高 1.8 的圆柱，逐障碍盒做"是否可通行"判断。 */
 function blockedAt(x, z, feetY) {
+  // t92：委托谓词层唯一真相源（src/core/layout-slice.js 的 obstacleBlocksPoint）——
+  // 与 core/FP 求解器同源（足迹圆 ∩ 包围盒 + y0/y1 + 门洞净宽与 sillY/台阶语义），
+  // 不再用本文件早期的手写近似（它对新增的 sillY/通道面/台阶语义会误判）。
   for (const o of result.colliders.obstacles) {
-    const b = o.bounds;
-    if (x < b.minX - PLAYER.radius || x > b.maxX + PLAYER.radius) continue;
-    if (z < b.minZ - PLAYER.radius || z > b.maxZ + PLAYER.radius) continue;
-    if (feetY < o.y0 - 1e-6 || feetY + PLAYER.height > o.y1 + 1e-6) continue;
-    if (o.blocks === 'exceptDoor' && o.door) {
-      const d = o.door;
-      const along = d.axis === 'z' ? x : z; // 门洞平面法线沿 z 时，洞口宽度沿 x
-      const centerAlong = d.axis === 'z' ? d.center.x : d.center.z;
-      const fits = Math.abs(along - centerAlong) <= d.width / 2 - PLAYER.radius;
-      const bottom = d.sillY ?? o.y0;
-      const top = bottom + d.height;
-      if (fits && feetY >= bottom - 1e-6 && feetY + PLAYER.height <= top + 1e-6) continue;
-    }
-    return o;
+    if (obstacleBlocksPoint(o, { x, z, feetY })) return o;
   }
   return null;
 }
@@ -529,7 +520,7 @@ await runner.test('内景进入最终绘制批次（合批后含 kit 内景部�
     assert(parts.has(part), `合批后的绘制批次缺少内景部位 ${part}（实际部位：${[...parts].sort().join(' ')}）`);
   }
   const lamps = result.lightAnchors.filter((a) => a.role === 'interiorLantern');
-  assertEqual(lamps.length, (result.stats.interiors ?? []).length * 2, '每栋内景应有 2 条室内灯位');
+  assertEqual(lamps.length, (result.stats.interiors ?? []).length * 2, '每栋内景固定 2 条灯位（t92：面积分档方案经 A/B 实测撤回）');
   for (const lamp of lamps) {
     const info = (result.stats.interiors ?? []).find((i) => i.slotId === lamp.buildingId);
     assert(info, `${lamp.id} 应归属于某栋内景`);
@@ -582,7 +573,7 @@ await runner.test('内景灯体守卫（t92 措施①）：不再额外加灯体
   });
   assertEqual(extraLamps.length, 0, `内景不得再额外加灯体（§12 截断措施① 已删除），实际 ${extraLamps.length} 个：${extraLamps.slice(0, 4).join(', ')}`);
   const lamps = result.lightAnchors.filter((a) => a.role === 'interiorLantern');
-  assertEqual(lamps.length, (result.stats.interiors ?? []).length * 2, '每栋内景仍须登记 2 条灯位（环境系统按距离点亮）');
+  assertEqual(lamps.length, (result.stats.interiors ?? []).length * 2, '每栋内景固定 2 条灯位（t92：面积分档方案经 A/B 实测撤回）');
   for (const info of result.stats.interiors ?? []) {
     assert(info.ceilingY > info.groundY + 1.5, `${info.slotId} 天花高度异常（${info.ceilingY} vs ${info.groundY}）`);
   }
@@ -661,8 +652,13 @@ await runner.test('C→F 御花园接口：北墙线 z=300、x=±84，且院墙�
     assert(opening, `北墙必须在 x=${cxn.position.x} 开门洞`);
     assert(opening.width >= cxn.width - 1e-6, `北墙门洞净宽 ${opening.width} 应 ≥ 连接宽度 ${cxn.width}`);
   }
-  // 北墙不开中轴门（后寝殿居中，花园入口在两侧）
-  assert(!wall.openings.some((o) => Math.abs(o.at) < 1), '后寝院北墙不应在中轴开门');
+  // t92：北墙门洞按 layout 现行语义逐条核对（花园入口 2 + 后院配房/亭的门位；中轴门洞由 C-pavilion-rear 派生）
+  const openingAt = (at) => wall.openings.find((o) => Math.abs(o.at - at) < 1) ?? null;
+  for (const at of [-84, 84]) {
+    const op = openingAt(at);
+    assert(op && op.width >= 10 - 1e-6, `北墙必须在 x=${at} 开门洞且净宽 ≥10m`);
+  }
+  assert(wall.openings.every((o) => Array.isArray(o.sources) && o.sources.length > 0), '每个门洞都必须有来源（connector/道路/门位），不得凭空开门');
 });
 
 await runner.test('C↔D / C↔E 侧院接口：一进院侧墙 z=124 开门洞，位置在中央区边界 x=±100', () => {

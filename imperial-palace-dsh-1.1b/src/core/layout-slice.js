@@ -470,6 +470,152 @@ export function y0CanonicalProblems({ obstacles = OBSTACLES, helpers = LAYOUT } 
   return { total: obstacles.length, clamped, kept, sources, problems };
 }
 
+/** t127：基线障碍列表缓存（水体在基线上是**派生版**；谓词实测必须用这份） */
+let baselineObstacleCache = null;
+function baselineObstacles({ helpers = LAYOUT } = {}) {
+  if (!baselineObstacleCache) {
+    baselineObstacleCache = assembleBaselineObstacles({ obstacles: OBSTACLES, waters: WATER_BODIES, helpers }).list;
+  }
+  return baselineObstacleCache;
+}
+
+/** t127：按 slotId 取该建筑的障碍条目（已做 `y0` 归一，门字段已按 `door` 原样携带）。 */
+function obstacleEntryFor(slotId, { helpers = LAYOUT } = {}) {
+  const list = baselineObstacles({ helpers });
+  const found = list.find((o) => o.buildingId === slotId || o.id === slotId || o.id === `OB-${slotId}`);
+  return found ?? null;
+}
+
+/**
+ * t127：某点在门带上是否被**任意障碍**阻挡 —— 一律走谓词层 `obstacleBlocksPoint()`（唯一真相源）。
+ * 该建筑自身的障碍在门洞内由谓词层的 `exceptDoor + insideObstacleDoor` 自动放行。
+ */
+function isDoorBandBlocked(entry, point, feetY, { helpers = LAYOUT, radius = INTERACTION.player.radius, height = INTERACTION.player.height } = {}) {
+  for (const other of baselineObstacles({ helpers })) {
+    const target = other.id === entry.id ? entry : other;
+    if (obstacleBlocksPoint(target, { x: point.x, z: point.z, feetY, height, radius })) return true;
+  }
+  return false;
+}
+
+/**
+ * t127：**门洞净宽实测探针**（供下游把 `door.passable/blockedBy` 从"声明自洽"升级为"实测守住"）。
+ *
+ * 语义（与 `insideObstacleDoor()` 的门带口径一致，**不新造第二套阻挡判定**）：
+ *   · 门带横向 = 垂直于 `door.axis` 的方向（`axis==='z'` ⇒ 横向是 x；`axis==='x'` ⇒ 横向是 z）；
+ *     这正是 `insideObstacleDoor()` 用 `door.width/2 - radius` 收窄的那条带；
+ *   · 在门洞中心平面（沿 `door.axis` 取 `door.center`）上，自 `center ± (width/2 - radius)` 之间**逐 `step`(默认 0.1m) 采样**；
+ *   · 每点用**谓词层** `obstacleBlocksPoint()` 判定（脚高默认取该点可行走面 `floorYAt()`，无面则退 `door.sillY` ⇒ `obstacle.y0`）；
+ *   · 返回**最长连续未被阻挡的宽度（米）**，四舍五入到 `step` 精度。
+ *
+ * 返回值：`number`（净宽）｜ `0`（该槽位无门 / 非 `exceptDoor` ⇒ 本来就没有门洞）｜ `null`（**无效 slotId**，不静默当 0）。
+ * 另提供 `probeDoorClearanceReport(slotId)` 返回逐项诊断（`{slotId, doorWidth, clearWidth, samples, passable, ...}`）。
+ */
+export function probeDoorClearanceReport(slotId, { step = 0.1, helpers = LAYOUT, feetY = null } = {}) {
+  if (typeof slotId !== 'string' || slotId.trim() === '') {
+    throw new TypeError('probeDoorClearance(slotId) 需要非空字符串 slotId（建筑 id）');
+  }
+  const entry = obstacleEntryFor(slotId, { helpers });
+  if (!entry) return { slotId, found: false, reason: 'unknown-slot', doorWidth: null, clearWidth: null, samples: 0, passable: null, points: [] };
+  const door = entry.door;
+  // 声明口径在门字段上：`door.passable` / `door.blockedBy`（见 src/shared/layout.js:353-356）
+  const declaredPassable = typeof door?.passable === 'boolean' ? door.passable : null;
+  const declaredBlockedBy = door?.blockedBy ?? null;
+  if (!door || entry.blocks !== 'exceptDoor') {
+    return {
+      slotId,
+      found: true,
+      reason: 'no-door',
+      doorWidth: door?.width ?? null,
+      clearWidth: 0,
+      samples: 0,
+      passable: declaredPassable,
+      blockedBy: declaredBlockedBy,
+      points: [],
+    };
+  }
+  const radius = INTERACTION.player.radius;
+  const height = INTERACTION.player.height;
+  const half = Math.max(0, door.width / 2 - radius);
+  const count = Math.max(1, Math.floor((half * 2) / step) + 1);
+  const points = [];
+  let best = 0;
+  let run = 0;
+  let blockedSamples = 0;
+  for (let i = 0; i < count; i += 1) {
+    const u = -half + i * step;
+    const p = door.axis === 'z' ? { x: door.center.x + u, z: door.center.z } : { x: door.center.x, z: door.center.z + u };
+    const floor = typeof helpers.floorYAt === 'function' ? helpers.floorYAt(p.x, p.z) : null;
+    const feet = feetY ?? floor ?? door.sillY ?? entry.y0 ?? 0;
+    const blocked = isDoorBandBlocked(entry, p, feet, { helpers, radius, height });
+    if (blocked) {
+      blockedSamples += 1;
+      run = 0;
+    } else {
+      run += step;
+      if (run > best) best = run;
+    }
+    points.push({ u: +u.toFixed(3), x: +p.x.toFixed(3), z: +p.z.toFixed(3), feetY: +Number(feet).toFixed(3), blocked });
+  }
+  const clearWidth = +Math.min(half * 2 + step, best).toFixed(3);
+  /**
+   * t127：**声明 vs 实测**的第二半 —— 若 `door.passable === false` 且给了 `blockedBy`，
+   * 就沿 `door.facade.outward` 从锚点向外采样，找**声明的那个阻挡者**（水体 id 形如 `WB-*-pond`，
+   * 在碰撞层里以 `OB-<id>` 存在）第一次真正挡住接近路径的位置。这样"声明的不可通行"是**可实测的**。
+   */
+  const facade = door.facade ?? null;
+  let declaredBlockerId = null;
+  let declaredBlockerResolved = false;
+  let approachBlockedAt = null;
+  if (door.passable === false && declaredBlockedBy) {
+    declaredBlockerId = declaredBlockedBy;
+    const resolved = baselineObstacles({ helpers }).find(
+      (o) => o.id === declaredBlockedBy || o.id === `OB-${declaredBlockedBy}` || (o.waterId ?? o.sourceId) === declaredBlockedBy,
+    );
+    declaredBlockerResolved = Boolean(resolved);
+    if (resolved && facade) {
+      const blocker = resolved;
+      const sign = facade.outward === 'north' || facade.outward === 'east' ? 1 : -1;
+      const lateral = facade.outward === 'north' || facade.outward === 'south';
+      // 从门洞内侧 6m 一直扫到外侧 12m（`t` 以 facade 锚点为原点、负值朝门洞内侧）——
+      // 声明的"阻挡"可能落在锚点内侧（水体压在墙脚外），只朝外扫会漏掉
+      for (let t = -6; t <= 12 + step; t += step) {
+        const z = lateral ? facade.z + sign * t : facade.z;
+        const x = lateral ? facade.x : facade.x + sign * t;
+        const f = typeof helpers.floorYAt === 'function' ? helpers.floorYAt(x, z) : null;
+        if (obstacleBlocksPoint(blocker, { x, z, feetY: f ?? 0 })) {
+          approachBlockedAt = +(lateral ? z : x).toFixed(3);
+          break;
+        }
+      }
+    }
+  }
+  return {
+    slotId,
+    found: true,
+    reason: clearWidth > 0 ? 'open' : 'blocked',
+    facade,
+    declaredBlockerId,
+    declaredBlockerResolved,
+    approachBlockedAt,
+    doorWidth: door.width,
+    doorAxis: door.axis,
+    bandHalfWidth: +half.toFixed(3),
+    clearWidth,
+    samples: points.length,
+    blockedSamples,
+    passable: declaredPassable,
+    blockedBy: declaredBlockedBy,
+    points,
+  };
+}
+
+/** 门洞净宽（米）：见 `probeDoorClearanceReport()` 的口径；无效 id ⇒ `null`（不静默 0）。 */
+export function probeDoorClearance(slotId, opts = {}) {
+  const r = probeDoorClearanceReport(slotId, opts);
+  return r.found ? r.clearWidth : null;
+}
+
 /** 某区域的水体 / 点景切片（区域不必再从障碍盒反推水池）。 */
 export function waterBodiesForZone(zoneId) {
   return WATER_BODIES.filter((w) => (w.owner ?? w.zone) === zoneId);

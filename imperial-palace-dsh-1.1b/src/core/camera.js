@@ -554,6 +554,9 @@ export function createFpSolver({ config = CONFIG } = {}) {
     obstacleBlocksPoint(obstacle, { x, z, feetY, height: player.height, radius: player.radius });
 
   /** 求解一步移动：返回 {x, z, y, blocked} */
+  /** t142：台阶阈值含等号（契约 CONTRACTS.md:638/:1018）——该容差**仅吸收浮点噪声**（如 1.6-1=0.6000000000000001）。 */
+  const BOUNDARY_EPS = 1e-9;
+
   function step1(from, dirX, dirZ, distance, options = {}) {
     const obstacles = options.obstacles ?? OBSTACLES;
     const feetY = (from.y ?? 0) - config.CAMERA.fpEyeHeight;
@@ -580,11 +583,13 @@ export function createFpSolver({ config = CONFIG } = {}) {
         pushReason('noSurface');
         return false;
       }
-      if (surfaceY - feetY > step.maxStepHeight + EPS) {
+      // t142：按 CONTRACTS.md:638/:1018「上 ≤ maxStepHeight」——恰好等于阈值可跨，超阈才挡（去掉 1e-6 松弛）
+      if (surfaceY - feetY > step.maxStepHeight + BOUNDARY_EPS) {
         pushReason('stepTooHigh');
         return false;
       }
-      if (surfaceY - feetY < -step.snapDownDistance) {
+      // t142：按契约「下 ≤ snapDownDistance」——恰好等于阈值可跨，更深才挡（严格 < 改为 > 的等价含界形式）
+      if (feetY - surfaceY > step.snapDownDistance + BOUNDARY_EPS) {
         pushReason('dropTooDeep');
         return false;
       }

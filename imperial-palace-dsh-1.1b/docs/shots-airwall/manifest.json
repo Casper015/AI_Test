@@ -1,90 +1,291 @@
 {
- "task": "t99",
- "attempt": "50b9afd6-4b03-45f1-80a2-e394c79faebf",
- "viewport": "1440x900",
- "browser": "chrome-headless-shell 1243 + SwiftShader",
- "driver": "t99-cdp-driver.mjs",
- "shots": [
-  {
-   "id": "01",
-   "file": "t99-01-fp-stand.png",
-   "role": "第一人称站在门殿西翼亭南侧 2m（基线）",
-   "bytes": 555480,
-   "sha256": "35b7359292f18dfffb61aced79cd71762e03f0fb1ef4acffc3496db76e0f5ecb",
-   "luma": {
-    "mean": 0.3897,
-    "std": 0.3027,
-    "darkPct": 10.027,
-    "clipPct": 0.051,
-    "min": 0.033,
-    "max": 0.955
-   },
-   "empty": false
+  "card": "t99 V1.4 空气墙提示与脱困的浏览器可见性证据（attempt 2）",
+  "generatedAt": "2026-09-27T01:15:47.324Z",
+  "root": "/Users/casper/Library/CloudStorage/OneDrive-Personal/Code/AI_Test/imperial-palace-dsh-1.1b",
+  "browser": "/Users/casper/Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell",
+  "viewport": {
+    "width": 1440,
+    "height": 900
   },
-  {
-   "id": "02",
-   "file": "t99-02-open-hint.png",
-   "role": "真实按住 W 撞亭 → 「门殿西翼亭 · 开敞构筑物」提示可见（像素实测对比度 0.55）",
-   "bytes": 633692,
-   "sha256": "19d357d9a19dc9e4e90d6082b602be1273f16d2a01cae8734a030120bf8b10f0",
-   "luma": {
-    "mean": 0.3483,
-    "std": 0.3053,
-    "darkPct": 17.735,
-    "clipPct": 0.051,
-    "min": 0.038,
-    "max": 0.955
-   },
-   "empty": false
+  "url": "http://127.0.0.1:53790/index.html?ui=1",
+  "blankCheckRule": {
+    "minBytes": 60000,
+    "minStd255": 8,
+    "exactSize": "1440x900"
   },
-  {
-   "id": "03",
-   "file": "t99-03-stuck-hud-absent.png",
-   "role": "连续顶住 8.56s（>5.7×1.5s 阈值）→ 卡死 HUD 仍 display:none（反证，见 F-1）",
-   "bytes": 633717,
-   "sha256": "03e357e081caed20651c37f576e7ca3c29d0e2199f623273104f99d387e5dd1f",
-   "luma": {
-    "mean": 0.3483,
-    "std": 0.3053,
-    "darkPct": 17.735,
-    "clipPct": 0.051,
-    "min": 0.038,
-    "max": 0.955
-   },
-   "empty": false
+  "screenshots": [
+    {
+      "file": "t99-01-fp-stand.png",
+      "step": "01-fp-stand-before-pavilion",
+      "bytes": 554448,
+      "sha256": "0ccc056a7dac5930a786f6f769b5f50dd6983c47ec2569ba569f96fd41e25296",
+      "size": "1440×900",
+      "lumaMean": 0.3911,
+      "lumaStd": 0.3033,
+      "lumaStd255": 77.34,
+      "darkRatio": 0.101,
+      "clipRatio": 0.0005,
+      "blankCheck": {
+        "ok": true,
+        "minBytes": 60000,
+        "minStd255": 8,
+        "note": "t78 口径：<60KB 或 std(0–255) <8 判空；std 同时给出 0–1 与 0–255 两种刻度"
+      }
+    },
+    {
+      "file": "t99-02-pavilion-enterable.png",
+      "step": "02-pavilion-enterable-no-airwall",
+      "bytes": 590153,
+      "sha256": "54c3009e199c1839f5145ec5d052e1970e7c00b11310d9f4ed96a55c47115664",
+      "size": "1440×900",
+      "lumaMean": 0.3881,
+      "lumaStd": 0.311,
+      "lumaStd255": 79.3,
+      "darkRatio": 0.1289,
+      "clipRatio": 0.0005,
+      "blankCheck": {
+        "ok": true,
+        "minBytes": 60000,
+        "minStd255": 8,
+        "note": "t78 口径：<60KB 或 std(0–255) <8 判空；std 同时给出 0–1 与 0–255 两种刻度"
+      }
+    },
+    {
+      "file": "t99-03-blocked-hint.png",
+      "step": "03-blocked-hint",
+      "bytes": 286592,
+      "sha256": "764e3de6a34c58b134119614e31df4ff812eba8783f583c68b69be7de98c90be",
+      "size": "1440×900",
+      "lumaMean": 0.6475,
+      "lumaStd": 0.2626,
+      "lumaStd255": 66.96,
+      "darkRatio": 0,
+      "clipRatio": 0.001,
+      "blankCheck": {
+        "ok": true,
+        "minBytes": 60000,
+        "minStd255": 8,
+        "note": "t78 口径：<60KB 或 std(0–255) <8 判空；std 同时给出 0–1 与 0–255 两种刻度"
+      }
+    },
+    {
+      "file": "t99-04-stuck-hud.png",
+      "step": "04-stuck-hud-visible",
+      "bytes": 291321,
+      "sha256": "b80d1b107bc30cd4d64cbe70bb548ba942a792244348fde610958f51b7a16356",
+      "size": "1440×900",
+      "lumaMean": 0.631,
+      "lumaStd": 0.2691,
+      "lumaStd255": 68.62,
+      "darkRatio": 0,
+      "clipRatio": 0.001,
+      "blankCheck": {
+        "ok": true,
+        "minBytes": 60000,
+        "minStd255": 8,
+        "note": "t78 口径：<60KB 或 std(0–255) <8 判空；std 同时给出 0–1 与 0–255 两种刻度"
+      }
+    },
+    {
+      "file": "t99-05-after-escape.png",
+      "step": "05-after-escape-G",
+      "bytes": 268116,
+      "sha256": "1b2075e6d651375dc66159ce3fbe6ec7d0401e27a818a2ddc54762c5a1c4cf06",
+      "size": "1440×900",
+      "lumaMean": 0.4838,
+      "lumaStd": 0.2578,
+      "lumaStd255": 65.74,
+      "darkRatio": 0.0063,
+      "clipRatio": 0.0007,
+      "blankCheck": {
+        "ok": true,
+        "minBytes": 60000,
+        "minStd255": 8,
+        "note": "t78 口径：<60KB 或 std(0–255) <8 判空；std 同时给出 0–1 与 0–255 两种刻度"
+      }
+    },
+    {
+      "file": "t99-06-after-escape-walk.png",
+      "step": "06-after-escape-walk",
+      "bytes": 262748,
+      "sha256": "32e0b588529a935aa191d2c2b64c90844d5962568f0aca286ea2c92cfc8d02ee",
+      "size": "1440×900",
+      "lumaMean": 0.4833,
+      "lumaStd": 0.258,
+      "lumaStd255": 65.79,
+      "darkRatio": 0.0063,
+      "clipRatio": 0.0007,
+      "blankCheck": {
+        "ok": true,
+        "minBytes": 60000,
+        "minStd255": 8,
+        "note": "t78 口径：<60KB 或 std(0–255) <8 判空；std 同时给出 0–1 与 0–255 两种刻度"
+      }
+    }
+  ],
+  "machineVerified": {
+    "coreNearest": {
+      "id": "VP-D-fp-spawn",
+      "distance": 140.7825,
+      "position": {
+        "x": -160,
+        "y": 2.05,
+        "z": -318
+      },
+      "mode": "fp-spawn"
+    },
+    "landing": {
+      "mode": "fp",
+      "landing": {
+        "x": -160,
+        "y": 2.05,
+        "z": -318
+      },
+      "spawn": {
+        "id": "VP-D-fp-spawn",
+        "x": -160,
+        "y": 2.05,
+        "z": -318
+      },
+      "delta": {
+        "dx": 0,
+        "dy": 0,
+        "dz": 0
+      },
+      "probe": {
+        "ok": true,
+        "surfaceY": 0.4,
+        "reasons": []
+      },
+      "envelope": {
+        "extent": {
+          "minX": -420,
+          "maxX": 420,
+          "minZ": -560,
+          "maxZ": 560
+        },
+        "inside": true
+      },
+      "eye": {
+        "expected": 2.05,
+        "actual": 2.05,
+        "diff": 0,
+        "fpEyeHeight": 1.65
+      }
+    },
+    "hudVisibleWhilePinned": {
+      "stuckVisible": true,
+      "stuckDisplay": "flex",
+      "stuckRect": {
+        "w": 556.4,
+        "h": 53
+      },
+      "position": {
+        "x": -299.627,
+        "z": -300
+      }
+    },
+    "hudAfterEscape": {
+      "visible": false,
+      "text": "好像卡住了连续 2.1s 走不动（阈值 1.5s）：按 G 或点右侧按钮脱离回到最近安全点（G）"
+    }
   },
-  {
-   "id": "04",
-   "file": "t99-04-after-escape.png",
-   "role": "按 G 脱困后：相机停在 oblique 全城视图 (0,520,-1180)，非最近出生点（F-2）",
-   "bytes": 331736,
-   "sha256": "e43655251a19b3f31104b1758dd12c7c616a912e7a19fde1c12e76f0b7b67495",
-   "luma": {
-    "mean": 0.5175,
-    "std": 0.2942,
-    "darkPct": 0.833,
-    "clipPct": 0.052,
-    "min": 0.002,
-    "max": 0.955
-   },
-   "empty": false
+  "visibility": {
+    "rule": "可见性判据（本卡自定；判空阈值沿用 t78 的 <60KB/std<8 口径）：区域高度 ≥18px、区域与外环的亮度差 ≥0.02、elementFromPoint 未被其它面板遮挡、且与其它可见面板的两两重叠为 0",
+    "hint": null,
+    "stuck": {
+      "rect": {
+        "x": 442.1,
+        "y": 763.8,
+        "w": 555.8,
+        "h": 53
+      },
+      "coveredBy": null,
+      "occlusionBasis": "elementFromPoint",
+      "contrastAbs": 0.4828,
+      "textColor": "rgb(240, 236, 225)",
+      "background": "color(srgb 0.177882 0.125333 0.103216)",
+      "borderColor": "rgb(180, 83, 58)",
+      "text": "好像卡住了连续 1.7s 走不动（阈值 1.5s）：按 G 或点右侧按钮脱离回到最近安全点（G）",
+      "ok": true
+    },
+    "stuckButton": {
+      "rect": {
+        "x": 841.9,
+        "y": 772.8,
+        "w": 143,
+        "h": 35
+      },
+      "coveredBy": null,
+      "occlusionBasis": "elementFromPoint",
+      "contrastAbs": 0.135,
+      "textColor": "rgb(240, 236, 225)",
+      "background": "rgba(223, 161, 18, 0.16)",
+      "borderColor": "rgba(223, 161, 18, 0.6)",
+      "text": "回到最近安全点（G）",
+      "ok": true
+    },
+    "toast": {
+      "rect": {
+        "x": 616,
+        "y": 828.8,
+        "w": 208,
+        "h": 55.2
+      },
+      "coveredBy": "CANVAS",
+      "occlusionBasis": "pointer-events:none ⇒ elementFromPoint 不可用，改用像素对比+面板重叠证据",
+      "contrastAbs": 0.5359,
+      "textColor": "rgb(240, 236, 225)",
+      "background": "rgba(26, 25, 23, 0.9)",
+      "borderColor": "rgba(223, 161, 18, 0.45)",
+      "text": "宫墙阻挡宫墙：请从城门 / 侧门门洞通行。",
+      "ok": true
+    },
+    "stuckOverlaps": [],
+    "measuredAt": "卡死 HUD 可见的同一时刻（按住 W 期间）"
   },
-  {
-   "id": "05",
-   "file": "t99-05-after-escape-walk.png",
-   "role": "脱困后再按 W 0.9s：位置未变 (0,520,-1180)——已不在第一人称走查中",
-   "bytes": 331789,
-   "sha256": "6a523f64b4a985a0b9bebaa3f1ef33ab75b33faecab02aa86bf71e529371e641",
-   "luma": {
-    "mean": 0.5175,
-    "std": 0.2942,
-    "darkPct": 0.833,
-    "clipPct": 0.052,
-    "min": 0.002,
-    "max": 0.955
-   },
-   "empty": false
+  "regionPixelStats": {
+    "stuckWhileVisible": {
+      "inside": {
+        "n": 29415,
+        "mean": 0.1979,
+        "min": 0.1315,
+        "max": 0.9179,
+        "darkRatio": 0
+      },
+      "ring": {
+        "n": 7440,
+        "mean": 0.6807
+      },
+      "contrastAbs": 0.4828
+    },
+    "stuckButtonWhileVisible": {
+      "inside": {
+        "n": 5005,
+        "mean": 0.2705,
+        "min": 0.1346,
+        "max": 0.9179,
+        "darkRatio": 0
+      },
+      "ring": {
+        "n": 2280,
+        "mean": 0.1355
+      },
+      "contrastAbs": 0.135
+    },
+    "toastWhileVisible": {
+      "inside": {
+        "n": 11648,
+        "mean": 0.2257,
+        "min": 0.1493,
+        "max": 0.9179,
+        "darkRatio": 0
+      },
+      "ring": {
+        "n": 3520,
+        "mean": 0.7616
+      },
+      "contrastAbs": 0.5359
+    }
   }
- ],
- "emptinessCriterion": "bytes<20000 或 lumaStd<0.03（0..1 尺度，≈8/255）"
 }

@@ -126,3 +126,146 @@ $ node tests/core.test.mjs → exit=0 · 通过 43 / 43（本卡前 42/43，唯�
 $ node scripts/audit.mjs --enforce → exit=0 · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）
 ```
 项目级 `run.mjs` 未列入本卡 verify；未触碰 `src/**`、`tests/layout.test.mjs`、`tests/interaction.test.mjs`、`tests/core-collision.test.mjs`、`tests/verify-*.mjs`、`docs/CONTRACTS.md`。
+
+
+---
+
+## t113（T2.28）更正 t108 的归因：`157 = 112 + 43（t102 过渡台阶）+ 2（t103 门槛面）`
+
+**背景**：t108 同步 `WALKABLE 112 → 157` 的 pin 时，把 +2 写成"2 条后续登记的 ground 面（t102）"——**归属写错**（t111 按纪律未越界改，只交回一行补丁；主理人采纳其选项 (甲)）。
+
+### 1. "为何 +2 属于 t103"的依据（本次实测）
+
+```text
+$ node --input-type=module -e "…loadModule('src/shared/layout.js')…"
+threshold 面: 2  → WK-B-pavilion-gate-west-threshold:ground | WK-B-pavilion-gate-east-threshold:ground
+transition 面: 43 → 覆盖槽位 18（id 后缀 -transition-N）
+总数 157 = 112 + 43 + 2 ✓（threshold 2 + transition 43 = 45）
+B 两座亭门殿 hasDoor: [{B-pavilion-gate-west:true}, {B-pavilion-gate-east:true}]
+```
+- +2 就是 **`WK-B-pavilion-gate-{west,east}-threshold`** 两条 `kind:'ground'` 门槛面（t103 的 10 座亭可通行化产物）；
+- t102 的 43 条过渡面 id 后缀是 **`-transition-N`**，与 `-threshold` **可区分**（两类面本次分别计数 45 = 43 + 2，正好补齐 112 → 157）。
+⇒ 归因更正有**可复算的证据**，不是措辞偏好。
+
+### 2. 改动前后逐字对照（`tests/core.test.mjs`）
+
+| 位置 | 旧（t108 写的） | 新（t113 更正） |
+| --- | --- | --- |
+| `:944` 注释行 | `//                        +  2 条后续登记的 ground 面（112 → 114，随 t102 同批落地）` | `//                        +  2 门槛面（t103：10 座亭可通行化 + B 两座门槛面`<br>`//                                WK-B-pavilion-gate-{west,east}-threshold，kind 用既有 ground，id 后缀 -threshold）` |
+| `:946` 断言的**理由串**（数值不变） | `'LAYOUT 1.1.10：可行走面 157 条（112 + 43 门外过渡台阶 + 2 条后续 ground 面，t102；kind 用既有 ground + id 后缀 -transition-N）'` | `'LAYOUT 1.1.10：可行走面 157 条（112 + 43 门外过渡台阶 t102 + 2 门槛面 t103；kind 用既有 ground + id 后缀 -transition-N / -threshold）'` |
+
+**断言本体一字未改**：仍是 `assertEqual(LAYOUT.WALKABLE.length, 157, …)`（**精确相等**，未改成 `>=`、未改成"包含"式）。
+
+### 3. 新增（只增不减）：把 +2 的**身份**也钉进代码
+
+在 t108 的组成自证块内追加（防止注释/归因再次漂移）：
+- `/-threshold$/` 面 == **2**；
+- 这些面必须 `kind === 'ground'`；
+- 两条 id 排序后必须恰为 **`WK-B-pavilion-gate-east-threshold,WK-B-pavilion-gate-west-threshold`**；
+- `B-pavilion-gate-west` / `B-pavilion-gate-east` 两槽位 `hasDoor === true`（t103 的可通行门殿）。
+
+t108 保留的组成自证断言**全部原样保留**：kind 分项之和 == 总数、`interior 43`、`passage 43`、`-transition-\d+$` == 43 且 `kind==='ground'`、过渡面覆盖 18 栋；`tests/core.test.mjs` 的 `assert(` 调用数由 82 → **88**（只增不减）。
+
+### 4. verify（原样）
+
+```text
+$ node tests/core.test.mjs → exit=0 · 通过 43 / 43
+   · WALKABLE 157 条组成：outerTerrain:4 / ground:58 / bridgeDeck:4 / gardenGround:1 / terrace:4 / interior:43 / passage:43；transition 43 面 / 18 栋
+$ node scripts/audit.mjs --enforce → exit=0 · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）
+```
+项目级 `run.mjs` 未列入本卡 verify；未触碰 `src/**`、`tests/layout.test.mjs`、`tests/interaction.test.mjs`、`tests/core-collision.test.mjs`、`docs/CONTRACTS.md`。
+
+
+---
+
+## t130（T2.32）core 侧 pin 再同步：`WALKABLE` 161 → **169**（LAYOUT 1.1.15）
+
+**任务**：`t128` 对 `WK-C-bed-terrace` 开槽（单块 → 5 段）+ C 两栋各 2 级台阶 ⇒ 净 **+8**；`t127` 刚同步到 161 的 pin 已过时。**以实测为准**，不弱化断言。
+
+### 1. 实测（先读后填，未凭转述）
+
+```text
+$ node --input-type=module -e "…loadModule('src/shared/layout.js')…"
+LAYOUT_VERSION 1.1.15 | WALKABLE 169
+byKind: outerTerrain:4 / ground:62 / bridgeDeck:4 / gardenGround:1 / terrace:12 / interior:43 / passage:43   （= 169）
+transition 面 47（全部 kind='ground'）| 覆盖槽位 20 | threshold 面 2 | terrace 面 12
+WK-C-bed-terrace-{south,north,west,mid,east} 共 5 段（t128 的 1 → 5 开槽：净 +4）
+```
+**分项变化对得上**：`terrace` 4 → 8（t126 +4）→ **12**（t128 +4）；`ground` 58 → **62**（+4 = C 两栋各 2 级台阶，登记为 `-transition-N` 台阶面）；`transition` 43 → **47**、覆盖槽位 18 → **20**；`interior 43 / passage 43 / threshold 2 / 外域 4 / 桥面 4 / 园林地 1` 未变。
+
+### 2. 改动（仅 `tests/core.test.mjs`，断言只增不减）
+
+| 位置 | 旧（t127） | 新（t130） |
+| --- | --- | --- |
+| 用例标题 | `… 161 可走面 …；LAYOUT 1.1.14` | `… **169** 可走面 …；**LAYOUT 1.1.15**` |
+| 主 pin | `assertEqual(LAYOUT.WALKABLE.length, **161**, 'LAYOUT 1.1.14：…（112 + 43 门外过渡台阶 t102 + 2 门槛面 t103 + 4 条 terrace 面 t126；…）')` | `assertEqual(LAYOUT.WALKABLE.length, **169**, 'LAYOUT 1.1.15：可行走面 169 条（112 + 43 门外过渡台阶 t102 + 2 门槛面 t103 + 4 条 terrace 面 t126 + **8 条 t128**（C-bed-terrace 开槽 1→5 净 +4 + C 两栋各 2 级台阶 4 条 -transition 台阶面）；kind 用既有 ground / terrace + id 后缀 -transition-N / -threshold）')`（**仍精确相等**，未改 `>=`/包含式） |
+| 组成自证 | `transition == 43`、覆盖 18 栋、`terrace == 8` | `transition == **47**`、覆盖 **20** 栋、`terrace == **12**`（各附理由串） |
+| 版本标签 | `1.1.10` / `1.1.14`、`157` / `161` | 统一为 **1.1.15** / **169**（**仅文案**） |
+| 输出行 | 硬编码 `transition 43 面 / 18 栋` | 改为**按实测变量输出**：`transition ${transitions.length} 面 / ${slotIds.size} 栋；threshold ${thresholds.length} 面`（不留硬编码数字） |
+
+**保留未动**：`buildings/connectors/obstacles/viewpoints/lightAnchors`（从 layout 读出精确比对）、`interior === 43`、`passage === 43`、分项和 == 总数、`threshold === 2` 且 id/kind/`hasDoor===true` 的身份断言。
+
+### 3. grep 排查（`tests/core*.mjs`）
+
+`grep -rn "161\|157\|112\|WALKABLE" tests/core*.mjs` 逐条结论：
+- **按旧规模断言的处**：仅 `tests/core.test.mjs`（本卡同步完毕）——同步后该文件内不再出现 161/157 作为计数（`112` 仅出现在组成注释 `169 = 112 + …` 的溯源里）。
+- **按 `kind` 过滤、不断言规模**：`core-camera.test.mjs:331/392`、`core-collision.test.mjs:231/295/335`、`core-interior.test.mjs:92`、`core-kinds.test.mjs:32/33/95/96` ⇒ 数值变化不影响它们（`interior` 仍 43）。
+- **坐标/历史快照（非计数，不改）**：`tests/core-interior.test.mjs:83` 的 `z: 157` 是机位**坐标**；`core-kinds.test.mjs` 注释里的 `LAYOUT 1.1.4` 是历史**版本标签**（其断言的 43 未变，且文件不在本卡 inScope）。
+
+### 4. verify（原样）
+
+```text
+$ node tests/core.test.mjs → exit=0 · 通过 45 / 45
+   · WALKABLE 169 条组成：outerTerrain:4 / ground:62 / bridgeDeck:4 / gardenGround:1 / terrace:12 / interior:43 / passage:43；transition 47 面 / 20 栋；threshold 2 面
+$ node tests/core-environment.test.mjs → exit=0 · 通过 8 / 8
+$ node scripts/audit.mjs --enforce → exit=0 · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）
+```
+用例数 45（不变）、`assert(` 调用 **91**（不变，只改数值与理由串）；项目级 `run.mjs` 未列入本卡 verify。
+未触碰 `src/**`、`tests/layout.test.mjs`、`tests/core-antialias.test.mjs`、`tests/core-environment.test.mjs`、`tests/verify-*.mjs`、`tests/zone-*.test.mjs`、`docs/CONTRACTS.md`。
+
+
+---
+
+## t136（T2.35）core 侧 pin 第 6 次同步：`WALKABLE` 171 → **167**（LAYOUT 1.1.17）
+
+**来源**：`t134` 删除 4 片残片 ⇒ 净 **−4**（`t133` 刚同步到 171，随即过时）。
+
+### 1. 实测（先读后填，未凭转述）
+
+```text
+$ node --input-type=module -e "…loadModule('src/shared/layout.js')…"
+LAYOUT_VERSION 1.1.17 | WALKABLE 167
+byKind: outerTerrain:4 / ground:64 / bridgeDeck:4 / gardenGround:1 / terrace:8 / interior:43 / passage:43   （= 167）
+transition 49（覆盖 21 栋）| threshold 2 | terrace 8
+terrace 现存 8 条：WK-B-terrace-{tier1,tier2-south,tier2-north,tier2-mid,tier3}、WK-C-bed-terrace-{south,north,mid}
+t134 声称删除的 4 片：WK-B-terrace-tier2-{west,east}、WK-C-bed-terrace-{west,east} —— **均已不在树中** ✓
+```
+**Δ 溯源**：`terrace 12 → 8`（**−4**，即 t134 删掉的 4 片残片）；`ground 64 / transition 49 / 覆盖槽位 21 / threshold 2 / interior 43 / passage 43 / 外域 4 / 桥面 4 / 园林地 1` **全部未变**。
+
+### 2. 改动（仅 `tests/core.test.mjs`，断言只增不减）
+
+| 位置 | 旧（t133） | 新（t136） |
+| --- | --- | --- |
+| 用例标题 | `… 171 可走面 …；LAYOUT 1.1.16` | `… **167** 可走面 …；**LAYOUT 1.1.17**` |
+| 主 pin | `assertEqual(LAYOUT.WALKABLE.length, **171**, 'LAYOUT 1.1.16：…)` | `assertEqual(LAYOUT.WALKABLE.length, **167**, 'LAYOUT 1.1.17：可行走面 167 条（112 + 43 t102 + 2 门槛面 t103 + 4 条 terrace 面 t126 + 8 条 t128 + 2 条 t131 **− 4 条 t134（删除残片 `WK-B-terrace-tier2-{west,east}` 与 `WK-C-bed-terrace-{west,east}`，kind=terrace）**；…）')`（**仍精确相等**，未改 `>=`/包含式） |
+| 组成自证 | `byKind.terrace === 12` | `byKind.terrace === **8**`（理由串：t126 +4 / t128 +4 / **t134 删残片 −4**） |
+| 版本标签 | `1.1.16`（4 处） | `**1.1.17**`（仅文案） |
+
+**保留未动**：`transition === 49`（t102 43 + t128 4 + t131 2）、覆盖槽位 `21`、`threshold === 2` 的身份断言、`interior === 43`、`passage === 43`、分项和 == 总数。
+
+### 3. grep 排查
+
+`grep -rn "171\|169\|161\|1\.1\.16" tests/core*.mjs docs/handoff-t2-expectations.md` ⇒ **无命中**（唯一含 `169` 的是 `three r169`——three.js 修订号，**不是计数**，未误改）。
+同步后 `tests/core.test.mjs` 中不再出现 `171` / `1.1.16` 作为计数或版本标签。
+
+### 4. verify（原样）
+
+```text
+$ node tests/core.test.mjs → exit=0 · 通过 45 / 45
+   · WALKABLE 167 条组成：outerTerrain:4 / ground:64 / bridgeDeck:4 / gardenGround:1 / terrace:8 / interior:43 / passage:43；transition 49 面 / 21 栋；threshold 2 面
+$ node tests/core-environment.test.mjs → exit=0 · 通过 12 / 12
+$ node scripts/audit.mjs --enforce → exit=0 · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）
+```
+用例数 45、`assert(` **91**（均不变，只改数值与理由串）；未触碰 `src/**`、`tests/layout.test.mjs`、`tests/core-antialias.test.mjs`、`tests/verify-*.mjs`、`docs/CONTRACTS.md`。
+
+**本线第 6 次同类同步（t108 157 → t113 归因 → t127 161 → t130 169 → t133 171 → t136 167）**；模板与首次一致：**先读实测 → Δ 逐项溯源 → 顺手去硬编码**（输出行早已改为按实测变量打印，故本次屏上无陈旧数字）。

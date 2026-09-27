@@ -138,7 +138,7 @@ export function createInteraction({
 
   /* ------------------------------------------------------------------ t87 通行性守卫与防卡死 */
   /**
-   * 通行性审计（四类糟糕阻挡 + 单向陷阱守卫 + 最近安全点）。
+   * 通行性审计（四类糟糕阻挡 + 单向陷阱守卫 + 最近安全格搜索；后者仅诊断/展示用）。
    * 采样是唯一重活：生产环境**分帧预热**（`warmupRowsPerTick` 行/帧），预热完成后才装守卫 ——
    * 未就绪期间守卫一律放行（绝不误伤），且脱困兜底始终可用。测试可用 `warmupAll()` 一次算完。
    */
@@ -395,54 +395,159 @@ export function createInteraction({
   }
 
   /**
-   * t87：一键脱离卡死 —— **确定性**回到最近的安全可行走点。
-   *   · 只用 §7.2 的请求事件（先退出第一人称、再重新进入）：core 会用 `nearestFpSpawn(position)`
-   *     把玩家放到**最近的已登记出生点**——出生点在 `registry` 里经契约校验（可行走面 + 眼高），
-   *     因此"不穿墙、不落水面/障碍内/包络外"由数据契约保证，本函数再逐项复核；
-   *   · **不做随机传送**、不放宽任何阻挡；返回落点与判定结果供 HUD/测试核对。
+   * t87/t105：一键脱离卡死 —— **确定性放置**到「最近的已登记出生点」。
+   *
+   * t99-F2（blocker）根因：旧实现在**同一 tick 连发两次** `requestViewMode{fp}` ——
+   * 第一次让 core `exitFp`（恢复 oblique），第二次未生效 ⇒ 读到的落点是 oblique 全城机位
+   * ⇒ 包络校验必然失败，玩家被抛到 (0,520,−1180) 的环绕相机（比不脱困更糟）。
+   *
+   * 现在的顺序（全部确定性，无随机数）：
+   *   0. 取快照（视图/位置），**先确定目标并对目标做预校验**（probe / 包络 / 眼高，判据一概不放宽）；
+   *   1. 若在 FP：用**同一入口**的切换请求退出 FP（state 与相机同步离开 fp）；
+   *   2. `rig.enterFp({ spawnId, position, instant:true })` —— 直接、精确地放到出生点（core 已支持强制落点）；
+   *   3. 再请求 `{mode:'fp'}` 把 **state 同步回 fp**（此时相机已在 fp ⇒ core 内部 no-op，不会二次放置）；
+   *   4. **事后复核**实际落点：与出生点逐值相等 + 可站立 + 包络内 + 眼高一致；
+   *      任一不通过 ⇒ **回滚到快照**（视图/位置不被改动）并给失败提示；**只有通过才给"已脱离"提示**。
    */
   function escapeToSafePoint(source = 'escape-api') {
     stats.escapes += 1;
     if (rig.isFp !== true) {
       pushHint({ tone: 'warn', kind: 'escape', title: '当前不在第一人称', detail: '脱困只在第一人称走查中生效：按 F 进入第一人称后再试。' }, { kind: 'escape' });
-      return { ok: false, reason: 'not-fp' };
+      const result = { ok: false, reason: 'not-fp', changed: false };
+      stats.lastEscape = result;
+      return result;
     }
-    const before = { ...rig.describe().position };
-    // 退出 → 再进入：两步都走同一条请求事件，core 负责选最近出生点（本模块不碰相机）
-    requester.send(EVENTS.requestViewMode, { mode: 'fp' });
-    requester.send(EVENTS.requestViewMode, { mode: 'fp' });
-    const after = { ...rig.describe().position };
-    lastEscapeProbe = { x: after.x, z: after.z };
-    const probe = solver.probe(after.x, after.z);
+    const describeBefore = rig.describe();
+    const snapshot = {
+      position: { ...describeBefore.position },
+      mode: store.state.viewMode,
+      isFp: rig.isFp === true,
+    };
+
+    /** 判据（与既有口径一致，未放宽）：可站立 + 包络内 + 眼高 = 面高 + 眼高。 */
+    const judge = (point) => {
+      const probe = solver.probe(point.x, point.z);
+      const surface = layout.floorYAt(point.x, point.z);
+      const inBounds =
+        point.x >= layout.TERRAIN_EXTENT.minX &&
+        point.x <= layout.TERRAIN_EXTENT.maxX &&
+        point.z >= layout.TERRAIN_EXTENT.minZ &&
+        point.z <= layout.TERRAIN_EXTENT.maxZ;
+      const eyeOk = surface !== null && Math.abs(point.y - (surface + config.CAMERA.fpEyeHeight)) < 1e-6;
+      return { ok: probe.ok === true && inBounds && eyeOk, probe, surface, inBounds, eyeOk };
+    };
+
+    // ① 目标 = registry 的最近出生点（**不改 nearestFpSpawn 语义**，只是消费它的结果）
+    const near = typeof registry?.nearestFpSpawn === 'function' ? registry.nearestFpSpawn(snapshot.position) : null;
+    const spawn = near?.viewpoint ?? null;
+    if (!spawn || !spawn.position) {
+      pushHint({ tone: 'warn', kind: 'escape', title: '脱困失败 · 无登记出生点', detail: 'registry 未登记 fp-spawn；**未改动**当前视图与位置。' }, { kind: 'escape' });
+      const result = { ok: false, reason: 'no-spawn', changed: false, before: snapshot.position };
+      stats.lastEscape = result;
+      return result;
+    }
+    const target = { ...spawn.position };
+
+    // ② 预校验：不合格就**什么都不做**（不改视图/位置）
+    const pre = judge(target);
+    if (!pre.ok) {
+      pushHint(
+        {
+          tone: 'warn',
+          kind: 'escape',
+          title: '脱困失败 · 出生点未通过校验',
+          detail: `${spawn.id}：可站立 ${pre.probe.ok}｜包络内 ${pre.inBounds}｜眼高 ${pre.eyeOk}｜原因 ${pre.probe.reasons.join('/') || '—'}；**未改动**当前视图与位置。`,
+        },
+        { kind: 'escape' },
+      );
+      const result = { ok: false, reason: 'spawn-invalid', changed: false, spawnId: spawn.id, target, reasons: pre.probe.reasons };
+      stats.lastEscape = result;
+      record({ kind: 'escape', action: 'reject', reason: 'spawn-invalid', spawnId: spawn.id });
+      return result;
+    }
+
+    // ③ 确定性放置：退出 → 精确放置 → 状态同步回 fp
+    const exitViaToggle = () => {
+      if (rig.isFp === true && store.state.viewMode === 'fp') {
+        requester.send(EVENTS.requestViewMode, { mode: 'fp' });
+      } else if (rig.isFp === true) {
+        rig.exitFp({ source: 'escape', reason: 'escape-place' });
+      }
+    };
+    exitViaToggle();
+    rig.enterFp({ source: 'escape', spawnId: spawn.id, position: { ...target }, instant: true });
+    if (store.state.viewMode !== 'fp') requester.send(EVENTS.requestViewMode, { mode: 'fp' });
+
+    // ④ 事后复核实际落点（按真实位置，不按"我以为的"）
+    const describeAfter = rig.describe();
+    const after = { ...describeAfter.position };
+    const post = judge(after);
+    const matchesSpawn =
+      Math.abs(after.x - target.x) < 1e-6 && Math.abs(after.y - target.y) < 1e-6 && Math.abs(after.z - target.z) < 1e-6;
     const region = traversal.ready ? traversal.regionAt(after.x, after.z) : 'unknown';
-    const moved = +Math.hypot(after.x - before.x, after.z - before.z).toFixed(2);
-    const feet = +(after.y - config.CAMERA.fpEyeHeight).toFixed(3);
-    const inBounds =
-      after.x >= layout.TERRAIN_EXTENT.minX &&
-      after.x <= layout.TERRAIN_EXTENT.maxX &&
-      after.z >= layout.TERRAIN_EXTENT.minZ &&
-      after.z <= layout.TERRAIN_EXTENT.maxZ;
-    const safe = probe.ok === true && inBounds && (region === 'main' || region === 'unknown');
+    const moved = +Math.hypot(after.x - snapshot.position.x, after.z - snapshot.position.z).toFixed(2);
+    lastEscapeProbe = { x: after.x, z: after.z };
+
+    if (!matchesSpawn || !post.ok) {
+      // 回滚：精确恢复到脱困前的视图与位置（不可接受"把玩家抛到别处"）
+      if (rig.isFp === true) rig.exitFp({ source: 'escape', reason: 'escape-rollback' });
+      rig.enterFp({ source: 'escape', position: { ...snapshot.position }, instant: true });
+      if (rig.isFp !== true && snapshot.isFp) rig.enterFp({ source: 'escape', position: { ...snapshot.position }, instant: true });
+      if (store.state.viewMode !== (snapshot.isFp ? 'fp' : snapshot.mode)) {
+        requester.send(EVENTS.requestViewMode, { mode: snapshot.isFp ? 'fp' : snapshot.mode });
+      }
+      const restored = { ...rig.describe().position };
+      const changed =
+        Math.abs(restored.x - snapshot.position.x) > 1e-6 ||
+        Math.abs(restored.y - snapshot.position.y) > 1e-6 ||
+        Math.abs(restored.z - snapshot.position.z) > 1e-6 ||
+        rig.isFp !== snapshot.isFp;
+      pushHint(
+        {
+          tone: 'warn',
+          kind: 'escape',
+          title: '脱困失败 · 落点未通过复核',
+          detail: `落点 (${after.x.toFixed(1)}, ${after.z.toFixed(1)}) 与出生点 ${spawn.id} 不一致或未过校验（可站立 ${post.probe.ok}｜包络内 ${post.inBounds}｜眼高 ${post.eyeOk}）；已恢复原视图与位置（changed=${changed}）。`,
+        },
+        { kind: 'escape' },
+      );
+      const result = { ok: false, reason: 'post-invalid', changed, restored: !changed, spawnId: spawn.id, before: snapshot.position, after, reasons: post.probe.reasons };
+      stats.lastEscape = result;
+      record({ kind: 'escape', action: 'rollback', reason: 'post-invalid', spawnId: spawn.id });
+      return result;
+    }
+
     solver.resetStuckTimer();
     stuckFlag = false;
-    stats.lastEscape = { moved, region, safe, reasons: probe.reasons, feetY: feet, at: { x: after.x, z: after.z } };
     pushHint(
-      safe
-        ? {
-            tone: 'info',
-            kind: 'escape',
-            title: '已脱离 · 回到最近安全点',
-            detail: `落点 (${after.x.toFixed(0)}, ${after.z.toFixed(0)})｜可站立 ✓｜区域 ${region}｜位移 ${moved}m`,
-          }
-        : {
-            tone: 'warn',
-            kind: 'escape',
-            title: '已尝试脱困，但落点未通过校验',
-            detail: `落点 (${after.x.toFixed(0)}, ${after.z.toFixed(0)})｜可站立 ${probe.ok}｜原因 ${probe.reasons.join('/') || '—'}`, 
-          },
+      {
+        tone: 'info',
+        kind: 'escape',
+        title: `已脱离 · 返回最近的已登记出生点（${moved.toFixed(1)} m）`,
+        detail: `落点 (${after.x.toFixed(0)}, ${after.z.toFixed(0)}) = ${spawn.id}（距卡死点 ${moved}m）｜可站立 ✓｜包络内 ✓｜眼高 ✓`,
+      },
       { kind: 'escape' },
     );
-    return { ok: true, safe, moved, region, reasons: probe.reasons, before, after, feetY: feet, inBounds, source };
+    const result = {
+      ok: true,
+      safe: true,
+      changed: true,
+      spawnId: spawn.id,
+      spawnDistance: near?.distance ?? null,
+      moved,
+      region,
+      reasons: post.probe.reasons,
+      before: snapshot.position,
+      after,
+      feetY: +(after.y - config.CAMERA.fpEyeHeight).toFixed(3),
+      inBounds: post.inBounds,
+      eyeOk: post.eyeOk,
+      matchesSpawn,
+      source,
+    };
+    stats.lastEscape = result;
+    record({ kind: 'escape', action: 'place', spawnId: spawn.id, moved });
+    return result;
   }
 
   function exitInterior(source = 'interior-api') {
@@ -671,7 +776,7 @@ export function createInteraction({
             tone: 'warn',
             kind: 'stuck',
             title: '好像卡住了',
-            detail: `连续 ${STUCK_SECONDS}s 走不动：按 G 或点「回到最近安全点」脱离（确定性回到最近登记出生点，不会穿墙）。`,
+            detail: `连续 ${STUCK_SECONDS}s 走不动：按 G 或点「返回最近的已登记出生点」脱离（确定性放置到该出生点，不穿墙、不落非法位置）。`,
           },
           { kind: 'stuck' },
         );
@@ -796,7 +901,7 @@ export function createInteraction({
     },
     select,
     hover,
-    /** t87：一键脱离卡死 —— 确定性回到最近的安全可行走点（详见函数注释）。 */
+    /** t87/t123：一键脱离卡死 —— 确定性返回**最近的已登记出生点**（文案与实现一致，详见函数注释）。 */
     escapeToSafePoint,
     /** 生产求解器实例（core 每帧调用的同一个；t87 起供通行性诊断/测试使用）。 */
     solver,

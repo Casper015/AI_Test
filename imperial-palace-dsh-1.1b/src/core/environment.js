@@ -200,7 +200,43 @@ export function createEnvironment({
 
   /** 退出内景时的淡出时长（进入时立即点亮，保证截图/首帧就达标；离开时淡出避免突兀）。 */
   const INTERIOR_FADE_OUT_SECONDS = 0.3;
-  const interiorState = { inside: false, blend: 0, litFrames: 0, darkFrames: 0 };
+  /**
+   * t106：**内景 Bloom 强度上限系数**（相机进入内景体积后，Bloom strength 按该系数缩放）。
+   *
+   * 诊断依据（t106，源级开关 + `?view=interior&zone=B&preset=dusk`，基线内容高光截断 5.67%）：
+   *   · 关 Bloom            → 截断 **0.00%**（均值 0.098）⇒ 截断 100% 来自 Bloom；
+   *   · kit 自发光 emissiveIntensity 1→0 → 5.68%（±0.01pp，**无贡献**）；
+   *   · environment 灯自发光 `0.6+2.6*scale`→0 → 5.69%（±0.02pp，**无贡献**）；
+   *   · 全材质 roughness→1（去镜面）→ 4.52%（−1.15pp，次要项）。
+   * 故只缩放**内景**的 Bloom 强度：外景机位的 bloom 参数逐位不变（不受影响），
+   * 也不动 `config.LIGHTING.presets.*.bloom`（config 不在本卡 inScope）与 §12 阈值。
+   */
+  const INTERIOR_BLOOM_STRENGTH_SCALE = 0.5;
+  /**
+   * t120：**内景 Bloom 上限的分档**（同一机制的细化，不新增第二套逻辑）。
+   *
+   * 由来：t106 用统一 ×0.5 压住金銮殿/寝殿等大空间；但 C/E 侧的**小院房**（如 `C-annex-west/east`，
+   * 内部 ≈18×20m）在 `--interior=<slot>` 口径下仍贴线（实测 `C-annex-east night` 5.02% > 5%，t92 曾报 6.23%）。
+   * 故按"房间净尺度"给两档：小房间更紧、大空间保持 t106 的冻结值 0.5（**大空间读数逐位不变** ⇒ 不回归 t106 的格子）。
+   * 判据（§12 阈值 5%）一字未动；这是**收紧**而不是放宽。
+   */
+  const INTERIOR_BLOOM_TIERS = Object.freeze([
+    Object.freeze({ tag: 'small', maxArea: 600, scale: 0.3 }),   // 院房/配房/小门屋（≈360 m² 级）
+    Object.freeze({ tag: 'large', maxArea: Infinity, scale: INTERIOR_BLOOM_STRENGTH_SCALE }),
+  ]);
+  const interiorBloomTierFor = (area) => INTERIOR_BLOOM_TIERS.find((t) => area !== null && area <= t.maxArea) ?? INTERIOR_BLOOM_TIERS[INTERIOR_BLOOM_TIERS.length - 1];
+  /** 逐"内景可行走面"的包围盒（不按区分组）——用于按房间尺度选择上限档；缺 bounds 的面跳过。 */
+  const interiorSurfaceBoxes = WALKABLE.filter((w) => w.kind === 'interior' && w.bounds).map((w) => ({
+    id: w.id,
+    area: w.area ?? (w.bounds.maxX - w.bounds.minX) * (w.bounds.maxZ - w.bounds.minZ),
+    minX: w.bounds.minX - INTERIOR_VOLUME_MARGIN,
+    maxX: w.bounds.maxX + INTERIOR_VOLUME_MARGIN,
+    minZ: w.bounds.minZ - INTERIOR_VOLUME_MARGIN,
+    maxZ: w.bounds.maxZ + INTERIOR_VOLUME_MARGIN,
+    minY: (w.y ?? 0) - 0.6,
+    maxY: (w.y ?? 0) + INTERIOR_CEILING_HEIGHT,
+  }));
+  const interiorState = { inside: false, blend: 0, litFrames: 0, darkFrames: 0, activeArea: null };
 
   function insideInteriorVolume(position) {
     if (!position) return false;
@@ -221,7 +257,15 @@ export function createEnvironment({
   }
 
   function updateInteriorFill(dt, cameraPosition) {
+    const previousBlend = interiorState.blend;
     const inside = insideInteriorVolume(cameraPosition);
+    // t120：登记"当前所在的最小内景房间"的净面积（用于 bloom 分档；不在房间内 → null）
+    interiorState.activeArea = (() => {
+      if (!inside || !cameraPosition) return null;
+      const hits = interiorSurfaceBoxes.filter((b) => cameraPosition.x >= b.minX && cameraPosition.x <= b.maxX && cameraPosition.z >= b.minZ && cameraPosition.z <= b.maxZ && cameraPosition.y >= b.minY && cameraPosition.y <= b.maxY);
+      if (hits.length === 0) return null;
+      return hits.reduce((min, b) => Math.min(min, b.area), Infinity);
+    })();
     interiorState.inside = inside;
     if (inside) {
       interiorState.blend = 1;
@@ -235,6 +279,10 @@ export function createEnvironment({
     const target = interiorFillTargets();
     interiorAmbient.intensity = +(target.ambient * interiorState.blend).toFixed(4);
     interiorHemi.intensity = +(target.hemi * interiorState.blend).toFixed(4);
+    // t106：内景入境程度变化时重算 Bloom（外景 blend=0 → 逐位等同预设；进出内景各重算一次）
+    if (Math.abs(interiorState.blend - previousBlend) > 1e-3) {
+      applyBloom(presetOf(currentPreset), presetOf(currentPreset).lampIntensityScale);
+    }
   }
 
   /** 环境贴图（t38 B）：由当前时辰的天空色生成 equirect 数据贴图（无需 WebGLRenderer，可测）。 */
@@ -621,6 +669,29 @@ export function createEnvironment({
     };
   }
 
+  /**
+   * t106：按"当前时辰预设 + 内景入境程度"求 Bloom 参数。
+   * 内景入境时 strength ×（1 −(1−SCALE)×blend）；blend=0（外景）时**逐位等同预设值**。
+   */
+  function bloomForState(preset = presetOf(currentPreset), lampScale = preset?.lampIntensityScale ?? 0) {
+    const base = preset?.bloom ?? null;
+    const blend = interiorState.blend;
+    // t120：按房间尺度取上限档（大空间 = t106 冻结值 0.5；小院房 = 0.3）；不在任何房间内时取最松档
+    const tier = interiorBloomTierFor(blend > 0 ? interiorState.activeArea : null);
+    const shrink = 1 - (1 - tier.scale) * blend;
+    const params = base && typeof base.strength === 'number'
+      ? { ...base, strength: +(base.strength * shrink).toFixed(4) }
+      : base;
+    return { params, enabled: lampScale > 0 ? true : undefined, blend: +blend.toFixed(3), shrink: +shrink.toFixed(4), tier };
+  }
+  /** 应用 Bloom（唯一入口：applyPreset 与内景入境状态变化都走这里）。 */
+  function applyBloom(preset = presetOf(currentPreset), lampScale = preset?.lampIntensityScale ?? 0) {
+    const r = bloomForState(preset, lampScale);
+    rendererAdapter.setBloom?.(r.params, r.enabled);
+    applied.bloom = { preset: preset?.id ?? currentPreset, baseStrength: preset?.bloom?.strength ?? null, effectiveStrength: r.params?.strength ?? null, interiorBlend: r.blend, shrink: r.shrink, scale: r.tier.scale, tier: r.tier.tag, area: interiorState.activeArea };
+    return applied.bloom;
+  }
+
   function applyPreset(id = currentPreset, { source = 'env' } = {}) {
     const p = presetOf(id);
     if (!p) throw new Error(`applyPreset: 未知时辰 "${id}"（合法：${config.LIGHTING.timePresets.join('/')}）`);
@@ -655,7 +726,7 @@ export function createEnvironment({
 
     // 曝光 / 色调映射 / Bloom
     rendererAdapter.setExposure?.(p.exposure);
-    rendererAdapter.setBloom?.(p.bloom, scale > 0 ? true : undefined);
+    applyBloom(p, scale); // t106：内景按 INTERIOR_BLOOM_STRENGTH_SCALE 缩放（外景逐位不变）
     // 内景环境贴图随时辰重建（只影响已绑定的内景材质）
     refreshInteriorEnvMaps();
 
@@ -906,6 +977,19 @@ export function createEnvironment({
           preset: currentPreset,
           textureName: interiorEnvTexture?.name ?? null,
         },
+      },
+      /** t106：Bloom 权威读数（内景按 INTERIOR_BLOOM_STRENGTH_SCALE 缩放，外景逐位等同预设） */
+      bloom: {
+        preset: applied.bloom?.preset ?? currentPreset,
+        baseStrength: applied.bloom?.baseStrength ?? null,
+        effectiveStrength: applied.bloom?.effectiveStrength ?? null,
+        interiorBlend: applied.bloom?.interiorBlend ?? 0,
+        shrink: applied.bloom?.shrink ?? 1,
+        interiorStrengthScale: applied.bloom?.scale ?? INTERIOR_BLOOM_STRENGTH_SCALE,
+        interiorTier: applied.bloom?.tier ?? 'large',
+        interiorArea: applied.bloom?.area ?? null,
+        /** t120：分档表（小房间更紧；大空间 = t106 冻结值） */
+        tiers: INTERIOR_BLOOM_TIERS.map((t) => ({ tag: t.tag, maxArea: t.maxArea, scale: t.scale })),
       },
       atmosphere: {
         smoke: smokeSystems.length,

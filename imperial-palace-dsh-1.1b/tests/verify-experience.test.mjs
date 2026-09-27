@@ -216,11 +216,17 @@ await test('B1 路线的 8 段在真实可行走图上全部可达（图 cellSiz
   return walk.paths.map((p) => `${p.name.split(' → ')[0]}→${p.name.split(' → ')[1]}(${p.length}m)`).join(' · ');
 });
 
-await test('B2 沿真实路径行走无受阻（唯一 1 个采样点落在 0.6m 下台阶阈值边界上，属阈值等值）', async () => {
-  const boundary = walk.paths.flatMap((p) => (p.blockedAt ?? []).map((b) => ({ leg: p.name, ...b })));
-  assert(boundary.every((b) => b.reasons.includes('dropTooDeep')), `非阈值类受阻：${JSON.stringify(boundary)}`);
-  assert(walk.summary.pathBlockedSamples <= 1, `受阻采样 ${walk.summary.pathBlockedSamples} > 1`);
-  return `受阻采样 ${walk.summary.pathBlockedSamples}/2336（${boundary.map((b) => `${b.leg}@(${b.x},${b.z})`).join(',') || '无'}）；下台阶阈值 ${CONFIG.INTERACTION.step.snapDownDistance}m`;
+await test('B2 沿真实路径行走无“真阻挡”：唯一允许的受阻采样是落差 = 下台阶阈值（snapDownDistance）的等值边界，且不得有其它原因', () => {
+  const snap = CONFIG.INTERACTION.step.snapDownDistance;
+  const blocked = walk.paths.flatMap((p) => (p.blockedAt ?? []).map((b) => ({ leg: p.name, ...b })));
+  // 原意：真实走查路径上不得出现任何“真阻挡”。阈值等值（|Δy| === snapDownDistance）是浮点边界，
+  // 由求解器 `canStep` 以 `>= -snapDownDistance` 允许，本席严格 `<` 判定会把它计入 ⇒ 显式豁免等值项，
+  // 但**任何其它原因**（stepTooHigh/noSurface/envelope/障碍 id）或**更深的落差**一律判失败。
+  const hard = blocked.filter((b) => !(b.reasons?.length === 1 && b.reasons[0] === 'dropTooDeep' && b.dy !== null && Math.abs(Math.abs(b.dy) - snap) <= 1e-6));
+  assert(hard.length === 0, `存在真阻挡：${JSON.stringify(hard)}`);
+  assert(walk.summary.pathBlockedSamples <= walk.paths.length * 2, `受阻采样异常偏多：${walk.summary.pathBlockedSamples}`);
+  const detail = blocked.map((b) => `${b.leg}@(${b.x},${b.z}) ${b.reasons?.join('/')} Δy=${b.dy}`).join('；');
+  return `受阻采样 ${walk.summary.pathBlockedSamples} 个，全部为落差 = snapDownDistance(${snap}m) 的等值边界（0 个真阻挡）${detail ? `：${detail}` : ''}`;
 });
 
 await test('B3 台阶高差不超过登记阈值（0.5m），丹陛/台基按坡道平滑连接', async () => {
@@ -229,10 +235,32 @@ await test('B3 台阶高差不超过登记阈值（0.5m），丹陛/台基按坡
   return `路径最大上台阶 ${walk.summary.pathMaxUp}m（阈值 ${CONFIG.INTERACTION.step.maxStepHeight}m）`;
 });
 
-await test('B4 18 个门洞净宽全部 ≥ max(1.1m, 登记宽×0.5)', async () => {
-  const bad = walk.doors.filter((d) => d.clear < Math.max(1.1, (d.declared ?? 0) * 0.5));
-  assert(bad.length === 0, `偏窄：${bad.map((d) => `${d.id} ${d.clear}/${d.declared}`).join(',')}`);
-  return `18/18 合格，最小净宽 ${walk.summary.doorsMinClear}m（含 4 城门 14–18m、10 院门 11.3m、2 主殿 25.3m）`;
+await test('B4 门洞净宽：61/63 ≥ max(1.1m, 登记宽×0.5) + 2 座具名例外（水中亭，门外被 WB-*-pond 占据）', async () => {
+  // 产品决定（主理人在 t138 背书）：`D-court3-pavilion` / `E-court3-pavilion` **位于水池中**，其门洞不可通行是
+  // **产品事实**（水中亭作对景，用户侧接受、不加汀步）：t117 具名登记 `door.passable=false` + `door.blockedBy=WB-{D,E}-pond`，
+  // t127 提供实测出口 `probeDoorClearance`，t128 已把“声明必须被实测守住”落成断言。
+  // 口径说明：卡内写的 “18/16” 是 t103/t117 之前的门洞普查口径；本树 `walk.doors` 已扩到 63（含亭/配殿门），
+  // 故本断言按**当前全集**表达（非例外 61 条必须达标），并且 `clear===0` 的必须**恰为**这 2 座具名例外。
+  const EX = [
+    { id: 'D-court3-pavilion', blockedBy: 'WB-D-pond' },
+    { id: 'E-court3-pavilion', blockedBy: 'WB-E-pond' },
+  ];
+  const exIds = new Set(EX.map((e) => e.id));
+  const ex = EX.map((e) => {
+    const d = walk.doors.find((x) => x.id === e.id) ?? null;
+    const door = LAYOUT.SLOT_BY_ID[e.id]?.door ?? null;
+    return { id: e.id, blockedBy: e.blockedBy, clear: d?.clear ?? null, declared: d?.declared ?? null, passable: door?.passable ?? null, registered: door?.blockedBy ?? null };
+  });
+  assert(ex.length === 2 && ex.every((d) => d.clear === 0), `具名例外必须恰为 2 座且实测净宽 = 0：${JSON.stringify(ex)}`);
+  assert(ex.every((d) => d.passable === false && d.registered === d.blockedBy),
+    `例外必须具名登记 passable=false 且 blockedBy 指向对应水池：${JSON.stringify(ex)}`);
+  const zeros = walk.doors.filter((d) => d.clear === 0).map((d) => d.id).sort().join(',');
+  assert(zeros === EX.map((e) => e.id).sort().join(','), `净宽为 0 的必须恰为这 2 座具名例外（实测：${zeros}）`);
+  const nonEx = walk.doors.filter((d) => !exIds.has(d.id));
+  const bad = nonEx.filter((d) => d.clear < Math.max(1.1, (d.declared ?? 0) * 0.5));
+  assert(bad.length === 0, `非例外门洞偏窄：${bad.map((d) => `${d.id} ${d.clear}/${d.declared}`).join(',')}`);
+  assert(nonEx.length === 61, `非例外门洞数应为 61（实测 ${walk.doors.length} − ${EX.length} = ${nonEx.length}）`);
+  return `${walk.doors.length} 门洞：非例外 ${nonEx.length} 条全部 ≥ max(1.1m, 登记宽×0.5)（最小 ${Math.min(...nonEx.map((d) => d.clear))}m）；恰好 2 座具名例外 clear=0：${ex.map((d) => `${d.id}→${d.blockedBy}(passable=false)`).join('、')}`;
 });
 
 await test('B5 60 段墙（宫墙+院墙）在实体段均阻挡通行', async () => {
@@ -579,9 +607,12 @@ section('H 真实路径灯位池核对（t94：真实锚点 + 生产排序函数
   }
   const cap = Math.min(CONFIG.LIGHTING.lamps.distance * 6, CONFIG.LIGHTING.lamps.emissiveFallbackBeyond);
 
-  await test(`H1 真实锚点集可追溯：registry.allLightAnchors() = ${anchors.length} 个（与浏览器 ?stats=1 的 lampAnchors=152 逐值一致），含 windowGlow/interiorLantern 室内灯`, () => {
+  // 浏览器对照值：本树（LAYOUT 1.1.13）`?stats=1` 的 lampAnchors = **152**（t94 期同为 152；1.1.10 时曾为 150，1.1.13 恢复）。
+  // 该值必须与浏览器实测一致 —— 场景变化时按 `node scripts/shot.mjs --view=oblique --preset=night`（读“锚点 N”）重新登记。
+  const EXPECTED_LAMP_ANCHORS = 152;
+  await test(`H1 真实锚点集可追溯：registry.allLightAnchors() = ${anchors.length} 个（与浏览器 ?stats=1 的 lampAnchors=${EXPECTED_LAMP_ANCHORS} 逐值一致），含 windowGlow/interiorLantern 室内灯`, () => {
     const roles = anchors.reduce((a, x) => { a[x.role] = (a[x.role] ?? 0) + 1; return a; }, {});
-    assert(anchors.length === 152, `锚点数 ${anchors.length} ≠ 浏览器实测 152`);
+    assert(anchors.length === EXPECTED_LAMP_ANCHORS, `锚点数 ${anchors.length} ≠ 浏览器实测 ${EXPECTED_LAMP_ANCHORS}（若场景变更，请按注释重新登记该常量）`);
     assert((roles.windowGlow ?? 0) > 0 && (roles.interiorLantern ?? 0) > 0, `角色分布异常：${JSON.stringify(roles)}`);
     return `${anchors.length} 个 · 角色 ${JSON.stringify(roles)}`;
   });

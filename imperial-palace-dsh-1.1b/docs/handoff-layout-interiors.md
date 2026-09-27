@@ -304,3 +304,139 @@ $ grep -n "surfaces-only\|不构成可达性\|生产口径" tests/layout.test.mj
 
 ### 9.6 契约
 `CONTRACTS v1.0.14 → **v1.0.15**`（历史只追加）：新增 **§4.1.1**（`door.center` = 建筑中心 / **`door.facade`** = 门外锚点，`y` 与 `sillY` 同源；贴门取地面一律用 `facade`——并入 t102 交付的 t100-F3 文案）；§5.2.1 与 §6.4 的 `WALKABLE` 112 → 157；登记“10 座开敞亭可通行化（`hasDoor:true` ⇒ `exceptDoor`，与院门同类）”。
+
+## 10. t117（LAYOUT 1.1.11）：两座水中亭门洞“声明 vs 实际”一致性修复（t77-F5）
+
+### 10.1 量化偏差（逐座，实测）
+| 亭 | 亭 bounds | 登记门宽 | **实际净宽** | 门洞带内的阻挡者 | 水体（具名障碍）bounds |
+| --- | --- | --- | --- | --- | --- |
+| `D-court3-pavilion` | （见下表实测输出） | **8m** | **0.0m** | `WB-D-pond:all` | `x[-188,-124] z[16,68]` |
+| `E-court3-pavilion` | 同上 | **8m** | **0.0m** | `WB-E-pond:all` | `x[124,188] z[16,68]` |
+| `D-court4-pavilion` / `E-court4-pavilion`（对照） | — | 8m | ✓ 可通行 | 仅自身 `exceptDoor` | 门洞带内**无**水体 |
+
+**几何依据**：两座亭位于**水池足迹内部**，`WB-*-pond`（`blocks:'all'`、整足迹阻挡）**占据门洞带**；门外 0.5–8m 的候选点全部落在那片水体里 ⇒ 净宽 0（t77 attempt 2 的 blocker `t77-F5`、t112 的具名判定一致）。
+
+### 10.2 处置：选 **(a) 保留几何门洞 + 显式具名登记阻挡来源**（未放宽任何断言）
+- `S()` 的门规范新增两个字段（**声明与实际对齐**）：
+  `door.passable`（布尔）· `door.blockedBy`（具名障碍 id，默认 `null`）；
+- 两座水中亭登记 `doorBlockedBy: 'WB-{D,E}-pond'` ⇒ `passable:false` + `blockedBy:'WB-D-pond'`/`'WB-E-pond'`；
+- **几何门洞未删**（`door.width` 仍 8m，供取景/贴门工具使用）；**未回退 t103**：两座仍 `hasDoor:true` ⇒ `OBSTACLES.blocks='exceptDoor'`（**不是**静默 `blocks:'all'` 空气墙），且**具名原因仍可见**（水体 id）——满足 t112 的“未走进必须有具名原因”原则。
+- **理由（为何不选 (b) 只改声明而不登记来源）**：只改声明会丢掉“**被什么挡住**”这一信息，下游/提示只能再猜一次；(a) 让“不可通行”与“因何不可通行”同时进入数据。
+
+### 10.3 断言（`tests/layout.test.mjs`，只增不减）
+`10 座亭恰 2 座声明不可通行` · `具名例外 id = D-court3-pavilion,E-court3-pavilion` · `blockedBy 指向真实存在的整足迹障碍（水体）` · `具名例外仍 hasDoor + exceptDoor（非空气墙）` · `其余 8 座 passable 且 blockedBy 为空` · `10 座 door.width 均 >0（几何门洞未删）`。
+实测输出：`t117 门洞一致性：10 座亭 = 8 可通行 + 2 具名例外（WB-D-pond / WB-E-pond）`。
+
+### 10.4 交回：`verify-experience` B4 的**精确期望改法**（归 verifier，本卡不改）
+**file:line = `tests/verify-experience.test.mjs:232-236`**（现文）：
+```
+232  await test('B4 18 个门洞净宽全部 ≥ max(1.1m, 登记宽×0.5)', async () => {
+233    const bad = walk.doors.filter((d) => d.clear < Math.max(1.1, (d.declared ?? 0) * 0.5));
+234    assert(bad.length === 0, `偏窄：${bad.map((d) => `${d.id} ${d.clear}/${d.declared}`).join(',')}`);
+235    return `18/18 合格，最小净宽 ${walk.summary.doorsMinClear}m（含 4 城门 14–18m、10 院门 11.3m、2 主殿 25.3m）`;
+```
+**旧期望 = “18/18 全部合格”**（隐含 10 座亭全部可通行）⇒ **新期望 = “16/18 合格 + 2 座具名例外（水中亭）”**，精确改法：
+```
+232  await test('B4 门洞净宽：16/18 ≥ max(1.1m, 登记宽×0.5) + 2 座具名例外（水中亭，门外被 WB-*-pond 占据）', async () => {
+233    const EX = { 'D-court3-pavilion': 'WB-D-pond', 'E-court3-pavilion': 'WB-E-pond' };
+233b    const ex = walk.doors.filter((d) => d.id in EX);
+233c    const bad = walk.doors.filter((d) => !(d.id in EX) && d.clear < Math.max(1.1, (d.declared ?? 0) * 0.5));
+234    assert(ex.length === 2 && ex.every((d) => d.clear === 0), `具名例外应恰 2 座且净宽 0：${ex.map((d) => `${d.id} ${d.clear}`).join(',')}`);
+234b    assert(walk.doors.length - ex.length === 16, `可通行门洞应为 16：${walk.doors.length - ex.length}`);
+234c    assert(bad.length === 0, `偏窄：${bad.map((d) => `${d.id} ${d.clear}/${d.declared}`).join(',')}`);
+235    return `16/18 合格 + 2 座具名例外（WB-D-pond / WB-E-pond）；最小净宽 ${walk.summary.doorsMinClear}m`;
+```
+**约束**：**不得**保留“18/18”或“10/10 可通行”，**不得**改成 `includes`/`some` 之类的“包含式”弱断言（必须**恰好 2 座例外 + 恰好 16 座合格**）。
+
+### 10.5 冻结 / 预算 / 跨 owner pin
+- `WALKABLE = 157`（**未变**）；`OBSTACLES` 语义**未变**（两座仍 `exceptDoor`）；`SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10 / CONNECTORS 32 / WALLS 60` **未变**；`LAYOUT_VERSION 1.1.10 → **1.1.11**`。
+- **跨 owner pin（本卡不代改，交回派单）**：
+  1. `tests/verify-experience.test.mjs:232-236` **B4**（见 §10.4，归 verifier）；
+  2. `docs/CONTRACTS.md`（归 t103 持有者）：建议在 §4 或 §6.1 登记新字段 **`door.passable` / `door.blockedBy`** 的语义（“门洞可通行性声明必须与实际一致；被具名障碍阻断时记 `blockedBy`”），**历史只追加**；
+  3. 若下游（`src/interaction`/`src/ui`）需要消费 `blockedBy` 生成提示，属其 owner 的后续卡（本卡已在数据侧就位，未改其代码）。
+- `node scripts/audit.mjs --enforce` → **exit 0**（§10.6）。
+
+### 10.6 verify（原样，两条）
+```
+$ node tests/layout.test.mjs
+全部通过 ✓（0 失败）
+ - t117 门洞一致性：10 座亭 = 8 可通行 + 2 具名例外（WB-D-pond / WB-E-pond）
+ - 连接 32，道路 95 段，墙 60 段，可行走面 157，障碍 81 · 视角 61，导览点 10，走查点 50
+$ node scripts/audit.mjs --enforce
+exit 0 · 结论：预算与契约检查全部通过（信息性提示 0 项，不计失败）
+```
+
+## 11. t121（LAYOUT 1.1.13）：门外分级过渡的**真根因**与修复（cellSize:1 网格可见性）
+
+### 11.1 结论性归因（实测证伪了"datum 错"的假设，指向**第三层**）
+逐栋探针（`B-hall-mid` / `B-hall-rear` / `C-hall-bed-rear` / `D-court1-hall` / `B-side-west-main`）：
+- **t102 的台阶位置正确**：自**通道面外端**起（`B-hall-mid` 通道面 `z[-40,-33.4]` → 台阶 `z[-40.8,-40]` 起）；**y 序列正确**（`1.5→1→0.5→0`，逐级 0.5；负 Δ 栋 `2→2.5→3`）；
+- **"门外 1.5m 处"确实被覆盖**：外 0.5m→`transition-1@1.5`、1.5m→`transition-2@1`、2.5m→`transition-4@0`（其余栋同型）；
+- ⇒ **既不是位置错、也不是 y 序列错、更不是未覆盖**。
+- **真因（实测坐实）**：每级台阶足印**进深仅 0.8–1.6m**，而 `cellSize:1` 的走查网格**只认格心** ⇒ **43 条里有 31 条不含任何格心**（例 `WK-B-hall-mid-transition-1` `z[-40.81,-40.00]` ⇒ **0 格心**）。**坡道"存在但对图不可见"**，所以 t116 仍量到"通道面相对门外 1.5m 处 = +0.6~+1.35"（图上从通道面直接跳到室外地面）。
+
+### 11.2 修复（**加法**，未撤改任何既有几何、未动判据/格距）
+`src/shared/layout.js` 过渡构建器两处：
+1. **每级足印进深 ≥ `CELL_FLOOR_DEPTH = 1.05m`**：`stepLen = Math.max(run / n, 1.05)`（总跑长只会更长 ⇒ 坡更缓，不改变"逐级 ≤0.5"语义）；
+2. **外沿吸附到整数格界**（向外 `ceil/floor`）⇒ 每条台阶带**必含 ≥1 个格心**；内沿仍贴通道面外端（保持接续）。
+- `LAYOUT_VERSION 1.1.12 → **1.1.13**`；`WALKABLE` 仍 **157**（**面数不变**，只是既有台阶带变宽）；**未新增 connector/面** ⇒ 冻结计数 `CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` 全部不变。
+
+### 11.3 修复前后（我自己的引擎，口径固定）
+| 指标（`cellSize:1`，`up ≤0.5 / down ≤0.6`） | 修前 | **修后** |
+| --- | --- | --- |
+| 过渡台阶中含 **0 格心**的条数 | **31 / 43** | **0 / 43** |
+| 样例 `WK-B-hall-mid-transition-1` 格心数 | 0（`z[-40.81,-40.00]`） | **52**（`z[-42,-40]`） |
+| 最小台阶进深 | 0.81m | **≥1.05m** |
+| 内景可达（本引擎，室外地面起步 BFS） | 41 / 43 | **41 / 43**（**未变**） |
+
+**如实说明**：本引擎的"可达数"未变 —— 因为它**只做 xz 相邻 + 阈值跨面**，不建模生产求解器的其它规则；本次修复消除的是**"坡道对网格不可见"这一前置阻塞**。**最终可达性判定归 t77 用生产引擎复跑**（本卡**不宣称"43 栋均可进入"**）。本引擎下仍不可达的 2 栋为 `C-side-west-main-interior` / `C-side-east-main-interior`（**不在 §11.2 的 18 栋内**；t100 曾记其"Δ 超阈但经其它路线可达"）⇒ 作为**残余**登记，交 t77 复跑判定。
+
+### 11.4 逐栋断言（18 栋 / 43 级，不抽样）
+`过渡台阶恰 43 级` · `每条台阶带 ≥1 个格心`（**这条就是本次修复的守卫**）· `每级进深 ≥1.0m` · `覆盖恰 18 栋`（§11.2 全表）。
+
+### 11.5 联动与边界
+- `tests/zone-forecourt.test.mjs:687`（从地坪可走入门内 ≥4，实测 3）：**本卡未改该断言**；其回绿取决于**生产引擎**（生产求解器）；若仍红，量化交回（见 §11.3 的 41/43 与本引擎口径说明）。
+- **未放宽任何判据**：`maxStepHeight 0.5` / `snapDownDistance 0.6` / 玩家体积 / 包络 / **`cellSize`** 逐值未动。
+- `node tests/layout.test.mjs` → **全部通过 ✓**；`node scripts/audit.mjs --enforce` → **exit 0**。
+
+## 12. t126 + t128：遮蔽普查结论与两次**有界开槽**（授权的减法例外）
+
+### 12.1 普查（只读、封闭）
+全城“可行走面被更高可行走面**完全内含**（平面投影）”**共 6 条**，**全部影响可达性**：
+| 类别 | 条数 | 明细 | 处理 |
+| --- | --- | --- | --- |
+| 过渡台阶（B 两栋） | 4 | `WK-B-side-{west,east}-main-transition-1@2.0 / -2@2.5` ⊂ `WK-B-terrace-tier2@3.0` | **t126 开槽** ⇒ 4 → 0 |
+| 门洞通道面（C 两栋） | 2 | `WK-C-side-{west,east}-main-door-passage@1.7` ⊂ `WK-C-bed-terrace@2.4` | **t128 开槽 + 加法台阶** ⇒ 2 → 0 |
+| 其它 | 0 | — | — |
+
+⇒ **影响栋数 = 4**（B 2 + C 2），**该类别封闭**（不再有未知条目）；修完 6 条即完整解 ⇒ **t128 后全城遮蔽 = 0**（已升为常驻守卫）。
+
+### 12.2 两次开槽（**主理人明确授权的减法例外**）
+- `WK-B-terrace-tier2`（x[-72,72] z[-158,-74]）→ **5 段**（南/北/西/中/东），开出西 `x[-66,-62]`、东 `x[62,66]` × `z[-129,-103]` 两条走廊；
+- `WK-C-bed-terrace`（x[-72,72] z[137,199]）→ **5 段**，开出西 `x[-61.5,-47.9]`、东 `x[47.9,61.5]` × `z[155,181]`；
+- **授权理由（写入代码注释 + 本节）**：“**加法在此已被证明必然无效**（新增台阶会被更高面同样内含）” ⇒ 仅为**这两处走廊**的有据例外，**不得扩大为通用做法**；
+- **有界性**：面积守恒断言（分段面积 + 移除带 = 原始矩形面积）、移除带 ≤ 总宽 20%、其余区域**未降低/未拆除**。
+
+### 12.3 C 两栋的链（t128，逐栋断言）
+`通道面 1.7 → 台阶 1.3 → 台阶 0.9`（每级 0.4 ≤ 0.5，xz 相接）；台阶自**门面**（west x=−50 朝东 / east x=+50 朝西）向外，进深 ≥1.05m 且外沿吸附整数格界（t121 口径：`cellSize:1` 必含格心）。
+
+### 12.4 遮蔽常驻守卫（t128 采纳）
+`tests/layout.test.mjs` 新增：任何可行走面被更高面完全内含 ⇒ **红并打印全部命中**（id@y ⊂ id@y）；**期望全城 0 条**（当前实测 **0**）。
+
+### 12.5 F5 实测化（t128 落地，t127 提供出口）
+`probeDoorClearance(slotId)` 逐座核对 10 亭：`passable:false ⇒ 净宽 === 0`；`passable:true ⇒ 净宽 ≥ max(1.1, door.width×0.5)`；**声明与实测不一致即红**。
+
+### 12.6 F7 口径（供 t77 同步其 5.4b，逐字）
+**非例外一致 37/43**；**真实偏离 5**（`F-gate-{south,north,west,east}` 四城门双标高 + `C-gate-inner`）；**已归位例外 1**（`C-hall-bed-main`，`sillY==wkY`，仅留档）；**`DOOR_SILL_EXCEPTIONS` 表内 6 条**；合计 **43**。（t125 曾写 38，**已更正**。）
+
+### 12.7 自有引擎 43 行对照（`cellSize:1`，up≤0.5/down≤0.6）
+| 时点 | 可达 |
+| --- | --- |
+| t121 后 | 41/43（剩 `C-side-{west,east}-main`） |
+| **t128 后** | **43/43** ✓ |
+
+**如实说明**：这是**我方引擎**口径；**最终判定归 t77 生产引擎复跑**（本卡**不宣称“43 栋均可进入”**）。
+
+### 12.8 冻结计数与跨 owner pin
+`WALKABLE 157 → 161（t126）→ **169**（t128）`；`LAYOUT 1.1.13 → 1.1.14 → **1.1.15**`；`CONNECTORS 32 / WALLS 60 / SLOTS 67 / COURTYARDS 14 / TOUR_POINTS 10` **未变**、**未新增 connector**。
+**跨 owner 待派单**：`tests/core.test.mjs`（t127 已同步到 161 ⇒ 现需 **169**）；`docs/CONTRACTS.md` 由本卡同步（✓）。

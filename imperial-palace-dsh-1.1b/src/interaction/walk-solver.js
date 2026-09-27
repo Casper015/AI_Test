@@ -22,6 +22,8 @@ import * as LAYOUT from '../shared/layout.js';
 import { obstacleBlocksPoint } from '../core/layout-slice.js';
 
 const EPS = 1e-6;
+/** t142：台阶阈值含等号（契约）——仅吸收浮点噪声（例：1.6-1 = 0.6000000000000001）。 */
+const BOUNDARY_EPS = 1e-9;
 const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
 
 /** 阻挡原因中属于"世界约束"而非具体构件的词（core 不把它们当作建筑 id 上报）。 */
@@ -375,8 +377,8 @@ export function createWalkSolver({
     }
     if (surfaceY === null) return { ok: false, x, z, surfaceY, reasons: ['noSurface'], obstacles: hits };
     if (feetY !== null) {
-      if (surfaceY - feet > step.maxStepHeight + EPS) return { ok: false, x, z, surfaceY, reasons: ['stepTooHigh'], obstacles: hits };
-      if (surfaceY - feet < -step.snapDownDistance) return { ok: false, x, z, surfaceY, reasons: ['dropTooDeep'], obstacles: hits };
+      if (surfaceY - feet > step.maxStepHeight + BOUNDARY_EPS) return { ok: false, x, z, surfaceY, reasons: ['stepTooHigh'], obstacles: hits };  // t142：含界
+      if (feet - surfaceY > step.snapDownDistance + BOUNDARY_EPS) return { ok: false, x, z, surfaceY, reasons: ['dropTooDeep'], obstacles: hits };  // t142：含界
     }
     const list = currentObstacles();
     const g = gridFor(list);
@@ -422,11 +424,11 @@ export function createWalkSolver({
         pushReason('noSurface');
         return false;
       }
-      if (surfaceY - feetY > step.maxStepHeight + EPS) {
+      if (surfaceY - feetY > step.maxStepHeight + BOUNDARY_EPS) {  // t142：含界
         pushReason('stepTooHigh');
         return false;
       }
-      if (surfaceY - feetY < -step.snapDownDistance) {
+      if (feetY - surfaceY > step.snapDownDistance + BOUNDARY_EPS) {  // t142：含界
         pushReason('dropTooDeep');
         return false;
       }

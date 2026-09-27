@@ -693,3 +693,309 @@ $ node tests/core-collision.test.mjs
 | ③ 依赖未落地如实登记 | 当前 **`airWalls = 10`**（t103 未落地）⇒ ⓑ 不触发、ⓒ 用合成世界证明目标状态可达；E13 报告行打印「t103 依赖：10 座亭改 exceptDoor 后应自动清零」 | 未放宽任何判据、未排除任何槽位 |
 
 本卡这三条只改测试与报告（`tests/interaction.test.mjs`、`docs/report-airwall.md`），未触碰 `src/ui/**`；若主理人希望**在 UI 文案层**也加"亭已可通行"的联动（例如提示里出现"亭内可通行"），需另派含 `src/ui/**` 的小卡。
+
+---
+
+## 13. t104 交付回执：t99-F1（卡死 HUD 不可达）+ 孤儿 API 守卫
+
+> 任务：t104（T7.7，来源 t99 真实浏览器验收 `t99-F1`，blocker） · 执行者：`ui-engineer` · attempt 2 `c8dc1ef4-b228-4d60-a19a-bf4b8903cba9`
+> inScope：`src/interaction/**`、`src/ui/**`、`tests/interaction.test.mjs`、本回执 · 三条 verify 全绿
+
+### 13.1 根因（复现 t99 的静态证据）
+
+| 证据 | 结果 |
+| --- | --- |
+| `grep -rn "\.move(" src/interaction/*.js src/core/camera.js` | **0**（无任何调用点） |
+| `noteStuckTick` 生产调用点 | 只有 `index.js` 的 `tick()`，且当时**只传 dt**（意图/位移读的是 `step1()` 写入的内部记录） |
+| 后果 | **意图恒 false、计时恒 0 ⇒ HUD 分支在生产上不可达**；t87 的 Node 用例之所以绿，是因为它自己显式驱动了 `solver.step`（**孤儿 API**：只被测试驱动） |
+
+### 13.2 修复（全部在 inScope）
+
+| 改动 | 内容 |
+| --- | --- |
+| `src/interaction/index.js` | ① **意图**：`passive` 观察 `MOVEMENT_CODES` 的 keydown/keyup（**不加 capture、不 stopPropagation、不 preventDefault** ⇒ core 仍是唯一移动处理者）+ `blur` 清空；② **位移**：每帧 `rig.position` 增量；③ `tick()` 用 `noteStuckTick(dt, { intent, moved, threshold: STUCK_SECONDS, minSpeed: STUCK_MIN_SPEED })`；④ 非 FP 时清空位置基准与计时；⑤ `stats`/`traversalState()` 暴露 `stuckIntent/stuckMoved/stuckSpeed/stuckIntentSource/movementKeysDown/solverStepAttempts/guarded/ready/sampledRows…`，UI 句柄 `stats().traversal` 一并暴露（浏览器可核对） |
+| `src/interaction/walk-solver.js` | `noteStuckTick(dt, { intent, moved, minSpeed, … })` 接受**显式真实输入**；判定用**速度** `moved/dt`（帧率无关）而非逐帧位移；返回并记录 `intent/moved/speed/source`；原内部记录仅作兼容（源码显式标注"仅供旧测试"） |
+| `src/ui/index.js` | `stats().traversal` 暴露通行性/卡死链路状态（含 `guarded`） |
+| `tests/interaction.test.mjs` | E15 **重写为驱动真实路径**（真实按键 + 位置不变 ⇒ 生产输入），并加两个对照（松开键 / 无输入）；新增 **F22 孤儿 API 守卫**；E13/F21 适配 t103 落地后的新状态（见 §13.5） |
+
+**阈值纪律**：`STUCK_SECONDS`（1.5s）**未动**；新增的只是**检测灵敏度** `STUCK_MIN_SPEED = 0.6 m/s`
+（依据：步行 3–6 m/s；被墙顶住时求解器滑动残差实测 <0.1 m/s ⇒ 两侧余量各 5–10 倍）。
+`MIN_MOVED`（逐帧位移）保留给兼容路径。所有碰撞判据（0.5/0.6/门洞/包络）一字未改。
+
+### 13.3 真实浏览器证据（CDP，`chrome-headless-shell`；脚本为 t99 驱动器的 /tmp 只读复用 + 自建同构复核）
+
+| 项 | 实测 |
+| --- | --- |
+| 目标 | 正面顶住 `OB-F-tower-corner-nw` 西面（站 (−317.6, 454)、视线 +x，**正面无侧滑**） |
+| **对照：未按键** | `display:none`、rect 0×0、`stuck=false`、`intent=false`（截图 `t104-01-stand-not-stuck.png`） |
+| **真实按键顶墙** | 第 11/12/13 轮模拟时间 1.267s → 1.400s → **`visible:true`、rect `{x:442,y:745,w:556,h:53}`**、`stuckSecondsMax=1.533`（跨过 1.5s 阈值）、`intentSource=explicit`、`keys=["KeyW"]`（截图 `t104-02-stuck-hud.png`，341,640B，sha256 `2ca825dd68b586c0`） |
+| **像素证据**（条带区域解码统计） | 卡死时：1621 个"危险色"像素、185 种颜色、std 55.0；同区域站立时：332 个、88 种、std 51.9 ⇒ 条带确实渲染出危险色 UI |
+| 对照：松开键 | `display:none`、rect 0×0（3 帧内消失） |
+| **守卫装载（验收 #4）** | 经**生产循环入口** `renderSystem.recordFrame(16)` 驱动到 `ready:true`、**`guarded:true`**、warmup `375/375`、`trap=0`、`stepAttempts=29` |
+| 披露 | headless 的 rAF 被节流（实测 **~0.095s 模拟时间/墙钟秒**）：按住 W 的同时额外驱动**生产循环入口** `recordFrame(16)` 以在有限墙钟内累计 ≥1.5s **模拟时间**——不绕过任何逻辑（按键、意图、位移、判定全走真实路径）；产物写 `/tmp/t104-shots/`（本卡 inScope 不含 `docs/shots-airwall/`） |
+
+### 13.4 孤儿 API 守卫（本卡最重要的防复发项）
+
+**做法（两层）**：
+1. **静态调用点检查**：对生产关键 API（`noteStuckTick` / `setTraversalGuard` / `warmupStep`）断言其在**生产入口文件**（`src/interaction/index.js` 或 `src/ui/index.js`）里存在调用点；
+   并断言卡死检测的输入是**显式** `{intent, moved}`、意图来自 `MOVEMENT_CODES` 事件、位移来自 `rig.position`；
+   同时断言 `src/interaction/**` 里**不存在** `.move(` 依赖、`index.js` 不把 `solver.step(` 当输入。
+2. **行为（同一实现）检查**：用 `mountInterface` + **`attachRenderLoop` 包装的唯一循环**（`recordFrame`）驱动，配**真实 KeyW**，断言卡死条出现且 `stuckIntentSource === 'explicit'`、`solverStepAttempts === 0`（**证明不需要孤儿写入者**）。
+**为什么能防住同类问题**：它把"这条分支在生产入口上真的会被走到"变成机器可检的条件——
+① 若函数只在测试里被调用，静态检查红；② 若检测偷偷依赖某个孤儿写入者，则"真实循环 + 真实按键"下不会出现卡死条（行为检查红），且 `solverStepAttempts === 0` 的反证会失败。
+
+### 13.5 顺带：t103 落地的语义切换（E13/F21 适配，未放宽）
+
+本轮期间 **t103 已落地**（10 座亭 `hasDoor:true ⇒ blocks:'exceptDoor'`），实测 `airWalls = 0`、亭提示变为「门殿西翼亭 · 墙体阻挡」（不再是「开敞构筑物」）——
+这正是 t88 验收项 #2 ② 要求"已可通行者不得再弹该提示"的收窄。据此**按数据状态分派**更新两处断言（不删、不弱化）：
+- E13：断言"亭的通行语义必须**整体一致**"（要么全部整足迹阻挡、要么全部门洞可通行），t103 后 ⇒ `airWalls === 0`；并对 10 座亭**逐座**断言提示语义与状态匹配（阻挡⇒必须给「开敞构筑物」；可通行⇒不得给且须给"仅门洞可通行"）。
+- F21：亭提示断言改为随 `obstacle.blocks` 分派（当前分支 = 可通行 ⇒ 断言**不含**「开敞构筑物」且含「墙体阻挡」）。
+
+### 13.6 实测（三条 verify 全绿）
+
+```text
+$ node tests/interaction.test.mjs
+  ✓ E15 防卡死兜底（t104：走真实移动路径）…  ✓ F22 孤儿 API 守卫 …
+  · 防卡死（真实路径）：按 W 顶墙 90 帧（1.5s）→ 卡死条出现；意图来源 explicit、solver.step 调用 0 次（孤儿 API 反证）；
+    脱困位移 236.5m、落点可站立 ✓、包络内 ✓、眼高 ✓、按钮/G/API 三次落点一致 ✓、守卫已装 ✓；松开键/无输入两种对照均不显示 ✓
+  · 孤儿 API 守卫：生产关键 API 调用点 ✓（noteStuckTick/setTraversalGuard/warmupStep）｜唯一循环 + 真实 KeyW 顶墙 1520ms → 卡死条出现
+    （intent 来源 explicit、solver.step 调用 0）｜未按键 3s 对照不出现 ✓
+ 通过 64 / 64（exit=0；用例 63→64、断言 592→618、skip 0）
+$ node tests/core-collision.test.mjs   → 通过 24 / 24（exit=0）
+$ node scripts/audit.mjs               → exit=0（"预算与契约检查全部通过（信息性提示 0 项，不计失败）"）
+```
+
+### 13.7 交回主理人的量化项
+
+**`src/core/camera.js` 的 `describe()` 未暴露"是否在移动"（`moving`）或按键集合**（`describe()` 返回 mode/position/lookAt/fov/… 但无 `moving`）。
+本卡因此改用**被动观察同一 keydown/keyup 事件流**（不拦不吞）作为意图来源，行为等价且零侵入；
+**最小改法（若主理人希望更"正统"）**：`describe()` 增加 `moving`（core 内已有 `let moving = false`）——
+属 `src/core/**`，本卡按纪律未改。二者可并存（我会优先用 `describe().moving`，`movementKeys` 作为回退）。
+
+### 13.8 未验证 / 边界
+
+- **模拟时间 vs 墙钟**：headless rAF 被节流（~0.095s 模拟/墙钟秒）⇒ 浏览器证据里"顶墙 ≥1.5s"是**模拟时间**（判定语义本就以循环 dt 计）；真机 60fps 下等价于约 1.5s 墙钟（未在真机验证）。
+- 触屏/移动端无"按键"，卡死检测在该场景不适用（未验证，也未做触屏替代输入）。
+- 我的复核脚本（`/tmp/t104-proof.mjs`）为临时产物，未纳入仓库；t99 的驱动器本体未改动（仅 /tmp 副本改了输出目录）。
+
+---
+
+## 14. t105 交付回执：t99-F2（脱困改确定性放置）
+
+> 任务：t105（T7.8，来源 t99 真实浏览器验收 `t99-F2`，blocker） · 执行者：`ui-engineer` · attempt 1 `caed4a18-4364-490f-8519-1f738c371b53`
+> inScope：`src/interaction/**`、`src/ui/**`、`tests/interaction.test.mjs`、本回执 · 三条 verify 全绿
+
+### 14.1 根因与修法
+
+**根因（复现 t99）**：旧 `escapeToSafePoint` 在**同一 tick 连发两次** `requestViewMode{fp}`：第一次让 core `exitFp`（恢复 oblique），第二次未生效 ⇒ 读到的 `after` 是 oblique 全城机位（(0,520,−1180)）⇒ 包络校验必然失败 ⇒ **玩家被抛到全城环绕相机**（比不脱困更糟）。
+
+**修法（确定性放置，无随机数）**：
+| 步 | 动作 |
+| --- | --- |
+| 0 | 取快照（`position` / `viewMode` / `isFp`）；**先确定目标再动手** |
+| 1 | 目标 = `registry.nearestFpSpawn(当前位置)`（**不改其语义**，只消费）；**预校验**：`solver.probe().ok` + 包络内 + 眼高 = `floorYAt + fpEyeHeight` ⇒ 不合格**什么都不做**（不改视图/位置）+ 明确失败提示 |
+| 2 | 若在 FP：用**同一入口**的切换请求退出 FP（state 与相机同步离开 fp） |
+| 3 | `rig.enterFp({ spawnId, position, instant: true })` —— 直接、精确放到出生点（core 已支持强制落点；`instant` 无过渡，落点即最终值） |
+| 4 | 再请求 `{mode:'fp'}` 把 **state 同步回 fp**（相机已在 fp ⇒ core 内部 `enterFp` no-op，不会二次放置） |
+| 5 | **事后复核实际落点**（与出生点逐值相等 + probe + 包络 + 眼高）；不通过 ⇒ **回滚到快照**（精确恢复原视图/位置）+ 失败提示；**只有通过才给「已脱离」提示** |
+
+### 14.2 真实浏览器四项断言（CDP，t99 驱动器只读复用 + 同构自建复核；截图/读数写 `/tmp/t105-shots/`）
+
+原始读数（`t105-readings.json`）：
+- **before**：`fp(−58, 1.65, −377.647)`；`nearestFpSpawn = VP-B-fp-spawn (−30, 1.65, −360)`，**距离 33.10m**
+- **after（真实按键 `G`）**：`position = (−30, 1.65, −360)`、`mode='fp'`、`isFp=true`、`viewMode='fp'`
+  - `probe {ok:true, surfaceY:0, reasons:[]}`；`TERRAIN_EXTENT = {minX:−420, maxX:420, minZ:−560, maxZ:560}` ⇒ **z=−360 在包络内**（t99-F2 失败点 z=−1180 已不复存在）
+  - `lastEscape {ok:true, safe:true, changed:true, spawnId:'VP-B-fp-spawn', moved:33.1, inBounds:true, eyeOk:true, matchesSpawn:true}`
+  - 提示：「已脱离 · 回到最近出生点 落点 (-30, -360) = VP-B-fp-spawn（距卡死点 33.1m）｜可站立 ✓｜包络内 ✓｜眼高 ✓」
+
+| 断言 | 结果 |
+| --- | --- |
+| ① 位置 == `nearestFpSpawn` | **✓**（x/y/z 逐值相等，1e-9） |
+| ② `probe().ok === true` | **✓** |
+| ③ 在包络内 | **✓**（z=−360 ∈ [−560, 560]） |
+| ④ 眼高逐值相等 | **✓**（1.65 == 出生点 y == 面高 0 + 1.65） |
+| （附加）仍在第一人称且 `state.viewMode==='fp'` | **✓**（t99-F2 症状是掉进 oblique） |
+| （附加）提示为成功提示 | **✓** |
+
+截图：`t105-01-after-escape.png`（脱困后落点第一人称）、`t105-02-failure-path.png`（失败路径）。
+
+### 14.3 提示与失败路径
+
+- **成功才提示**：「已脱离…」只在第 5 步通过后弹出（源码顺序可查，且 F23 断言成功路径不得出现「失败」字样）。
+- **失败路径 A（出生点本身不合格）**：浏览器内把 `registry.nearestFpSpawn` 临时换成越界落点（`(0,520,−1180)`）→ `res {ok:false, reason:'spawn-invalid', changed:false, reasons:['envelope']}`，**位置/模式逐值不变**（`(−30,1.65,−360)` / `fp`），提示「脱困失败 · 出生点未通过校验 …**未改动**当前视图与位置」。
+- **失败路径 B（放置后复核不通过）**：Node 用例 F23 篡改 `rig.enterFp` 让"带 spawnId 的放置"落到非法点 ⇒ `res {ok:false, reason:'post-invalid', changed:false}`，**精确回滚**到脱困前位置（1e-9）且仍在 FP、`state='fp'`。
+
+### 14.4 不得放宽 / 不改语义
+
+`probe` / 包络 / 眼高**判据一字未改**（失败即不改动视图，恰好相反于"放宽"）；`registry.nearestFpSpawn` 语义未改（只消费其返回值并在 F23 里用同一函数复算期望值）；**无随机数**（同一点两次脱困落点逐值一致，F23 断言）；`STUCK_SECONDS` 等阈值未动。
+
+### 14.5 实测（三条 verify 全绿）
+
+```text
+$ node tests/interaction.test.mjs
+  ✓ F23 脱困确定性放置（t99-F2）：落点 == nearestFpSpawn、可站立、包络内、眼高逐值相等；失败路径不改动视图/位置
+  · 脱困（确定性）：VP-B-fp-spawn {"x":-30,"y":1.65,"z":-360}（卡死点距出生点 33.10m、位移 33.1m）｜可站立 ✓ 包络内 ✓ 眼高 ✓ isFp ✓ state=fp ✓
+ 通过 65 / 65（exit=0；用例 64→65、断言 618→655、skip 0）
+$ node tests/core-collision.test.mjs   → 通过 26 / 26（exit=0）
+$ node scripts/audit.mjs               → exit=0（"预算与契约检查全部通过（信息性提示 0 项，不计失败）"）
+```
+
+### 14.6 未验证 / 边界
+
+- 浏览器复核脚本为 `/tmp` 临时产物（t104/t105 inScope 均不含 `docs/shots-airwall/`）；t99 的驱动器本体未改动（只在 /tmp 副本改输出目录）。
+- 回滚路径在**真实浏览器**里只覆盖了"出生点不合格"分支（A）；"放置后复核不通过"（B）在 Node 里以篡改 `enterFp` 的方式覆盖——浏览器端未构造 B（未验证）。
+- 若 core 未来给 `state.requestViewMode` 增加 `spawnId/position` 透传，本实现可简化为**单次请求**（当前用"切换退出 → 相机精确放置 → 请求同步"三步，等价且已实测）。
+
+---
+
+## 15. t112 交付回执：E13/F21 断言同步到 t103 之后语义（亭不再是空气墙）
+
+> 任务：t112（T7.9） · 执行者：`ui-engineer` · attempt 1 `6ad66dc7-7075-4a30-9e1e-eb793609a4eb` · 依赖 t103（已落地，LAYOUT 1.1.10 / WALKABLE 157）、t104/t105
+> inScope：`src/interaction/**`、`src/ui/**`、`tests/interaction.test.mjs`、本回执、`docs/report-airwall.md` · 三条 verify 全绿（含 `audit.mjs --enforce`）
+
+### 15.1 开工即核对：主理人报的 62/64 已在本分支消除
+
+主理人实测的两条红是"旧期望遇新现实"；本分支在 **t104 已把 E13/F21 改为按数据状态分派**，故开工时基线已是 **65/65 全绿**。
+本卡的任务是把它们**从"分派"升级为"对 t103 后现实的强断言"**（见 15.3），并补齐主理人要求的三项（逐条列出 14 条、门洞带可走进、突变对照）。
+
+### 15.2 实测真值（探针 + 断言输出）
+
+| 项 | 真值 |
+| --- | --- |
+| `airWalls`（视觉开放却整足迹阻挡） | **0**；其中亭 **0/10** |
+| 亭通行语义 | 10/10 `blocks:'exceptDoor'`、`hasDoor:true`、`doorWidth ∈ {8,10,16}` |
+| 仍为 `blocks:'all'` 者 | **14 条**（逐条）：角楼 `OB-F-tower-corner-{nw,ne,sw,se}` · 护城河 `OB-MOAT-{south,north,west,east}` · 水体 `OB-WB-F-pond-west/east`、`OB-WB-D-pond`、`OB-WB-E-pond` · 山石 `OB-SC-F-rockery-west/east`；**无一条亭** |
+| 14 条提示 | 逐条齐备且**非兜底文案**（角楼=建筑不可进入；护城河/水体=水面不可行走；山石=假山不可穿越） |
+| 门洞带可走性（走真实 solver，门外 1.5m→中心 30×0.25m） | **8/10 走进足迹且全程无阻挡**（B 西/东翼亭、C 后庭院亭、D 西后小亭、E 东后小亭、F 御花园中央/西/东亭）；**2/10 被有名实体挡住**：`D-court3-pavilion ← OB-WB-D-pond`、`E-court3-pavilion ← OB-WB-E-pond`（门前水池） |
+| 撞墙轴（门宽所在轴） | 每座亭两个方向**一步即被自身障碍/已登记实体/世界原因挡住**，且**一步内不得进入足迹** |
+
+### 15.3 断言同步（不删、不加恒真、不改数据）
+
+- **E13**：替换过时期望"亭必须全部登记为空气墙（10/10）"为
+  ① `airWalls` 中**不得含任何 `kind==='pavilion'`** + `airWalls.length === 0` + `blockedOpen.length === 0`；
+  ② **反向逐条**：`blocks==='all'` 的 14 条**每条**都必须有**非兜底**可见提示，并断言分组计数 4 角楼/4 护城河/4 水体/2 山石（`runner.info` 打印全清单）；
+  ③ **突变对照**：内存里把 `B-pavilion-gate-west` 改回 `blocks:'all'` ⇒ `auditAirWalls()` 必须报**恰好 1 座**且 `kind==='pavilion'`，提示翻转为「开敞构筑物」⇒ 证明"亭不得为空气墙"这条断言是**活的**（不是恒真）。
+- **F21**：① 10 座亭**逐座**断言**不得**出现「开敞构筑物」、应给「墙体阻挡」且正文指引门洞；
+  ② **门洞带可走性**逐座断言：≥8/10 走进足迹无阻挡，其余必须被**有名有姓**的实体挡住（`OB-*` 或世界原因），**禁止静默阻挡**（"未走进却无任何原因"直接判失败）；
+  ③ 门洞轴向语义（数据推导 `door.lateralAxis`）：沿**门宽轴**向内一步必被自身障碍/已登记实体挡住且不得一步入内；沿**贯穿轴**可走或被有名原因挡住；
+  ④ 反向保留"整足迹阻挡者必须有可见提示"（14 条）。
+
+### 15.4 语义说明（主理人可核对；如需改，量化交回）
+
+亭"门洞带 = **入口门槛**"（t103 加法登记：广场 0 → 门槛 0.3 → 亭地面 0.6，相邻各 ≤0.5m 阈值）；其余边缘是**台基边缘/墙**（0.6m 不可直接跨，实测沿门宽轴一步被 `OB-<亭>` 挡住）。
+`door.lateralAxis` 是**门宽所在轴**：横向越出 `width/2 − radius` 由墙阻挡，沿另一轴**贯穿通过**（与主殿门洞同一"穿透体块"语义）⇒ 亭**不是空气墙**，而是"看得进去 + 走得进去（经门槛）+ 撞得到实体"。
+
+**本卡主张当前语义成立，无需裁定**；唯一可讨论处已量化交回：`D-court3-pavilion` / `E-court3-pavilion` 门前即水体（`OB-WB-D-pond` / `OB-WB-E-pond`），"经门洞带进入"对这两座不成立（通道轴终点 `z=49.5` / `z=33.5`，均在足迹之外）——属**景观意图**（水中亭多作对景）。若产品希望"踏石/栈道入亭"，需 layout/区域侧登记可行走连接（**未改数据、未放宽碰撞**）。
+
+### 15.5 实测（三条 verify 全绿）
+
+```text
+$ node tests/interaction.test.mjs
+  ✓ E13 四类糟糕阻挡审计（…空气墙…）   ✓ F21 t87 UI 与按键（…亭的撞墙提示…）
+  · ③ 空气墙：亭 0/10 在册（应为 0）；整足迹阻挡者 14 条逐条提示齐备：OB-F-tower-corner-nw[角楼]、…、OB-SC-F-rockery-east[山石]
+  · 亭门洞带可走性：8/10 走进足迹（无阻挡）；2 座被有名阻挡：D-court3-pavilion←OB-WB-D-pond、E-court3-pavilion←OB-WB-E-pond
+ 通过 65 / 65（exit=0；断言 655→674、skip 0）
+$ node tests/core-collision.test.mjs            → 通过 26 / 26（exit=0）
+$ node scripts/audit.mjs --enforce              → exit=0（"预算与契约检查全部通过（信息性提示 0 项，不计失败）"）
+```
+
+### 15.6 未验证 / 边界
+
+- 浏览器端**未**重跑（本卡只改断言与文档，不改产品代码；t104/t105 已分别给出浏览器证据）。需要"亭可走进"的浏览器证据时可复用 t99 驱动脚本（真实 CDP 走向 `B-pavilion-gate-west (-58,-386)` 的南门）。
+- 两座水中亭（`D-court3-pavilion`/`E-court3-pavilion`）的"可进入"未验证（当前数据下不可，详见 15.4）。
+- `doorWidth` 只覆盖 `{8,10,16}`；若 layout 后续改动门宽/门槛高程，本卡的"走进去"断言会自动按新数据复核（断言为数据推导）。
+
+---
+
+## 16. t116 交付回执：走查图关节连通诊断（t77-F4/F6）——根因在布局，量化交回
+
+> 任务：t116（T7.10） · 执行者：`ui-engineer` · attempt 1 `b9733fd4-a54b-4343-aac4-2887c9a5c1ab`
+> inScope：`src/interaction/**`、`tests/interaction.test.mjs`、`docs/report-airwall.md`、本回执 · 三条 verify 全绿（含 `audit.mjs --enforce`）
+> 完整逐栋表见 `docs/report-airwall.md` §11
+
+### 16.1 结论（先诊断后动手）
+
+**主理人假设"1m/3m 栅格把 0.6m 内伸的通道面与室内面切在不同格 ⇒ 图上无边"——证伪。**
+实测（新用例 E18，`cellSize=3` 生产口径）：43/43 面对相接（gap ≤ 0.05m）；两面都有可走格者 41/41 **都存在相邻格对**（"两面有格却无相邻格对" = **0**）；其中 **39/41 相邻且 `canStep` 直接可跨**（如 `WK-B-hall-main-interior ↔ WK-B-hall-main-door-passage`：34 对可跨、Δy=0）。另 2 对"相邻但不可跨"的原因是**相邻格采样面高差 1.5m**（台地 3.0 vs 通道 1.5）——高程问题，不是栅格切分。
+补充事实：`createWalkGraph` 在 `cellSize=1` 下构造整城会直接抛错（`841×1121 = 943k > maxCells 400k`，模块自带守卫）⇒ 任何"1m 栅格"口径都必须局部/提额构造。
+
+**真正根因：入口台阶/坡道缺失（布局高程）。** 18 栋不可达**全部**由"通道面（=内景地面）相对门外 1.5m 处地面高差超阈值"解释：16 栋抬升 **0.6–1.35m**、2 栋（`VP-B-side-west/east-main-interior`）**下落 1.5m**。按主理人裁定（根因在布局 ⇒ 停手量化交回），本卡**未改 `src/shared/**`、未调 `cellSize`、未放宽任何阈值**。
+
+### 16.2 交回派单的最小改动方向
+
+在每栋门洞外侧登记**分级过渡**（`connector` `kind:'stairs'` + 分段 `elevationLow`，或分级可行走面），使**相邻两级高差 ≤ 0.5m**（下行同理，每级 ≤ 0.6m）——与 `t103` 给 10 座亭做的"广场 0 → 门槛 0.3 → 亭地面 0.6"同一手法。逐栋清单（机位 / 内景面 / 高差）见报告 §11.2 表（18 行）。
+
+### 16.3 本卡落地物（全部 inScope）
+
+| 文件 | 内容 |
+| --- | --- |
+| `tests/interaction.test.mjs` | 新增 **E18 关节连通诊断**（常驻）：① 断言 43/43 相接；② **断言"无一对是两面有格却无相邻格对"**（若假设成立此断言必红 ⇒ 证伪被机器守住）；③ 少数"相邻不可跨"必须由**采样高差**解释；④ 每个不可达点必须落到 `entrance-step` / `passage-overlaps-water` 两类量化病因之一（不得有不明原因）；⑤ 锁定 `maxStepHeight 0.5`/`snapDownDistance 0.6` 与 `cellSize=3`（防"调小格距绕过"）；⑥ 打印 43 行复测供 t77 复核 |
+| `docs/report-airwall.md` | 新增 §11：假设证伪的实测表 + 18 栋逐条高差表 + 最小改动方向 + 43 行复测 |
+
+### 16.4 实测（三条 verify 全绿）
+
+```text
+$ node tests/interaction.test.mjs
+  ✓ E18 关节连通诊断（t116）：通道面↔室内面在图上**可跨**（证伪栅格假设）；18 栋不可达全部有量化病因
+  · 关节诊断（cellSize=3）：相接 43/43；两面有格者 41 对中可跨邻接 39 对；"两面都有格却无相邻格对" 0 对、"相邻但高差超阈值" 2 对 ⇒ 栅格假设【证伪】
+  · 43 行可达性复测（cellSize=3）：可达 25/43、不可达 18（病因：入口台阶缺失 18 栋）
+ 通过 66 / 66（exit=0；断言 674→686、skip 0）
+$ node tests/core-collision.test.mjs   → 通过 26 / 26（exit=0）
+$ node scripts/audit.mjs --enforce     → exit=0（"预算与契约检查全部通过（信息性提示 0 项，不计失败）"）
+```
+
+### 16.5 边界如实
+
+- **不宣称"43 栋均可进入"**：可达数仍 **25/43**；最终判定归 `t77` 生产引擎复跑（布局补台阶后应上升）。
+- 未改弱任何验证套件：`tests/verify-*.test.mjs`、`scripts/verify-completeness.mjs` 未触碰（均不在本卡 inScope）。
+- 未验证：布局侧补台阶后的可达数上升（需 t77 复测）；`cellSize` 若未来要调，须先给预算/性能影响（本卡未调）。
+
+---
+
+## 17. t123 交付回执：脱困文案与实现语义统一（t99-F4）+ 距离语义结论
+
+> 任务：t123（T7.11） · 执行者：`ui-engineer` · attempt 1 `bf758d3b-cb19-48c8-82f8-ad1e6e8cca9b`
+> inScope：`src/interaction/**`、`src/ui/**`、`tests/interaction.test.mjs`、本回执、`docs/report-airwall.md` · 三条 verify 全绿（含 `audit --enforce`）
+
+### 17.1 改了什么（file:line 逐字对照见 `docs/report-airwall.md` §12.1）
+
+| 文件:行 | 改前 → 改后 |
+| --- | --- |
+| `src/ui/index.js:334` | `回到最近安全点（G）` → **`返回最近的已登记出生点（G）`** |
+| `src/interaction/index.js:526` | `已脱离 · 回到最近出生点` → **`已脱离 · 返回最近的已登记出生点（${moved} m）`**（**附距离**） |
+| `src/interaction/index.js:779` | `按 G 或点「回到最近安全点」脱离…` → **`…「返回最近的已登记出生点」…`** |
+| `src/interaction/keymap.js:163` | `脱离卡死（回到最近安全点）` → **`脱离卡死（返回最近的已登记出生点）`** |
+| `src/interaction/keymap.js:183` | `卡住了？回到最近的安全可行走点…` → **`卡住了？返回最近的已登记出生点（…落点与距离会如实写明）`** |
+| 诊断注释 2 处 | 改为「最近安全格搜索（仅诊断）」/「最近的安全可行走格（仅诊断；脱困落点由 `nearestFpSpawn` 决定）」 |
+
+**实现语义未动**：落点仍是 `registry.nearestFpSpawn(卡死点)`（t105 的确定性放置、probe/包络/眼高校验一字未改）。
+
+### 17.2 距离语义结论（量化）
+
+5 个登记出生点 × 21 个常见卡死点（4 角楼 + 8 宫墙段 + 10 亭 + 3 殿）：**min 32.0 m / median 144.3 m / max 350.9 m**；`>140m` **12/21**、`>100m` **14/21**、`≤60m` 3/21；最远 `WALL-CITY-east` **350.9 m**。
+**结论**：135–141 m **属正常范围**（中位数即 144.3 m），落点**必然合法**，但**距离可能很大** ⇒ **文案如实标注距离**（已做）。
+**最小改法**：(a) **文案如实（已实施，推荐）**；(b) 距离上限**不推荐**（12/21 样本会被拒绝脱困，比"远但合法"更糟；若确需，应做二次确认而非拒绝，需新增交互状态 ⇒ 交回裁定）；(c) **增设出生点**（4–6 个可把 max 351 → ≈120 m）⇒ **属 layout/registry，交回主理人派单**（本卡未改数据）。
+
+### 17.3 `door.blockedBy` 可行性（只报告，未实施）
+
+可行、改动小：`src/interaction/catalog.js` 的 `labelForObstacle()`（+2 行带出 `door.passable/blockedBy`）与 `blockedHint()` 的 `exceptDoor` 分支（+8~12 行用具名原因替换通用「墙体阻挡」），**合计 ≈10–14 行** + 2–3 条断言；数据已在 `src/shared/layout.js:353-356`（t117 登记、t118 入契约）。**实施须交回主理人裁定**（用户尚未表态）。
+
+### 17.4 实测（三条 verify 全绿）
+
+```text
+$ node tests/interaction.test.mjs
+  ✓ F24 脱困文案统一（t99-F4）：全仓无「最近安全点/安全可行走点」措辞；按钮·键位·帮助·提示同一语义 + 距离如实
+  · 脱困文案（t99-F4）：本次落点 VP-…、距离 X.X m（文案与实现一致；全仓「最近安全点/安全可行走点」= 0 处）
+ 通过 67 / 67（exit=0；断言 686→715、skip 0）
+$ node tests/core-collision.test.mjs   → 通过 26 / 26（exit=0）
+$ node scripts/audit.mjs --enforce     → exit=0（"预算与契约检查全部通过（信息性提示 0 项，不计失败）"）
+```
+
+### 17.5 未验证 / 边界
+
+- 浏览器端未重跑（本卡只改文案/断言；t104/t105 已给浏览器证据）。文案在 HUD 上的**实际字形/截断**未在浏览器核对（按钮宽度足够，风险低）。
+- (b)/(c) 两种改法**未实施**（需主理人裁定/派单）；`door.blockedBy` 提示**未实施**（只报告）。
+- 距离分布基于 21 个"典型卡死点"样本（非全城枚举）；更大样本或真机卡点可能超出 350.9 m。
+
+### 17.6 期间复测（t116 的 E18 随布局进展自动更新）
+`LAYOUT` 已到 1.1.12、布局侧在补入口台阶：同一 `cellSize=3` 口径 **可达 33/43（此前 25/43）**；余 10 栋病因分类：入口台阶缺失 7 / 缺栅格 0 / 关节高差 0 / **通道不在主分量 3**（后 3 栋通道有格但不在主分量 ⇒ 仍需布局侧接通门外接近面）。E18 现覆盖**四类可核对病因**，不得有不明原因；断言 686→**715**。

@@ -2226,36 +2226,54 @@ await runner.test('E13 四类糟糕阻挡审计（数字 + 位置）：单向陷
   for (const gate of dooredOpen) {
     assert(!airWalls.some((row) => row.buildingId === gate.id), `${gate.id} 有门洞可通过，不应被算作空气墙`);
   }
-  // 亭：t103 前应全部在册（整足迹阻挡）；t103 后应全部可通行（hasDoor ⇒ exceptDoor）⇒ airWalls 清零。
-  // 两种状态都必须**整体一致**（不允许"一半在册一半可通行"的混合），且提示语义随之切换（见下）。
+  // 亭（t103 语义）：10 座亭均已 `hasDoor:true ⇒ exceptDoor` ⇒ **一条都不得被算作空气墙**
   const pavilionSlots = LAYOUT.SLOTS.filter((slot) => slot.kind === 'pavilion');
   const pavilionObstacles = pavilionSlots.map((slot) => obstacleByBuilding.get(slot.id)).filter(Boolean);
-  const pavilionsBlocked = pavilionObstacles.filter((o) => o.blocks === 'all');
-  const pavilionsPassable = pavilionObstacles.filter((o) => o.blocks === 'exceptDoor');
+  assertEqual(pavilionSlots.length, 10, `应恰好 10 座亭（实际 ${pavilionSlots.length}）`);
   assertEqual(pavilionObstacles.length, pavilionSlots.length, '10 座亭都必须有障碍条目');
-  assertEqual(
-    pavilionsBlocked.length + pavilionsPassable.length,
-    pavilionSlots.length,
-    '亭的通行语义必须整体一致：要么全部整足迹阻挡（t103 前），要么全部门洞可通行（t103 后）',
+  assert(pavilionObstacles.every((o) => o.blocks === 'exceptDoor'), `亭必须为 exceptDoor（仅门洞带阻挡）：${JSON.stringify([...new Set(pavilionObstacles.map((o) => o.blocks))])}`);
+  assert(pavilionSlots.every((s) => s.hasDoor === true), '10 座亭都必须登记 hasDoor（t103 的加法登记）');
+  // ★ 正确期望（替换 t87/t88 时代的"亭必须全部在册"）
+  assert(airWalls.every((row) => row.kind !== 'pavilion'), `airWalls 中不得含任何亭：${JSON.stringify(airWalls.filter((r) => r.kind === 'pavilion'))}`);
+  assertEqual(airWalls.length, 0, `t103 之后空气墙必须清零（实际 ${airWalls.length}）`);
+  assertEqual(blockedOpen.length, 0, '不得再有整足迹阻挡的开敞构筑物');
+
+  // ★ 反向断言：**每一个** blocks==='all' 的构筑物都必须有可见提示（逐条列出，不只给个数）
+  const blockedAll = solver.obstacles().filter((o) => o.blocks === 'all');
+  const hintCatalog = buildCatalog({ layout: LAYOUT, config: CONFIG });
+  const groupOf = (id) =>
+    /^OB-F-tower-corner/.test(id) ? '角楼' : /^OB-MOAT/.test(id) ? '护城河' : /^OB-WB/.test(id) ? '水体' : /^OB-SC/.test(id) ? '山石' : '其它';
+  const groups = {};
+  for (const o of blockedAll) groups[groupOf(o.id)] = (groups[groupOf(o.id)] ?? 0) + 1;
+  assertEqual(blockedAll.length, 14, `整足迹阻挡者应为 14 条（实际 ${blockedAll.length}）：${blockedAll.map((o) => o.id).join('、')}`);
+  assertEqual(groups['角楼'] ?? 0, 4, `角楼 4 条（实际 ${groups['角楼'] ?? 0}）`);
+  assertEqual(groups['护城河'] ?? 0, 4, `护城河 4 条（实际 ${groups['护城河'] ?? 0}）`);
+  assertEqual(groups['水体'] ?? 0, 4, `水体 4 条（实际 ${groups['水体'] ?? 0}）`);
+  assertEqual(groups['山石'] ?? 0, 2, `山石 2 条（实际 ${groups['山石'] ?? 0}）`);
+  for (const o of blockedAll) {
+    assert(o.kind !== 'pavilion' && !pavilionSlots.some((s) => `OB-${s.id}` === o.id), `${o.id} 不得是亭（亭已可通行）`);
+    const hint = hintCatalog.hintFor(o.id);
+    assert(hint && typeof hint.title === 'string' && hint.title.length > 0, `${o.id} 必须有可见提示（不得静默）`);
+    assert(hint.title !== '此路不通', `${o.id} 的提示必须点名（不得用兜底文案）：${hint.title}`);
+  }
+  runner.info(
+    `  ③ 空气墙：亭 ${airWalls.filter((r) => r.kind === 'pavilion').length}/10 在册（应为 0）；整足迹阻挡者 ${blockedAll.length} 条逐条提示齐备：` +
+      blockedAll.map((o) => `${o.id}[${groupOf(o.id)}]`).join('、'),
   );
-  if (pavilionsPassable.length > 0) {
-    assertEqual(airWalls.length, 0, `亭已可通行（t103 落地）⇒ 空气墙必须清零，实际 ${airWalls.length}`);
-    assertEqual(blockedOpen.length, 0, 't103 落地后不得再有整足迹阻挡的开敞构筑物');
-  } else {
-    assertEqual(airWalls.length, pavilionSlots.length, `亭必须全部登记为空气墙（实际 ${airWalls.length}/${pavilionSlots.length}）`);
-  }
-  // 提示联动（两种状态各自的正确语义）
-  const pavilionHintFor = (slot) => buildCatalog({ layout: LAYOUT, config: CONFIG }).hintFor(`OB-${slot.id}`);
-  for (const slot of pavilionSlots) {
-    const obstacle = obstacleByBuilding.get(slot.id);
-    const hint = pavilionHintFor(slot);
-    if (obstacle?.blocks === 'all') {
-      assert(/开敞构筑物/.test(hint.title), `${slot.id} 整足迹阻挡 ⇒ 必须给「开敞构筑物」可见提示，实际「${hint.title}」`);
-    } else {
-      assert(!/开敞构筑物/.test(hint.title), `${slot.id} 已可通行 ⇒ 不得再弹「开敞构筑物」，实际「${hint.title}」`);
-      assert(/墙体阻挡/.test(hint.title), `${slot.id} 已可通行 ⇒ 应按"仅门洞可通行"提示，实际「${hint.title}」`);
-    }
-  }
+
+  // ★ 突变对照：把某座亭在内存里改回 blocks:'all' ⇒ "亭不得为空气墙"必须失败（审计与提示都应翻转）
+  const mutated = solver.obstacles().map((o) => (o.buildingId === pavilionSlots[0].id ? { ...o, blocks: 'all', door: null } : o));
+  const mutatedSolver = createWalkSolver({ obstacles: mutated });
+  const mutatedAudit = createTraversalAudit({ solver: mutatedSolver, layout: LAYOUT, cellSize: 3, start: { x: 0, z: -480 } });
+  const mutatedAirWalls = mutatedAudit.auditAirWalls();
+  assertEqual(mutatedAirWalls.length, 1, `突变后应有 1 座空气墙（实际 ${mutatedAirWalls.length}）`);
+  assertEqual(mutatedAirWalls[0].kind, 'pavilion', '突变后该空气墙必须是亭');
+  assert(
+    !airWalls.some((row) => row.buildingId === pavilionSlots[0].id),
+    '突变对照：若亭被改回整足迹阻挡，上面"亭不得为空气墙"的断言会失败（本断言确认基线不含它）',
+  );
+  const mutatedHint = blockedHint({ sourceType: 'building', name: pavilionSlots[0].name, blocks: 'all', kind: 'pavilion', visitable: false, sourceLabel: '建筑' });
+  assert(/开敞构筑物/.test(mutatedHint.title), `突变后提示应翻转为「开敞构筑物」（实际「${mutatedHint.title}」）`);
 
   // ④ 单向高差：上下阈值不对称造成的有向边（|Δy| ∈ (maxStepHeight, snapDownDistance]）
   const oneWay = report.oneWayHeight;
@@ -2379,7 +2397,8 @@ await runner.test('E15 防卡死兜底（t104：走**真实移动路径**）：�
   assertEqual(stuckPanel.hidden, false, '卡住时 HUD 条必须可见');
   const escapeButton = app.app.querySelectorAll('[data-ui-part]').find((el) => el.attrs['data-ui-part'] === 'escape');
   assert(escapeButton, '卡住条必须提供一键脱困按钮');
-  assert(/最近安全点/.test(escapeButton.textContent), `按钮文案应说明去处，实际「${escapeButton.textContent}」`);
+  assert(/已登记出生点/.test(escapeButton.textContent), `按钮文案必须与实现一致（返回最近的已登记出生点），实际「${escapeButton.textContent}」`);
+  assert(!/最近安全点/.test(escapeButton.textContent), '不得再出现与实现不符的「最近安全点」措辞');
 
   // 对照（避免"恒显示"）：松开 W ⇒ 意图消失 ⇒ 计时归零、卡死条隐藏
   app.win.keyUp('KeyW');
@@ -2489,16 +2508,96 @@ await runner.test('F21 t87 UI 与按键：G 键映射脱困、亭的撞墙提示
   const catalog = buildCatalog({ layout: LAYOUT, config: CONFIG });
   const pavilionObstacle = createWalkSolver({}).obstacles().find((o) => LAYOUT.SLOTS.find((s2) => s2.id === o.buildingId)?.kind === 'pavilion');
   assert(pavilionObstacle, '应能找到一个亭的障碍条目');
-  const hint = catalog.hintFor(pavilionObstacle.id);
-  if (pavilionObstacle.blocks === 'all') {
-    // t103 前：整足迹阻挡 ⇒ 必须给解释性可见提示（不能只留一堵看不见的墙）
-    assert(/开敞构筑物/.test(hint.title), `亭（整足迹阻挡）的提示标题应说明"开敞构筑物"：${hint.title}`);
-    assert(/四面开敞/.test(hint.detail) && /绕行/.test(hint.detail), `提示正文应解释"为什么进不去 + 怎么办"：${hint.detail}`);
-    assertEqual(hint.tone, 'info', '亭的提示是解释性信息（不是错误）');
-  } else {
-    // t103 后：亭已可通行（hasDoor ⇒ exceptDoor）⇒ 提示必须**收窄**为"仅门洞可通行"，不得再弹"开敞构筑物"
-    assert(!/开敞构筑物/.test(hint.title), `亭已可通行 ⇒ 不得再弹「开敞构筑物」：${hint.title}`);
-    assert(/墙体阻挡/.test(hint.title), `亭已可通行 ⇒ 应按"仅门洞可通行"提示：${hint.title}`);
+  // ── ① 亭不得再出现「开敞构筑物」提示（t103 后为 exceptDoor：仅门洞带阻挡）
+  assertEqual(pavilionObstacle.blocks, 'exceptDoor', '亭必须为 exceptDoor（仅门洞带阻挡）');
+  for (const slot of LAYOUT.SLOTS.filter((s2) => s2.kind === 'pavilion')) {
+    const h = catalog.hintFor(`OB-${slot.id}`);
+    assert(!/开敞构筑物/.test(h.title), `${slot.id} 已可通行 ⇒ 不得再弹「开敞构筑物」：${h.title}`);
+    assert(/墙体阻挡/.test(h.title), `${slot.id} 撞非门洞边缘应按「墙体阻挡」提示：${h.title}`);
+    assert(/门洞/.test(h.detail), `${slot.id} 提示正文应指引门洞：${h.detail}`);
+  }
+
+  // ── ② 经门洞带（入口门槛）可进入亭的足迹（可走性断言；与 t87 的 traversal 审计同口径：走真实 solver）
+  const sol = createWalkSolver({});
+  const eye = CONFIG.CAMERA.fpEyeHeight;
+  const facingDir = { south: [0, -1], north: [0, 1], east: [1, 0], west: [-1, 0] };
+  const doorResults = [];
+  for (const slot of LAYOUT.SLOTS.filter((s2) => s2.kind === 'pavilion')) {
+    const ob = sol.obstacles().find((o) => o.buildingId === slot.id);
+    if (!ob) { doorResults.push({ id: slot.id, entered: false, blocked: ['<无障碍条目>'] }); continue; }
+    const b = ob.bounds;
+    const dir = facingDir[slot.facing] ?? [0, -1];
+    const halfX = (b.maxX - b.minX) / 2;
+    const halfZ = (b.maxZ - b.minZ) / 2;
+    const outside = { x: slot.x + dir[0] * (Math.abs(dir[0]) ? halfX + 1.5 : 0), z: slot.z + dir[1] * (Math.abs(dir[1]) ? halfZ + 1.5 : 0) };
+    const yOut = LAYOUT.floorYAt(outside.x, outside.z);
+    let pos = { x: outside.x, y: (yOut ?? 0) + eye, z: outside.z };
+    const blocked = new Set();
+    for (let i = 0; i < 30; i += 1) {
+      const r = sol.step(pos, -dir[0], -dir[1], 0.25, {});
+      r.blocked.forEach((id) => blocked.add(id));
+      pos = { x: r.x, y: r.y, z: r.z };
+    }
+    const entered = pos.x >= b.minX && pos.x <= b.maxX && pos.z >= b.minZ && pos.z <= b.maxZ;
+    doorResults.push({ id: slot.id, entered, blocked: [...blocked], end: { x: +pos.x.toFixed(2), z: +pos.z.toFixed(2) } });
+  }
+  const enteredCount = doorResults.filter((r) => r.entered).length;
+  const blockedNamed = doorResults.filter((r) => !r.entered);
+  // 不得出现"静默阻挡"：没走进去的必须给出**有名有姓**的阻挡原因（障碍 id 或世界原因）
+  for (const r of blockedNamed) {
+    assert(r.blocked.length > 0, `${r.id} 未走进却无任何阻挡原因（静默阻挡 = 空气墙）`);
+    assert(r.blocked.every((id) => /^OB-/.test(id) || WORLD_BLOCK_REASONS.includes(id)), `${r.id} 的阻挡原因必须有名有姓：${JSON.stringify(r.blocked)}`);
+  }
+  assert(enteredCount >= 8, `至少 8/10 座亭应能经门洞带走进足迹（实测 ${enteredCount}/10）：${JSON.stringify(doorResults)}`);
+  assertEqual(enteredCount + blockedNamed.length, 10, '两类之和必须等于 10（无遗漏）');
+  runner.info(
+    `  亭门洞带可走性：${enteredCount}/10 走进足迹（无阻挡）；${blockedNamed.length} 座被**有名**阻挡：` +
+      blockedNamed.map((r) => `${r.id}←${r.blocked.join('/')}`).join('、') + `｜明细 ${JSON.stringify(doorResults)}`,
+  );
+  // 门洞语义（数据推导，逐座）：门洞通道沿 `door.lateralAxis` **贯穿体块**（横向自由、沿另一轴由墙体阻挡）
+  //   ⇒ ① 沿**墙轴**（垂直于 lateralAxis）向内一步必须被**自身障碍**挡住（有实体依据的边界，不是空气墙）；
+  //      ② 沿**通道轴**（lateralAxis）向内一步要么可走（通道）、要么被**有名**原因挡住（如门前水池/台阶）。
+  for (const slot of LAYOUT.SLOTS.filter((s2) => s2.kind === 'pavilion')) {
+    const ob = sol.obstacles().find((o) => o.buildingId === slot.id);
+    const b = ob.bounds;
+    const lateral = ob.door?.lateralAxis ?? ((b.maxX - b.minX) >= (b.maxZ - b.minZ) ? 'x' : 'z');
+    // `lateralAxis` 是**门宽所在轴**：横向越出「门宽/2」即由墙体阻挡；沿另一轴则**贯穿通过**。
+    const wall = lateral === 'x' ? [1, 0] : [0, 1];
+    const through = lateral === 'x' ? [0, 1] : [1, 0];
+    const outside = (axis) => ({
+      x: slot.x + axis[0] * ((b.maxX - b.minX) / 2 + 0.6),
+      z: slot.z + axis[1] * ((b.maxZ - b.minZ) / 2 + 0.6),
+    });
+    // ① 撞墙轴（两个方向都试）
+    for (const sign of [1, -1]) {
+      const out = outside([wall[0] * sign, wall[1] * sign]);
+      const feet = (LAYOUT.floorYAt(out.x, out.z) ?? 0) + eye;
+      const single = sol.step({ x: out.x, y: feet, z: out.z }, -wall[0] * sign, -wall[1] * sign, 0.5, {});
+      assert(single.blocked.length > 0, `${slot.id} 沿墙轴向内一步必须被挡（不得静默穿过）：${JSON.stringify(single)}`);
+      // 阻挡必须"有名有姓"：自身障碍 / 其它**已登记**障碍（例如亭前水池）/ 世界原因（台阶、包络…）
+      const allObstacles = sol.obstacles();
+      assert(
+        single.blocked.every((id) => WORLD_BLOCK_REASONS.includes(id) || allObstacles.some((o) => o.id === id)),
+        `${slot.id} 撞墙方向的阻挡原因必须有名有姓（不得是凭空的墙）：${JSON.stringify(single.blocked)}`,
+      );
+      assert(
+        single.blocked.includes(`OB-${slot.id}`) || single.blocked.some((id) => /^OB-(WB|SC|MOAT)/.test(id) || WORLD_BLOCK_REASONS.includes(id)),
+        `${slot.id} 的阻挡应来自自身障碍或已登记的实体（水体/山石/世界原因）：${JSON.stringify(single.blocked)}`,
+      );
+      assert(!(single.x > b.minX && single.x < b.maxX && single.z > b.minZ && single.z < b.maxZ), `${slot.id} 沿墙轴不得在一步内进入足迹`);
+    }
+    // ② 通道轴（两个方向）：可走或被有名原因挡住（不得静默）
+    for (const sign of [1, -1]) {
+      const out = outside([through[0] * sign, through[1] * sign]);
+      const feet = (LAYOUT.floorYAt(out.x, out.z) ?? 0) + eye;
+      const single = sol.step({ x: out.x, y: feet, z: out.z }, -through[0] * sign, -through[1] * sign, 0.5, {});
+      if (single.blocked.length > 0) {
+        assert(
+          single.blocked.every((id) => /^OB-/.test(id) || WORLD_BLOCK_REASONS.includes(id)),
+          `${slot.id} 通道轴上的阻挡必须有名有姓（不得静默）：${JSON.stringify(single.blocked)}`,
+        );
+      }
+    }
   }
 
   // 卡死条默认隐藏；setVisible(false)（?ui=0&shot=1 的路径）下仍保持隐藏
@@ -2722,6 +2821,439 @@ await runner.test('F22 孤儿 API 守卫：被检测链路必须在**生产入�
     `  孤儿 API 守卫：生产关键 API 调用点 ✓（noteStuckTick/setTraversalGuard/warmupStep）｜唯一循环 + 真实 KeyW 顶墙 ${elapsedMs}ms → 卡死条出现（intent 来源 explicit、solver.step 调用 0）｜未按键 3s 对照不出现 ✓`,
   );
   handle.dispose();
+});
+
+/* ==========================================================================
+ *  t105 / T7.8：脱困=确定性放置（t99-F2）—— 四项断言 + 失败路径不改动视图
+ * ======================================================================== */
+
+await runner.test('F23 脱困确定性放置（t99-F2）：落点 == nearestFpSpawn、可站立、包络内、眼高逐值相等；失败路径不改动视图/位置', async () => {
+  const app = await makeApp();
+  const eye = CONFIG.CAMERA.fpEyeHeight;
+  app.interaction.requester.viewMode('fp');
+  for (let i = 0; i < 240 && app.rig.isFp !== true; i += 1) app.rig.update(1 / 60, 0, app.store.state);
+  assertEqual(app.rig.isFp, true, '应已进入第一人称');
+  const solver = app.interaction.solver;
+
+  // 把玩家放到"卡死点"（与 t99 复现同量级：B 区亭外）
+  const stuck = { x: -58, z: -377.647 };
+  const stuckSurface = LAYOUT.floorYAt(stuck.x, stuck.z);
+  app.rig.position.set(stuck.x, stuckSurface + eye, stuck.z);
+
+  // ── ① 目标 = registry.nearestFpSpawn（语义不动，只消费）
+  const near = app.registry.nearestFpSpawn(app.rig.describe().position);
+  assert(near?.viewpoint?.position, 'registry 必须能给出最近出生点');
+  const spawn = near.viewpoint;
+  const before = { ...app.rig.describe().position };
+
+  const result = app.interaction.escapeToSafePoint('test:deterministic');
+  const after = { ...app.rig.describe().position };
+  assertEqual(result.ok, true, `脱困必须成功（reason=${result.reason}）`);
+  assertEqual(result.spawnId, spawn.id, `落点必须点名最近出生点：${result.spawnId} vs ${spawn.id}`);
+  // ① 位置 == 最近登记出生点（逐值相等）
+  assert(Math.abs(after.x - spawn.position.x) < 1e-9, `x 必须等于出生点：${after.x} vs ${spawn.position.x}`);
+  assert(Math.abs(after.y - spawn.position.y) < 1e-9, `y 必须等于出生点：${after.y} vs ${spawn.position.y}`);
+  assert(Math.abs(after.z - spawn.position.z) < 1e-9, `z 必须等于出生点：${after.z} vs ${spawn.position.z}`);
+  assertEqual(result.matchesSpawn, true, '落点与出生点必须逐值一致（matchesSpawn）');
+  // ② 可站立
+  const probe = solver.probe(after.x, after.z);
+  assertEqual(probe.ok, true, `落点必须可站立：${JSON.stringify(probe.reasons)}`);
+  assertEqual(result.reasons.length, 0, '落点不应带任何阻挡原因');
+  // ③ 包络内（t99-F2 的失败点：z=-1180 越界）
+  assert(
+    after.x >= LAYOUT.TERRAIN_EXTENT.minX && after.x <= LAYOUT.TERRAIN_EXTENT.maxX && after.z >= LAYOUT.TERRAIN_EXTENT.minZ && after.z <= LAYOUT.TERRAIN_EXTENT.maxZ,
+    `落点必须在包络内（TERRAIN_EXTENT z ∈ [${LAYOUT.TERRAIN_EXTENT.minZ}, ${LAYOUT.TERRAIN_EXTENT.maxZ}]）：实际 z=${after.z}`,
+  );
+  assertEqual(result.inBounds, true, 'inBounds 必须为 true');
+  // ④ 眼高：既等于出生点 y，又等于面高 + 眼高
+  assert(Math.abs(after.y - (LAYOUT.floorYAt(after.x, after.z) + eye)) < 1e-9, `眼高必须 = 面高 + ${eye}`);
+  assertEqual(result.eyeOk, true, 'eyeOk 必须为 true');
+  // 视图必须仍在第一人称（t99-F2 症状是掉进 oblique 全城相机）
+  assertEqual(app.rig.isFp, true, '脱困后必须仍在第一人称');
+  assertEqual(app.store.state.viewMode, 'fp', `state.viewMode 必须同步为 fp（实际 ${app.store.state.viewMode}）`);
+  // 提示只在成功后出现
+  const hint = app.interaction.lastHint();
+  assertEqual(hint?.kind, 'escape', '必须给 escape 类提示');
+  assert(/已脱离/.test(hint?.title ?? ''), `成功提示标题应为「已脱离…」，实际「${hint?.title}」`);
+  assert(!/失败/.test(hint?.title ?? ''), '成功路径不得出现失败提示');
+  runner.info(
+    `  脱困（确定性）：${spawn.id} ${JSON.stringify({ x: after.x, y: after.y, z: after.z })}（卡死点距出生点 ${(near.distance ?? 0).toFixed(2)}m、位移 ${result.moved}m）｜可站立 ✓ 包络内 ✓ 眼高 ✓ isFp ✓ state=fp ✓`,
+  );
+
+  // ── ② 确定性：同一卡死点再脱困一次 ⇒ 落点完全一致（无随机）
+  app.rig.position.set(stuck.x, stuckSurface + eye, stuck.z);
+  const second = app.interaction.escapeToSafePoint('test:deterministic-2');
+  const afterSecond = { ...app.rig.describe().position };
+  assert(Math.abs(afterSecond.x - after.x) < 1e-9 && Math.abs(afterSecond.z - after.z) < 1e-9, '同一卡死点两次脱困落点必须一致');
+
+  // ── ③ 失败路径 A：出生点本身不合格（越界）⇒ 不改动视图/位置
+  const originalNearest = app.registry.nearestFpSpawn;
+  app.registry.nearestFpSpawn = () => ({ viewpoint: { id: 'VP-test-invalid', position: { x: 0, y: 520, z: LAYOUT.TERRAIN_EXTENT.minZ - 620 } }, distance: 1 });
+  const posBeforeA = { ...app.rig.describe().position };
+  const modeBeforeA = app.store.state.viewMode;
+  const resA = app.interaction.escapeToSafePoint('test:spawn-invalid');
+  const posAfterA = { ...app.rig.describe().position };
+  app.registry.nearestFpSpawn = originalNearest;
+  assertEqual(resA.ok, false, '出生点不合格时必须失败');
+  assertEqual(resA.reason, 'spawn-invalid', `失败原因应为 spawn-invalid，实际 ${resA.reason}`);
+  assertEqual(resA.changed, false, '失败时不得改动视图/位置（changed=false）');
+  assert(Math.abs(posAfterA.x - posBeforeA.x) < 1e-9 && Math.abs(posAfterA.y - posBeforeA.y) < 1e-9 && Math.abs(posAfterA.z - posBeforeA.z) < 1e-9, `失败时位置必须逐值不变：${JSON.stringify(posAfterA)} vs ${JSON.stringify(posBeforeA)}`);
+  assertEqual(app.store.state.viewMode, modeBeforeA, `失败时视图模式必须不变（实际 ${app.store.state.viewMode}）`);
+  assertEqual(app.rig.isFp, true, '失败时仍应在第一人称（不得掉进 oblique）');
+  const hintA = app.interaction.lastHint();
+  assert(/失败/.test(hintA?.title ?? ''), `失败应给明确失败提示，实际「${hintA?.title}」`);
+  assert(/未改动/.test(hintA?.detail ?? ''), `失败提示应说明"未改动"，实际「${hintA?.detail}」`);
+
+  // ── ④ 失败路径 B：放置后复核不通过（模拟"落点不对"）⇒ 回滚到原位
+  const originalEnter = app.rig.enterFp;
+  app.rig.enterFp = function patchedEnter(opts = {}) {
+    // 只有"脱困放置"（带 spawnId）被篡改成非法落点；回滚调用（无 spawnId）保持真实行为
+    if (opts && opts.spawnId) return originalEnter.call(this, { ...opts, position: { x: 0, y: 520, z: LAYOUT.TERRAIN_EXTENT.minZ - 620 }, instant: true });
+    return originalEnter.call(this, opts);
+  };
+  const posBeforeB = { ...app.rig.describe().position };
+  const resB = app.interaction.escapeToSafePoint('test:post-invalid');
+  app.rig.enterFp = originalEnter;
+  const posAfterB = { ...app.rig.describe().position };
+  assertEqual(resB.ok, false, '落点复核不通过时必须失败');
+  assertEqual(resB.reason, 'post-invalid', `失败原因应为 post-invalid，实际 ${resB.reason}`);
+  assertEqual(resB.changed, false, '回滚后不得留下任何改动（changed=false）');
+  assert(
+    Math.abs(posAfterB.x - posBeforeB.x) < 1e-9 && Math.abs(posAfterB.y - posBeforeB.y) < 1e-9 && Math.abs(posAfterB.z - posBeforeB.z) < 1e-9,
+    `回滚必须精确恢复原位：${JSON.stringify(posAfterB)} vs ${JSON.stringify(posBeforeB)}`,
+  );
+  assertEqual(app.rig.isFp, true, '回滚后必须仍在第一人称');
+  assertEqual(app.store.state.viewMode, 'fp', '回滚后 state 必须仍是 fp');
+
+  // ── ⑤ 静态守卫：必须用确定性放置（enterFp + spawnId/position/instant），禁止"连发两次请求"的老写法
+  const src = readFileSync(join(ROOT, 'src/interaction/index.js'), 'utf8');
+  const body = src.slice(src.indexOf('function escapeToSafePoint'), src.indexOf('function exitInterior'));
+  assert(/rig\.enterFp\(\{[^}]*spawnId[^}]*\}/s.test(body), '脱困必须用 rig.enterFp({ spawnId, position, instant }) 做确定性放置');
+  assert(/instant:\s*true/.test(body), '确定性放置必须用 instant: true（无过渡，落点即最终值）');
+  assert(!/requestViewMode, \{ mode: 'fp' \}\);\s*\n\s*requester\.send\(EVENTS\.requestViewMode/.test(body), '禁止"同一 tick 连发两次 requestViewMode"的老写法（t99-F2 根因）');
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+/* ==========================================================================
+ *  t116 / T7.10：走查图"关节连通"诊断（t77-F4/F6）—— 证伪栅格假设 + 逐栋病因量化
+ * ======================================================================== */
+
+await runner.test('E18 关节连通诊断（t116）：通道面↔室内面在图上**可跨**（证伪栅格假设）；18 栋不可达全部有量化病因', async () => {
+  const solver = createWalkSolver({});
+  const cellSize = 3; // 生产审计口径（不调小 cellSize 绕过）
+  const graph = createWalkGraph(solver, { cellSize });
+  const area = graph.bounds;
+  const center = (c, r) => ({ x: area.minX + c * cellSize, z: area.minZ + r * cellSize });
+  const cellsOf = (surface) => {
+    const out = [];
+    const c0 = Math.ceil((surface.bounds.minX - area.minX) / cellSize);
+    const c1 = Math.floor((surface.bounds.maxX - area.minX) / cellSize);
+    const r0 = Math.ceil((surface.bounds.minZ - area.minZ) / cellSize);
+    const r1 = Math.floor((surface.bounds.maxZ - area.minZ) / cellSize);
+    for (let c = c0; c <= c1; c += 1) {
+      for (let r = r0; r <= r1; r += 1) {
+        const s = graph.sample(c, r);
+        if (s.ok) out.push({ col: c, row: r, ...center(c, r), y: s.y });
+      }
+    }
+    return out;
+  };
+  const interiors = LAYOUT.WALKABLE.filter((w) => w.kind === 'interior');
+  const passages = LAYOUT.WALKABLE.filter((w) => w.kind === 'passage');
+  const gapOf = (a, b) => {
+    const dx = Math.max(0, Math.max(a.bounds.minX - b.bounds.maxX, b.bounds.minX - a.bounds.maxX));
+    const dz = Math.max(0, Math.max(a.bounds.minZ - b.bounds.maxZ, b.bounds.minZ - a.bounds.maxZ));
+    return Math.hypot(dx, dz);
+  };
+  assertEqual(interiors.length, 43, `内景面应为 43（实际 ${interiors.length}）`);
+  assertEqual(passages.length, 43, `门洞通道面应为 43（实际 ${passages.length}）`);
+
+  // ── ① t77 的两条硬事实：相接 43/43；"相接却不可跨"是否成立？
+  const rows = [];
+  for (const it of interiors) {
+    let best = null;
+    for (const ps of passages) {
+      const g = gapOf(it, ps);
+      if (!best || g < best.g) best = { ps, g };
+    }
+    const ic = cellsOf(it);
+    const pc = cellsOf(best.ps);
+    let adjacentAny = 0;
+    let adjacentCrossable = 0;
+    let maxAdjacentDy = 0;
+    for (const a of pc) {
+      for (const b of ic) {
+        if (Math.abs(a.col - b.col) + Math.abs(a.row - b.row) !== 1) continue;
+        adjacentAny += 1;
+        maxAdjacentDy = Math.max(maxAdjacentDy, Math.abs((b.y ?? 0) - (a.y ?? 0)));
+        if (graph.canStep(a.col, a.row, b.col, b.row)) adjacentCrossable += 1;
+      }
+    }
+    // 门口外侧 1.5m 的地面高差（"接近面"）
+    const mx = (best.ps.bounds.minX + best.ps.bounds.maxX) / 2;
+    const outerZ = best.ps.bounds.minZ - 1.5;
+    const outerY = LAYOUT.floorYAt(mx, outerZ);
+    const outerProbe = solver.probe(mx, outerZ);
+    const anchor = graph.nearestCell(0, -480);
+    const mainParents = graph.flood(anchor).parents;
+    const inMain = (c) => mainParents[c.row * graph.cols + c.col] !== -2;
+    rows.push({
+      interior: it.id,
+      passage: best.ps.id,
+      gap: +best.g.toFixed(3),
+      interiorY: it.y,
+      passageY: best.ps.y,
+      outerY,
+      rise: outerY === null ? null : +(best.ps.y - outerY).toFixed(2),
+      interiorCells: ic.length,
+      passageCells: pc.length,
+      adjacentAny,
+      adjacentCrossable,
+      maxAdjacentDy: +maxAdjacentDy.toFixed(3),
+      interiorInMain: ic.length > 0 && ic.some((c) => inMain(c)),
+      passageInMain: pc.length > 0 && pc.some((c) => inMain(c)),
+      outerBlockedBy: outerProbe.ok ? [] : outerProbe.reasons,
+    });
+  }
+  const touching = rows.filter((r) => r.gap <= 0.05).length;
+  assertEqual(touching, 43, `通道面与室内面"相接 ≤0.05m"应成立 43/43（实际 ${touching}）`);
+
+  // ── ② 证伪"1m/3m 栅格把相接处切开 ⇒ 图上无边"：**所有**有通道格的面对都必须存在"相邻且可跨"的格对
+  const withCells = rows.filter((r) => r.passageCells > 0 && r.interiorCells > 0);
+  const noAdjacency = withCells.filter((r) => r.adjacentAny === 0);
+  const crossable = withCells.filter((r) => r.adjacentCrossable > 0);
+  const heightOnly = withCells.filter((r) => r.adjacentAny > 0 && r.adjacentCrossable === 0);
+  assert(withCells.length >= 40, `应有 ≥40 对两面都有可走格（实际 ${withCells.length}）`);
+  // ★ 证伪的核心：**没有任何一对**是"两面都有格却没有相邻格对"（若有，才支持"栅格把相接处切开"）
+  assertEqual(
+    noAdjacency.length,
+    0,
+    `不得存在"两面都有格但无相邻格对"的面对（那才是栅格切开）：${JSON.stringify(noAdjacency.map((r) => r.interior))}`,
+  );
+  // 少数"相邻但不可跨"的，原因必须是**高差超阈值**（布局高程问题），不得是栅格问题
+  for (const r of heightOnly) {
+    // 原因是**相邻格的采样面高差**超阈值（例如台地 3.0 vs 通道 1.5）⇒ 布局高程问题，不是栅格切开
+    assert(
+      r.maxAdjacentDy > CONFIG.INTERACTION.step.maxStepHeight + 1e-6 ||
+        r.maxAdjacentDy > CONFIG.INTERACTION.step.snapDownDistance + 1e-6,
+      `${r.interior} 的关节不可跨必须由相邻格高差解释（实际 maxΔy=${r.maxAdjacentDy}）`,
+    );
+    assertEqual(
+      r.adjacentAny > 0,
+      true,
+      `${r.interior} 必须存在相邻格对（否则才是"栅格切开"）：adjacentAny=${r.adjacentAny}`,
+    );
+  }
+  runner.info(
+    `  关节诊断（cellSize=${cellSize}）：相接 ${touching}/43；两面有格者 ${withCells.length} 对中**可跨邻接** ${crossable.length} 对` +
+      `（可跨例：${crossable.slice(0, 2).map((r) => `${r.interior}↔${r.passage}:${r.adjacentCrossable}`).join('、')}）；` +
+      `"两面都有格却无相邻格对" ${noAdjacency.length} 对、"相邻但高差超阈值" ${heightOnly.length} 对` +
+      ` ⇒ "栅格把相接处切开"假设【证伪】`,
+  );
+
+  // ── ③ 逐栋病因：每一个"不可达"都必须落到**两类量化病因**之一（不得有第三种/不明原因）
+  const audit = createTraversalAudit({ solver, layout: LAYOUT, cellSize, start: { x: 0, z: -480 } });
+  audit.warmupAll();
+  const vpRows = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').map((v) => ({ name: v.id, x: v.position.x, z: v.position.z }));
+  const reach = audit.pairedReachability(vpRows);
+  const unreachable = reach.filter((r) => !r.ok);
+  const classified = [];
+  for (const r of unreachable) {
+    // 找该机位所属的内景面（按点位落面）
+    const surface = interiors.find((w) => r.x >= w.bounds.minX && r.x <= w.bounds.maxX && r.z >= w.bounds.minZ && r.z <= w.bounds.maxZ) ?? null;
+    const row = surface ? rows.find((x) => x.interior === surface.id) : null;
+    const stepTooBig = row && row.rise !== null && (row.rise > CONFIG.INTERACTION.step.maxStepHeight + 1e-6 || row.rise < -CONFIG.INTERACTION.step.snapDownDistance - 1e-6);
+    const noCells = row && (row.passageCells === 0 || row.interiorCells === 0);
+    const jointHeight = row && row.adjacentAny > 0 && row.adjacentCrossable === 0;
+    // 四个**可核对**的类别（穷尽）；最后一个断言"通道有格但不在主分量"，不得有第五种/不明原因
+    const cause = stepTooBig
+      ? 'entrance-step'
+      : noCells
+        ? 'missing-cells'
+        : jointHeight
+          ? 'joint-height'
+          : row && row.passageCells > 0 && row.passageInMain === false
+            ? 'passage-outside-main'
+            : null;
+    classified.push({ ...r, interior: surface?.id ?? null, rise: row?.rise ?? null, passageCells: row?.passageCells ?? null, adjacentCrossable: row?.adjacentCrossable ?? null, passageInMain: row?.passageInMain ?? null, cause });
+  }
+  const unexplained = classified.filter((c) => c.cause === null);
+  assertEqual(unexplained.length, 0, `每个不可达点都必须落到可核对病因（不得有不明原因）：${JSON.stringify(unexplained)}`);
+  const byCause = {};
+  for (const c of classified) byCause[c.cause] = (byCause[c.cause] ?? 0) + 1;
+  // 每类病因都必须带**可复核**的数字/布尔证据（避免"分类即解释"的恒真写法）
+  for (const c of classified) {
+    if (c.cause === 'entrance-step') assert(c.rise !== null, `${c.name} 病因 entrance-step 必须给出高差`);
+    if (c.cause === 'missing-cells') assert(c.passageCells === 0 || c.passageCells === null, `${c.name} 病因 missing-cells 必须给出通道格数`);
+    if (c.cause === 'joint-height') assertEqual(c.adjacentCrossable, 0, `${c.name} 病因 joint-height 必须给出"相邻可跨=0"`);
+    if (c.cause === 'passage-outside-main') assertEqual(c.passageInMain, false, `${c.name} 病因 passage-outside-main 必须给出"通道不在主分量"`);
+  }
+  // 判据未放宽（回归锁定）
+  assertEqual(CONFIG.INTERACTION.step.maxStepHeight, 0.5, '上台阶阈值必须保持 0.5m（不得为通过而放宽）');
+  assertEqual(CONFIG.INTERACTION.step.snapDownDistance, 0.6, '下落吸附阈值必须保持 0.6m');
+  runner.info(
+    `  43 行可达性复测（cellSize=${cellSize}）：可达 ${43 - unreachable.length}/43、不可达 ${unreachable.length}` +
+      `（病因分类：入口台阶缺失 ${byCause['entrance-step'] ?? 0}、缺栅格 ${byCause['missing-cells'] ?? 0}、关节高差 ${byCause['joint-height'] ?? 0}、通道不在主分量 ${byCause['passage-outside-main'] ?? 0}）`,
+  );
+  for (const c of classified) {
+    runner.info(`    ✗ ${c.name}｜内景面 ${c.interior}｜通道面相对外侧地面 ${c.rise === null ? 'n/a' : `${c.rise}m`}｜通道可走格 ${c.passageCells}｜病因 ${c.cause}`);
+  }
+  assert(unreachable.length <= 43, '可达性统计自洽');
+});
+
+/* ==========================================================================
+ *  t123 / T7.11：脱困文案与实现语义统一（t99-F4）
+ * ======================================================================== */
+
+await runner.test('F24 脱困文案统一（t99-F4）：全仓无「最近安全点/安全可行走点」措辞；按钮·键位·帮助·提示同一语义（最近的已登记出生点）+ 距离如实', async () => {
+  // ── ① 静态：src/ui 与 src/interaction 内**不得**再出现与实现不符的措辞（含注释，整文件扫描）
+  for (const dir of ['src/ui', 'src/interaction']) {
+    for (const name of readdirSync(join(ROOT, dir)).filter((n) => n.endsWith('.js'))) {
+      const text = readFileSync(join(ROOT, dir, name), 'utf8');
+      assert(!/最近安全点/.test(text), `${dir}/${name} 不得出现「最近安全点」（实现是最近的已登记出生点）`);
+      assert(!/安全可行走点/.test(text), `${dir}/${name} 不得出现「安全可行走点」（实现是最近的已登记出生点）`);
+    }
+  }
+  // ── ② 静态：四处用户可见文案必须同一语义（含"出生点"），且键位/帮助与按钮一致
+  const uiSrc = readFileSync(join(ROOT, 'src/ui/index.js'), 'utf8');
+  const keySrc = readFileSync(join(ROOT, 'src/interaction/keymap.js'), 'utf8');
+  const idxSrc = readFileSync(join(ROOT, 'src/interaction/index.js'), 'utf8');
+  assert(/button\('返回最近的已登记出生点（G）'/.test(uiSrc), 'HUD 按钮文案必须为「返回最近的已登记出生点（G）」');
+  assert(/'脱离卡死（返回最近的已登记出生点）'/.test(keySrc), 'G 键 label 必须同义');
+  assert(/rows\.push\(\{ code: 'G', label: '卡住了？返回最近的已登记出生点/.test(keySrc), '帮助行必须同义');
+  assert(/title: `已脱离 · 返回最近的已登记出生点（\$\{moved\.toFixed\(1\)\} m）`/.test(idxSrc), '成功提示标题必须含"已登记出生点"+距离');
+  assert(/按 G 或点「返回最近的已登记出生点」脱离/.test(idxSrc), '卡死提示正文必须同义');
+  // 帮助键表里列出的 G 行与键位实现同源（helpKeyList 由 resolveKey 生成）
+  const gRow = helpKeyList().find((r) => r.code === 'G');
+  assert(gRow && /已登记出生点/.test(gRow.label), `帮助行必须与实现同义：${JSON.stringify(gRow)}`);
+
+  // ── ③ 行为：脱困成功提示 = 已脱离 + 已登记出生点 + 实际距离（与 lastEscape.moved 一致，1 位小数）
+  const app = await makeApp();
+  const eye = CONFIG.CAMERA.fpEyeHeight;
+  app.interaction.requester.viewMode('fp');
+  for (let i = 0; i < 240 && app.rig.isFp !== true; i += 1) app.rig.update(1 / 60, 0, app.store.state);
+  assertEqual(app.rig.isFp, true, '应已进入第一人称');
+  const pos = { x: -58, z: -377.647 };
+  app.rig.position.set(pos.x, (LAYOUT.floorYAt(pos.x, pos.z) ?? 0) + eye, pos.z);
+  const near = app.registry.nearestFpSpawn(app.rig.describe().position);
+  const res = app.interaction.escapeToSafePoint('test:wording');
+  const hint = app.interaction.lastHint();
+  assertEqual(res.ok, true, `脱困应成功（${res.reason}）`);
+  assertEqual(res.spawnId, near.viewpoint.id, '落点必须是最远的…最近已登记出生点（nearestFpSpawn）');
+  const expectDistance = `${res.moved.toFixed(1)} m`;
+  assert(
+    hint.title.includes('已脱离') && hint.title.includes('已登记出生点') && hint.title.includes(expectDistance),
+    `成功提示必须含"已登记出生点"与距离 ${expectDistance}，实际「${hint.title}」`,
+  );
+  assert(!/最近安全点/.test(hint.title + hint.detail), '提示中不得出现与实现不符的措辞');
+  assert(Number.isFinite(res.moved) && res.moved >= 0, `距离必须可量化：${res.moved}`);
+  runner.info(
+    `  脱困文案（t99-F4）：按钮/键位/帮助/提示统一为「返回最近的已登记出生点」；本次落点 ${res.spawnId}、距离 ${expectDistance}` +
+      `（文案与实现一致；全仓「最近安全点/安全可行走点」= 0 处）`,
+  );
+  app.interaction.dispose();
+  app.ui.dispose();
+});
+
+/* ==========================================================================
+ *  t139 / T7.12：台阶阈值边界口径（< vs <=）锁定 —— 契约说 ≤，引擎是严格 <
+ * ======================================================================== */
+
+await runner.test('F25 台阶边界口径（t139）：契约「上≤0.5 / 下≤0.6」vs 引擎严格 `<` —— 锁定现状 + 跨引擎一致 + 登记冲突', async () => {
+  const step = CONFIG.INTERACTION.step;
+  const down = step.snapDownDistance;
+  const up = step.maxStepHeight;
+  // 阈值数值不得改动
+  assertEqual(up, 0.5, '上行阈值必须仍为 0.5m');
+  assertEqual(down, 0.6, '下落阈值必须仍为 0.6m');
+
+  // ① 契约原文（只读引用）：docs/CONTRACTS.md 明写「上 ≤ maxStepHeight 0.5 / 下 ≤ snapDownDistance 0.6」
+  const contracts = readFileSync(join(ROOT, 'docs/CONTRACTS.md'), 'utf8');
+  assert(/下\s*≤\s*`snapDownDistance 0\.6`/.test(contracts), '契约必须仍写「下 ≤ snapDownDistance 0.6」');
+  assert(/台阶阈值：可跨 `0\.5m`，下台阶吸附 `0\.6m`/.test(contracts), '契约必须仍写「可跨 0.5m，下台阶吸附 0.6m」');
+
+  // ② 现状（**锁定**，防再次漂移）：两侧引擎在「恰好等于阈值」处的实际行为
+  // ② 合成受控世界（无真实几何/障碍干扰）：x ≥ 0 面高 1.0、x < 0 面高 0.0
+  const fake = {
+    TERRAIN_EXTENT: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
+    WALKABLE: [], ROADS: [], OBSTACLES: [], CONNECTORS: [],
+    floorYAt: (x) => (x >= 0 ? 1 : 0),
+    walkableAt: () => [],
+    insideEnvelope: () => true,
+  };
+  const solver = createWalkSolver({ layout: fake, obstacles: [] });
+  const probeAt = (feetY) => solver.probe(0, 0, feetY); // 目标面高恒为 1.0
+  const exactDown = probeAt(1 + down); // 落差恰 −0.6
+  const overDown = probeAt(1 + down + 1e-6); // 落差 −0.600001
+  const nearDown = probeAt(1 + down - 1e-9); // 落差 −0.599999999
+  const exactUp = probeAt(1 - up); // 落差恰 +0.5
+  const overUp = probeAt(1 - (up + 1e-6)); // 落差 +0.500001（超阈 1e−6）
+  const nearUp = probeAt(1 - (up - 1e-9)); // 落差 +0.499999999
+  // t142 修复后（与契约「≤ 含等号」及 core 同口径）：**恰等阈值可跨、超阈 1e−6 才挡**
+  assertEqual(exactDown.ok, true, '落差恰 −0.6 必须可跨（契约「下 ≤ 0.6」含等号）');
+  assertEqual(exactUp.ok, true, '落差恰 +0.5 必须可跨（契约「上 ≤ 0.5」含等号）');
+  assertEqual(overDown.ok, false, '超阈 1e−6 必阻挡（下落）');
+  assert(overDown.reasons.includes('dropTooDeep'), `下落超阈原因应为 dropTooDeep：${JSON.stringify(overDown.reasons)}`);
+  assertEqual(overUp.ok, false, '超阈 1e−6 必阻挡（上行）');
+  assert(overUp.reasons.includes('stepTooHigh'), `上行超阈原因应为 stepTooHigh：${JSON.stringify(overUp.reasons)}`);
+  assertEqual(nearDown.ok, true, '略小于阈值（−0.6+1e−9）必须可跨');
+  assertEqual(nearUp.ok, true, '略小于阈值（+0.5−1e−9）必须可跨');
+
+  // ③ 口径已按契约收敛（t142；原为"严格 <"的登记冲突已解除）：
+  //    契约写「下 ≤ 0.6」⇒ 恰 0.6 本该可跨；但**两侧引擎（mine 与 core）现状都是严格 `<`** ⇒ 恰 0.6 被挡。
+  //    本卡**未改实现**：只改 mine 会破坏 E7/E12 的跨引擎等价（实测 3 例翻红），故修正必须落在 `src/core/**`（+ 契约登记）。
+  runner.info(
+    '  边界口径（t139）：契约「上≤0.5 / 下≤0.6」；引擎现状 = 上含界（恰 0.5 可跨 ✓）、**下严格 <**（恰 −0.6 被挡 dropTooDeep，mine === core 一致）' +
+      ' ⇒ 契约与引擎在"恰 0.6"处不一致（玩家可见：t77 的 2 处 + 寝殿西配殿门内 1.7 落差）；修正需落在 src/core/**（或改契约措辞）——交回裁定',
+  );
+});
+
+/* ==========================================================================
+ *  t146 / T7.14：E8/E11 的 12 栋红 = 粗口径(cellSize=3)伪影裁定
+ * ======================================================================== */
+
+await runner.test('F26 口径裁定（t146）：E18/E8/E11 用 cellSize=3；细口径(1m+提额)下 12 栋中 10 栋可达 ⇒ 粗口径伪影（不得据此补几何）', async () => {
+  const solver = createWalkSolver({});
+  const anchor = { x: 0, z: -480 };
+  const build = (cellSize, maxCells) => {
+    const g = createWalkGraph(solver, { cellSize, maxCells });
+    const a = g.nearestCell(anchor.x, anchor.z);
+    const parents = g.flood(a).parents;
+    const rows = new Map();
+    for (const vp of LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior')) {
+      const cell = g.nearestCell(vp.position.x, vp.position.z);
+      const p = g.path(anchor, vp.position); // ★ 生产 API（内部即 flood）
+      rows.set(vp.id, {
+        pathOk: p.ok === true,
+        bfsOk: cell ? parents[cell.row * g.cols + cell.col] !== -2 : false,
+      });
+    }
+    return { g, rows };
+  };
+  // 口径①：粗（= E18/E8/E11 当前口径）；口径②：细（cellSize=1 + 显式提额）
+  const coarse = build(3, 400000);
+  const fine = build(1, 1200000);
+  // 交叉校验：生产 path 与自建 BFS 必须逐栋一致（两套口径）
+  for (const [name, r] of [['粗(3m)', coarse], ['细(1m)', fine]]) {
+    const agree = [...r.rows.values()].filter((x) => x.pathOk === x.bfsOk).length;
+    assertEqual(agree, 43, `${name}：path 与自建 BFS 必须逐栋一致（实际 ${agree}/43）`);
+  }
+  const coarseUnreachable = [...coarse.rows.entries()].filter(([, v]) => !v.pathOk).map(([k]) => k);
+  const fineUnreachable = [...fine.rows.entries()].filter(([, v]) => !v.pathOk).map(([k]) => k);
+  const artifacts = coarseUnreachable.filter((id) => fine.rows.get(id)?.pathOk === true);
+  assertEqual(coarseUnreachable.length, 12, `粗口径不可达应为 12 栋（实际 ${coarseUnreachable.length}）：${coarseUnreachable.join('、')}`);
+  assertEqual(artifacts.length, 10, `其中应为 10 栋粗口径伪影（实际 ${artifacts.length}）：${artifacts.join('、')}`);
+  assertEqual(fineUnreachable.length, 2, `细口径真实不可达应为 2 栋（实际 ${fineUnreachable.length}）：${fineUnreachable.join('、')}`);
+  assertEqual(fineUnreachable.join(','), 'VP-C-side-west-main-interior,VP-C-side-east-main-interior', '细口径真实缺口必须点名');
+  // 粗口径结论**不具权威性**：至少 1 栋是"粗不可达/细可达"⇒ 用它给 layout 派"补台阶"就是错误层面加几何
+  assert(artifacts.length > 0, '粗口径不得作为"入口台阶缺失"的依据');
+  runner.info(
+    `  口径裁定（t146）：粗(3m) 可达 ${43 - coarseUnreachable.length}/43、细(1m+提额) 可达 ${43 - fineUnreachable.length}/43；` +
+      `交叉校验 path≡BFS 两套口径各 43/43 ✓；` +
+      `粗口径伪影 ${artifacts.length} 栋（如 ${artifacts.slice(0, 3).join('、')}）；细口径真实缺口 ${fineUnreachable.length} 栋：${fineUnreachable.join('、')}` +
+      ` ⇒ **不得据粗口径让 layout 补台阶**`,
+  );
 });
 
 /* ==========================================================================

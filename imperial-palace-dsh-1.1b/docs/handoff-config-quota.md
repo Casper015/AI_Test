@@ -74,3 +74,41 @@ $ node scripts/audit.mjs --enforce            → exit 0
 - `docs/CONTRACTS.md` **未改**（待 t89 并入 §4 文案并递增契约版本）；
 - `tests/**` **未改**（§3 清单交回派单：`zone-west:673` 临时常量、其余 zone 测试与 `layout.test` 的配额 pin 归 t85）；
 - 未删除任何内容、未关闭任何检查。
+
+## 6. t93（分区配额单一权威源）：zone 测试去除硬编码/临时豁免
+
+### 6.1 首要目标：`D_BUDGET_APPROVED` 收口
+| 位置 | 旧 | **新** |
+| --- | --- | --- |
+| `tests/zone-west.test.mjs:676` | `const D_BUDGET_APPROVED = 56;`（t62 的临时常量） | **`const D_BUDGET_APPROVED = BUDGET.drawCalls.perZone.D;`**（唯一权威源） |
+| `tests/zone-west.test.mjs:677` | `const D_BUDGET_EFFECTIVE = Math.max(D_BUDGET_INITIAL, D_BUDGET_APPROVED);` | **`= BUDGET.drawCalls.perZone.D;`**（去掉 `max()` 临时余量，与 t92 对 E 区的收紧同口径） |
+| `tests/zone-west.test.mjs:675` | `const D_BUDGET_INITIAL = BUDGET.drawCalls.perZone.D; // 40（初始诊断目标）` | `const D_BUDGET_DIAGNOSTIC_INITIAL = 40;`（**仅打印用**的历史诊断目标，不参与断言） |
+
+**权威源**：`CONFIG.BUDGET.drawCalls.perZone = {B:70,C:60,D:56,E:56,F:80}`（`scripts/audit.mjs:649` 读同一处）。**未放宽任何断言**（`<= perZone.D` 严格比较，未写成 `<= 350` 之类恒真式；断言数只增不减）。
+
+### 6.2 全量排查结论（`grep -rn "perZone|drawCallBudget|70|50|40|56" tests/zone-*.mjs`）
+- **已就位（无需改）**：`zone-forecourt:50/907-912`（读 `perZone.B`）· `zone-inner:788`（`perZone[ZONE]`，t92 已收紧）· `zone-east:553`（`perZone[ZONE]`，t92 已收紧）· `zone-garden:44/727-738/1031-1036`（读 `perZone.F`）。
+- **本次改为单一权威源**：`zone-west:675-677`（见 §6.1）。
+- **非配额字面量（逐条说明）**：`zone-west:675` 的历史诊断值 40（仅打印）；`zone-forecourt:618` 与 `zone-west:604` 的 `radius <= 40`（**几何扫描半径**，非配额）；`zone-garden:1035` 的 `interiorTriangles <= 4000`（**内景三角面预算**，属 `BUDGET.triangles` 族，非分区绘制配额）。
+- **随 t102/t103 演进的陈旧 pin（本次一并同步，均注明来源）**：
+  | 位置 | 旧 | 新 | 依据 |
+  | --- | --- | --- | --- |
+  | `zone-forecourt:263` | 可行走面 **27** | **51**（+22 B 区过渡台阶 t102 +2 亭门槛 t103） | t102/t103 |
+  | `zone-west:179` | 可行走面 **17** | **25**（+8 D 区过渡台阶 t102） | t102 |
+  | `zone-garden:790` 起 | 「不可进入 → 不应有门洞」对亭亦成立 | **亭例外分支**：`hasDoor===true` + `blocks==='exceptDoor'` + `door!==null`（t103 开敞亭可通行但不可进入内景） | t103 |
+
+### 6.3 回归现状（实测）
+```
+zone-west      31 / 31  ✓（exit 0）
+zone-inner     36 / 36  ✓（exit 0）
+zone-east      32 / 32  ✓（exit 0）
+zone-garden    37 / 37  ✓（exit 0）
+zone-forecourt 38 / 39  ✗ 仍有 1 项
+node scripts/audit.mjs --enforce → exit 0（预算与契约检查全部通过）
+```
+
+### 6.4 **残余未闭合项（本卡不放大、不放宽）**
+- **位置**：`tests/zone-forecourt.test.mjs:687` `assert(walkIn.length >= 4, '从地坪可走入门内至少应有 4 栋')` ⇒ **实测 3**。
+- **归因**：该项衡量的是**经 `ROAD` 从院落地坪走入门内**（测试自带 info 写明“台明正面**无注册 ROAD**（layout 侧缺口，与 verify-completeness §5.3 不连通清单同源）”。t102 登记的是**可行走过渡台阶**（`WK-*-transition-*`），**不是 ROAD** ⇒ 不满足该口径。
+- **为何不在本卡修**：修复需在 **`src/shared/layout.js` 注册台明正面 ROAD**，**不在 t93 的 inScope**（本卡 inScope 仅五个 zone 测试 + 本文件）。
+- **纪律**：**未把 4 改小**（不静默放宽），如实留红并归因 ⇒ 建议单开一张"台明正面 ROAD 登记"卡（layout 侧）。

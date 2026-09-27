@@ -734,6 +734,9 @@ export async function createZone(ctx) {
     const cx = round((bounds.minX + bounds.maxX) / 2);
     const cz = round((bounds.minZ + bounds.maxZ) / 2);
     const dx = round((bounds.maxX - bounds.minX) * 0.28);
+    // t92：灯位数量**保持 2 条/栋**。曾按面积分档给窄小院房只放 1 条（措施②），但 A/B 实测证明
+    // 它会把环境系统的光强集中到房间中点、night 截断反而更高（C-annex-west 5.78%→6.11%、
+    // C-annex-east 6.23%→8.23%），故**撤回**；剩余 dusk/night 超标按"灯池/强度令牌"量化交回（回执 §B.7）。
     for (const [i, offset] of [-dx, dx].entries()) {
       const lamp = {
         id: `LA-${ZONE_ID}-${slot.id}-${String(i + 1).padStart(2, '0')}`,

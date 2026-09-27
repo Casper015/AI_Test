@@ -34,6 +34,7 @@ const runner = createTestRunner('core.test.mjs · 唯一渲染内核 / 相机装
 const THREE = await loadThree();
 const { CONFIG, EVENTS } = await loadModule('src/shared/config.js');
 const LAYOUT = await loadModule('src/shared/layout.js');
+const LAYOUT_SLICE = await loadModule('src/core/layout-slice.js');
 const { createEventBus, EventBusError } = await loadModule('src/core/events.js');
 const { createStateStore, createStateController, validateStateShape, STATE_FIELDS } = await loadModule('src/core/state.js');
 const { createRegistry, RegistryError } = await loadModule('src/core/registry.js');
@@ -889,14 +890,14 @@ await runner.test('查询辅助：按点/包围盒取建筑、最近 fp-spawn、
   const lamps = registry.nearestLightAnchors({ x: 0, y: 0, z: -390 }, 3);
   assertEqual(lamps.length, 3);
   assert(lamps[0].distance <= lamps[2].distance, '灯位应按距离升序');
-  // t76：interior 机位由 layout 驱动（LAYOUT 1.1.10 = 43 栋内景各 1 个），不再硬编码 2
+  // t76：interior 机位由 layout 驱动（LAYOUT 1.1.17 = 43 栋内景各 1 个），不再硬编码 2
   const interiorVpIds = LAYOUT.VIEWPOINTS.filter((v) => v.mode === 'interior').map((v) => v.id);
   assertEqual(
     registry.viewpointsByMode('interior').length,
     interiorVpIds.length,
     `interior 机位数应等于 layout 中 mode=interior 的登记数（实际登记 ${interiorVpIds.length}）`,
   );
-  assertEqual(interiorVpIds.length, 43, 'LAYOUT 1.1.10：43 栋内景各 1 个 interior 机位（t72 城门 4 + t73 12 + t74 23 + 既有门殿 4）');
+  assertEqual(interiorVpIds.length, 43, 'LAYOUT 1.1.17：43 栋内景各 1 个 interior 机位（t72 城门 4 + t73 12 + t74 23 + 既有门殿 4）');
   assert(
     interiorVpIds.every((id) => /-interior$/.test(id)),
     `interior 机位命名应统一为 *-interior（异常：${interiorVpIds.filter((id) => !/-interior$/.test(id)).join(',')}）`,
@@ -914,7 +915,7 @@ async function greyResult() {
   return grey;
 }
 
-await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 / 81 障碍 / 157 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.10）', async () => {
+await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 / 81 障碍 / 167 可走面 / 61 视角 / 49 灯位；LAYOUT 1.1.17）', async () => {
   const grey = await greyResult();
   const { problems, stats } = validateZoneResult('GREYBOX', grey.result, { THREE, scope: 'city', expectBuildings: LAYOUT.SLOTS.length });
   assertNoProblems(problems);
@@ -925,7 +926,7 @@ await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 
   assertEqual(stats.viewpoints, LAYOUT.VIEWPOINTS.length);
   assertEqual(stats.lightAnchors, LAYOUT.LIGHT_ANCHORS.length);
   assertEqual(stats.viewpointsByMode['fp-spawn'], 5, '五个区域各 1 个 fp-spawn（t75 未改）');
-  // t76：按 layout 实际值（LAYOUT 1.1.10：interior 43 / zone 7 / focus-extra 6 ⇒ 合计 61；t102/t103 未改机位）
+  // t76：按 layout 实际值（LAYOUT 1.1.17：interior 43 / zone 7 / focus-extra 6 ⇒ 合计 61；t102/t103/t126/t128/t131/t134 未改机位）
   const byMode = LAYOUT.VIEWPOINTS.reduce((acc, v) => {
     acc[v.mode] = (acc[v.mode] ?? 0) + 1;
     return acc;
@@ -940,16 +941,27 @@ await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 
     '四种机位模式之和应等于 layout.VIEWPOINTS 总数（61）',
   );
   // t108：同步冻结计数到当前树（精确相等，未放宽）：
-  //   LAYOUT 1.1.10 = 157 条 = 112（t75 口径：28 条地面/桥面/台基/外域 + 43 interior + 43 passage）
+  //   LAYOUT 1.1.17 = 167 条 = 112（t75 口径：28 条地面/桥面/台基/外域 + 43 interior + 43 passage）
   //                        + 43 门外过渡台阶（t102，18 栋，id 后缀 -transition-N，kind 用既有 ground）
-  //                        +  2 条后续登记的 ground 面（112 → 114，随 t102 同批落地）
-  assertEqual(LAYOUT.WALKABLE.length, 157, 'LAYOUT 1.1.10：可行走面 157 条（112 + 43 门外过渡台阶 + 2 条后续 ground 面，t102；kind 用既有 ground + id 后缀 -transition-N）');
+  //                        +  2 门槛面（t103：10 座亭可通行化 + B 两座门槛面
+  //                                WK-B-pavilion-gate-{west,east}-threshold，kind 用既有 ground，id 后缀 -threshold）
+  //                        +  4 条 terrace 面（t126：tier2 有界开槽 ⇒ 单块 1 → 5 段，−1+5 净 +4；kind='terrace'）
+  //                        +  8 条 t128：C-bed-terrace 开槽 1 → 5 段（净 +4，kind='terrace'）
+  //                                + C 两栋各 2 级台阶（4 条 `-transition-N` 台阶面，kind='ground'）
+  //                        +  2 条 t131：E-court3-hall 门外 2 级台阶（`-transition-N`，kind='ground'）⇒ ground 62 → 64
+  //                        −  4 条 t134：删除 4 片残片
+  //                                `WK-B-terrace-tier2-{west,east}`、`WK-C-bed-terrace-{west,east}`（kind='terrace'）⇒ terrace 12 → 8
+  assertEqual(
+    LAYOUT.WALKABLE.length,
+    167,
+    'LAYOUT 1.1.17：可行走面 167 条（112 + 43 门外过渡台阶 t102 + 2 门槛面 t103 + 4 条 terrace 面 t126 + 8 条 t128（C-bed-terrace 开槽 1→5 净 +4 + C 两栋各 2 级台阶 4 条 -transition 台阶面）+ 2 条 t131（E-court3-hall 门外 2 级台阶）− 4 条 t134（删除残片 WK-B-terrace-tier2-{west,east} 与 WK-C-bed-terrace-{west,east}，kind=terrace）；kind 用既有 ground / terrace + id 后缀 -transition-N / -threshold）',
+  );
   assertEqual(
     LAYOUT.WALKABLE.filter((w) => w.kind === 'passage').length,
     43,
     'passage 门洞通道面应为 43 条（t75；不参与内景包围盒）',
   );
-  // t108 新增：157 的**组成自证**（分项之和 = 总数；transition 面 43 条、覆盖 18 栋）
+  // t108 新增、t130 建立、t136 同步：167 的**组成自证**（分项之和 = 总数；transition 面 49 条、覆盖 21 栋；threshold 2 条；terrace 8 条）
   {
     const byKind = LAYOUT.WALKABLE.reduce((acc, w) => {
       acc[w.kind] = (acc[w.kind] ?? 0) + 1;
@@ -959,15 +971,33 @@ await runner.test('灰盒满足全部契约字段与数量（67 栋 / 32 连接 
     assertEqual(sum, LAYOUT.WALKABLE.length, `按 kind 分项之和应等于总数（${sum} vs ${LAYOUT.WALKABLE.length}）`);
     assertEqual(byKind.interior, 43, 'interior 43（t72 4 城门 + t73 12 hall + t74 23 sideHall + 既有 4）');
     assertEqual(byKind.passage, 43, 'passage 43（t75 门洞通道面）');
+    // t127：t126 的 +4 落在 kind='terrace'（tier2 有界开槽：单块 1 → 5 段）
+    assertEqual(byKind.terrace, 8, `terrace 面应为 8 条（t126 +4、t128 +4、t134 删残片 −4；实际 ${byKind.terrace}）`);
     const transitions = LAYOUT.WALKABLE.filter((w) => /-transition-\d+$/.test(w.id));
-    assertEqual(transitions.length, 43, '门外过渡台阶面应为 43 条（t102）');
+    assertEqual(transitions.length, 49, '门外过渡台阶面应为 49 条（t102 的 43 + t128 的 C 两栋 4 条 + t131 的 E-court3-hall 2 条）');
     assert(
       transitions.every((w) => w.kind === 'ground'),
       '过渡台阶面必须复用既有 kind=ground（不得引入新 kind，否则消费方白名单会漏）',
     );
     const slotIds = new Set(transitions.map((w) => w.id.replace(/-transition-\d+$/, '')));
-    assertEqual(slotIds.size, 18, `过渡台阶应覆盖 18 栋（实际 ${slotIds.size}）`);
-    runner.info(`WALKABLE ${LAYOUT.WALKABLE.length} 条组成：${Object.entries(byKind).map(([k, n]) => `${k}:${n}`).join(' / ')}；transition 43 面 / 18 栋`);
+    assertEqual(slotIds.size, 21, `过渡台阶应覆盖 21 栋（t102 的 18 + t128 的 C 两栋 + t131 的 E-court3-hall；实际 ${slotIds.size}）`);
+    // t113：把 +2 的**身份**也钉住（t108 注释曾把归属写成 t102）——
+    //   +2 = t103 的门槛面，id 后缀 `-threshold`、kind='ground'、所属两座亭门殿 hasDoor=true
+    const thresholds = LAYOUT.WALKABLE.filter((w) => /-threshold$/.test(w.id));
+    assertEqual(thresholds.length, 2, `门槛面应为 2 条（t103；实际 ${thresholds.length}）`);
+    assert(
+      thresholds.every((w) => w.kind === 'ground'),
+      '门槛面必须复用既有 kind=ground（不得引入新 kind）',
+    );
+    assertEqual(
+      thresholds.map((w) => w.id).sort().join(','),
+      'WK-B-pavilion-gate-east-threshold,WK-B-pavilion-gate-west-threshold',
+      '两条门槛面应恰为 B 两座亭门殿（WK-B-pavilion-gate-{west,east}-threshold）',
+    );
+    for (const slotId of ['B-pavilion-gate-west', 'B-pavilion-gate-east']) {
+      assertEqual(LAYOUT.SLOTS.find((sl) => sl.id === slotId)?.hasDoor, true, `${slotId} 应为可通行门殿（t103）`);
+    }
+    runner.info(`WALKABLE ${LAYOUT.WALKABLE.length} 条组成：${Object.entries(byKind).map(([k, n]) => `${k}:${n}`).join(' / ')}；transition ${transitions.length} 面 / ${slotIds.size} 栋；threshold ${thresholds.length} 面`);
   }
   assertEqual(grey.result.root.parent, null, 'root 未挂载（挂载归 main.js）');
   const transformOk = ['x', 'y', 'z'].every((k) => grey.result.root.position[k] === 0);
@@ -1122,6 +1152,68 @@ await runner.test('main.js 在 Node 内可被 import（只在浏览器里自动�
   assertEqual(typeof mod.bootstrap, 'function');
   assertEqual(typeof mod.countRenderables, 'function');
   assertEqual(mod.default, mod.bootstrap);
+});
+
+/* ========================================================================== */
+runner.section('t127：门洞净宽实测（probeDoorClearance 直读，替代"只比声明字段"）');
+/* ========================================================================== */
+
+await runner.test('t127：probeDoorClearance 语义 —— 无效 id ⇒ null、空串 ⇒ TypeError、无门槽位 ⇒ 0', () => {
+  const { probeDoorClearance, probeDoorClearanceReport } = LAYOUT_SLICE;
+  assertEqual(probeDoorClearance('Z-不存在-该建筑'), null, '无效 slotId 必须返回 null（不得静默当 0）');
+  assertEqual(probeDoorClearanceReport('Z-不存在-该建筑').reason, 'unknown-slot');
+  let threw = null;
+  try {
+    probeDoorClearance('');
+  } catch (e) {
+    threw = e.constructor.name;
+  }
+  assertEqual(threw, 'TypeError', '空 slotId 必须显式报错');
+  const noDoorSlot = LAYOUT.SLOTS.find((sl) => !sl.hasDoor);
+  assert(noDoorSlot, '应存在无门槽位（用于"无门 ⇒ 0"断言）');
+  assertEqual(probeDoorClearance(noDoorSlot.id), 0, `无门槽位 ${noDoorSlot.id} 应返回 0`);
+  assertEqual(probeDoorClearanceReport(noDoorSlot.id).reason, 'no-door');
+  runner.info(`语义：无效=${probeDoorClearance('Z-不存在')}｜空串=TypeError｜无门(${noDoorSlot.id})=0 ✓`);
+});
+
+await runner.test('t127：全部有门槽位逐条实测 —— 声明 passable 与门洞净宽/接近阻挡必须一致（声明可被实测推翻）', () => {
+  const { probeDoorClearanceReport } = LAYOUT_SLICE;
+  const slots = LAYOUT.SLOTS.filter((sl) => sl.hasDoor);
+  assert(slots.length >= 60, `有门槽位应 ≥60（实际 ${slots.length}）`);
+  const mismatches = [];
+  const rows = [];
+  let passableCount = 0;
+  let blockedCount = 0;
+  for (const slot of slots) {
+    const r = probeDoorClearanceReport(slot.id);
+    const width = r.doorWidth ?? slot.door?.width ?? null;
+    const need = width === null ? null : Math.max(1.1, width * 0.5);
+    rows.push({ id: slot.id, width, declared: r.passable, band: r.clearWidth, need, blockedBy: r.blockedBy, resolved: r.declaredBlockerResolved, approachBlockedAt: r.approachBlockedAt });
+    if (r.passable === true) {
+      passableCount += 1;
+      if (!(typeof r.clearWidth === 'number' && r.clearWidth >= need)) {
+        mismatches.push(`${slot.id}: 声明可通行但实测净宽 ${r.clearWidth} < 阈值 ${need?.toFixed(2)}（width=${width}）`);
+      }
+    } else if (r.passable === false) {
+      blockedCount += 1;
+      // 声明"不可通行"必须**两边都成立**：门洞本体净宽 0 且声明的阻挡者在门外接近路径上真的挡
+      if (r.clearWidth !== 0) mismatches.push(`${slot.id}: 声明不可通行但门洞净宽 ${r.clearWidth} ≠ 0`);
+      if (!r.declaredBlockerResolved) mismatches.push(`${slot.id}: 声明的阻挡者 ${r.blockedBy} 在碰撞层里找不到`);
+      if (r.approachBlockedAt === null) mismatches.push(`${slot.id}: 声明的阻挡者 ${r.blockedBy} 未在门外接近路径上实测到阻挡`);
+    } else {
+      mismatches.push(`${slot.id}: door.passable 未声明（应为布尔）`);
+    }
+  }
+  assertEqual(mismatches.length, 0, `声明与实测必须一致，发现 ${mismatches.length} 例：${mismatches.slice(0, 5).join('；')}`);
+  assertEqual(passableCount + blockedCount, slots.length, '每个有门槽位都应带布尔 passable 声明');
+  assert(blockedCount >= 1, `应有 ≥1 个显式声明不可通行的门（实际 ${blockedCount}）`);
+  const minBand = Math.min(...rows.map((r) => r.band));
+  const maxBand = Math.max(...rows.map((r) => r.band));
+  runner.info(`63 类逐条：可通行 ${passableCount} / 声明不可通行 ${blockedCount} / 共 ${slots.length}；净宽 ${minBand}–${maxBand}m`);
+  for (const id of ['D-court3-pavilion', 'E-court3-pavilion', 'D-court4-pavilion', 'B-pavilion-gate-west']) {
+    const r = rows.find((x) => x.id === id);
+    runner.info(`  ${id.padEnd(22)} width=${r.width} passable=${r.declared} 净宽=${r.band} blockedBy=${r.blockedBy} 接近阻挡@${r.approachBlockedAt}`);
+  }
 });
 
 /* ========================================================================== */

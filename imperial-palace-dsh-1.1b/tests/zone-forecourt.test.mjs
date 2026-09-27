@@ -260,7 +260,7 @@ await runner.test('§3.3/§4/§5/§6/§8.3 全部字段通过，建筑/通道/�
   assertEqual(stats.obstacles, 12, '障碍数（12 栋建筑各一条）');
   // t62：layout 1.1.5 已为 10 栋 visitable 建筑注册内景（室内面 + 门洞通道面 + 机位）
   assertEqual(stats.walkable, zoneLayout.walkable.length, '可行走面数（应与切片一致）');
-  assertEqual(stats.walkable, 27, '可行走面数 = 8 原有 + 10 室内 + 10 门洞通道（t75）');
+  assertEqual(stats.walkable, 51, '可行走面数 = 8 原有 + 10 室内 + 10 门洞通道（t75）+ 22 B 区门外过渡台阶（t102）+ 2 亭入口门槛（t103）');
   assertEqual(stats.ramps, 8, '坡道/台阶数（= 本区 Δy ≠ 0 的道路段数）');
   assertEqual(stats.viewpoints, 4 + 9, "机位数 = 4 原有 + 9 内景机位（B-hall-main 复用既有 VP-B-interior 别名，故 10 栋对应 9 个新机位 + 1 个别名）");
   assertEqual(stats.lightAnchors, 24 + 20, '灯位数 = 24 中轴灯位 + 2×10 内景补光');

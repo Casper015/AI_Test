@@ -786,7 +786,14 @@ await runner.test('碰撞：26 个 F 障碍（含 4 墙 / 4 河 / 2 池 / 2 假�
     const o = obstacles.find((x) => x.buildingId === b.id);
     assert(o, `${b.id} 未进入 colliders.obstacles（建筑必须登记障碍）`);
     const hasDoor = b.door !== null;
-    if (!b.visitable) {
+    const isPavilion = (b.kind ?? b.category) === 'pavilion';
+    if (!b.visitable && isPavilion) {
+      /* t103：开敞亭**可通行**（门洞类、仅门洞阻挡）但**不可进入内景**（无 interior 机位）
+         ⇒ 期望改为「有门洞 + blocks='exceptDoor'」，不再是旧口径的「不可进入 → 不应有门洞」。 */
+      assertEqual(hasDoor, true, `${b.id} 开敞亭可通行（t103）→ 必须有门洞规格`);
+      assertEqual(o.blocks, 'exceptDoor', `${b.id} 开敞亭 → 仅门洞阻挡（exceptDoor），不得回退整足迹阻挡`);
+      assert(o.door !== null, `${b.id} 开敞亭 → obstacle.door 必须非空`);
+    } else if (!b.visitable) {
       assertEqual(hasDoor, false, `${b.id} 不可进入 → 不应有门洞`);
       assertEqual(o.blocks, 'all', `${b.id} 不可进入 → 必须整体阻挡`);
       assertEqual(o.door, null, `${b.id} 无门洞 → obstacle.door 应为 null`);

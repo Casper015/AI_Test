@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { basename, resolve } from 'node:path';
 export function decodePng(path) {
   const buf = readFileSync(path);
   let off = 8, w = 0, h = 0, bitDepth = 8, colorType = 6; const idat = [];
@@ -58,7 +60,15 @@ export function regionStats(img, rect) {
   const ringMean = ring.reduce((a, b) => a + b, 0) / ring.length;
   return { rect: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, pixels: lum.length, mean: +mean.toFixed(4), p05: +q(0.05).toFixed(4), p50: +q(0.5).toFixed(4), p95: +q(0.95).toFixed(4), contrastRange: +(q(0.95) - q(0.05)).toFixed(4), ringMean: +ringMean.toFixed(4), contrastVsRing: +Math.abs(mean - ringMean).toFixed(4) };
 }
-const [cmd, file, rectJson] = process.argv.slice(2);
-const img = decodePng(file);
-if (cmd === 'stats') console.log(JSON.stringify(stats(img), null, 1));
-else console.log(JSON.stringify({ ...stats(img), region: regionStats(img, JSON.parse(rectJson)) }, null, 1));
+/* CLI 只在**直接执行**时运行；被 import（t99-cdp-driver.mjs）时不得有副作用。 */
+const invokedDirectly = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return resolve(entry) === fileURLToPath(import.meta.url) || basename(entry) === basename(fileURLToPath(import.meta.url));
+})();
+if (invokedDirectly) {
+  const [cmd, file, rectJson] = process.argv.slice(2);
+  const img = decodePng(file);
+  if (cmd === 'stats') console.log(JSON.stringify(stats(img), null, 1));
+  else console.log(JSON.stringify({ ...stats(img), region: regionStats(img, JSON.parse(rectJson)) }, null, 1));
+}

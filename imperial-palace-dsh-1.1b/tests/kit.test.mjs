@@ -247,11 +247,22 @@ startSection('2 材质令牌驱动 / 光泽规范 / 共享缓存 / 贴图预算'
   eq('暖白石 metalness = 0', kit.materials.get('stoneWhite').metalness, 0, 1e-9);
   eq('宫红 metalness = 0（哑光）', kit.materials.get('plasterRed').metalness, 0, 1e-9);
   eq('木作 metalness = 0', kit.materials.get('timberLacquer').metalness, 0, 1e-9);
+  // 统一旧化（t114 同步 + 加固）：期望值取自当前 CONFIG（`WEATHERING.roughnessBias`），
+  // 原意 = "每个材质都恰好叠加一次统一旧化"。除等值断言外，再加"只叠加一次/不被重复或遗漏"的差值断言。
+  const roughnessDiffs = new Map();
   for (const id of ['glazeTile', 'plasterRed', 'stoneWhite', 'timberLacquer', 'paintingTeal', 'pavingStone']) {
     const spec = CONFIG.MATERIALS[id];
     const expected = Math.min(1, spec.roughness + CONFIG.WEATHERING.roughnessBias);
-    eq(`材质 ${id} 叠加统一旧化 roughnessBias`, kit.materials.get(id).roughness, expected, 1e-9);
+    const actual = kit.materials.get(id).roughness;
+    eq(`材质 ${id} 叠加统一旧化 roughnessBias`, actual, expected, 1e-9);
+    // 加固：实际差值必须 == 期望差值（含 clamp 情形）——可捕获"重复叠加/漏叠加"这类真实回归
+    eq(`材质 ${id} 统一旧化只叠加一次（差值 == 期望差值）`, +(actual - spec.roughness).toFixed(9), +(expected - spec.roughness).toFixed(9), 1e-9);
+    roughnessDiffs.set(id, +(actual - spec.roughness).toFixed(9));
   }
+  // 跨材质一致性：未触顶（spec+bias ≤ 1）的材质必须共享同一个 bias 值（"统一"旧化的字面含义）
+  const untouched = [...roughnessDiffs.entries()].filter(([id]) => CONFIG.MATERIALS[id].roughness + CONFIG.WEATHERING.roughnessBias <= 1);
+  ok(`统一旧化在未触顶材质上共享同一 bias（${untouched.length} 个）`, untouched.every(([, d]) => Math.abs(d - CONFIG.WEATHERING.roughnessBias) < 1e-9), JSON.stringify(Object.fromEntries(untouched)));
+  eq('统一旧化 bias 未被重复叠加（差值 ≤ bias）', untouched.every(([, d]) => d <= CONFIG.WEATHERING.roughnessBias + 1e-9), true);
   ok('木作有轻微纹理贴图', Boolean(kit.materials.get('timberLacquer').map));
   ok('琉璃瓦有瓦垄纹理贴图', Boolean(kit.materials.get('glazeTile').map));
   ok('贴图色彩空间为 srgb', kit.materials.get('glazeTile').map.colorSpace === T.SRGBColorSpace);
@@ -978,11 +989,33 @@ function probeDoorChannel(object, { samples = 201 } = {}) {
   ok('gateHall(F-gate-south, doubleEaveHip) 现在建成重檐庑殿', Boolean(findMesh(gate, 'lowerRoof')) && gate.userData.kit.metrics.upperEaveY > gate.userData.kit.metrics.eaveHeight);
 
   // 全 67 槽：凡 layout 带 door 的槽位，净宽都必须够玩家通过
+  // 例外（t103 语义 + 能力边界）：**亭 pavilion 四面开敞、没有正面墙**，
+  // 布局给它的 door 数据（hasDoor=true, width 8/10/16, blocks=exceptDoor）表达的是"可通行"，
+  // 几何上因无墙而不存在"墙上门洞"（doorWidth=0）——故单独按可通行语义断言，不计入"必须有开口"。
   let withDoor = 0;
   let tooNarrow = [];
+  const pavilionDoorSlots = [];
   const clearWidths = [];
   for (const s of layout.SLOTS) {
     if (!s.door || !(s.door.width > 0.2)) continue;
+    if (s.kind === 'pavilion') {
+      // t114 同步（t103 语义）：亭**四面开敞**，数据侧已 `hasDoor=true`、障碍 `blocks='exceptDoor'`、
+      // `door.passable=true` ⇒ 亭必须是**可通行**的；几何上因为**没有墙**，所以不存在"墙上门洞"
+      // （`metrics.opening` 缺省、`doorWidth=0`）——这不是"不适用/无门洞"，而是"靠开敞实现通行"。
+      const pav = kit.pavilion({ ...s, lod: 'near', quality: 'medium' });
+      const pmeta = pav.userData.kit.metrics;
+      const obstacle = layout.OBSTACLES.find((o) => o.buildingId === s.id) ?? null;
+      pavilionDoorSlots.push(`${s.id}:doorWidth=${pmeta.doorWidth},hasDoor=${s.hasDoor},blocks=${obstacle?.blocks ?? 'n/a'},passable=${obstacle?.door?.passable ?? 'n/a'}`);
+      const passable = obstacle?.door?.passable;
+      const blockedBy = obstacle?.door?.blockedBy ?? null;
+      // 数据侧口径（t103）：亭带门 ⇒ `hasDoor=true` 且障碍 `blocks='exceptDoor'`（不再"无门洞/不可入"）。
+      ok(`亭 ${s.id} 数据侧带门（hasDoor=true + blocks=exceptDoor）`, s.hasDoor === true && obstacle?.blocks === 'exceptDoor', JSON.stringify({ hasDoor: s.hasDoor, blocks: obstacle?.blocks, doorW: s.door?.width }));
+      // 自洽不变式：passable 必须显式布尔；passable=false 必须给出 blockedBy 原因（当前 2 座被水面 WB-*-pond 阻断）
+      ok(`亭 ${s.id} 的 door.passable/blockedBy 自洽（false ⇒ 有 blockedBy）`, typeof passable === 'boolean' && (passable === true ? blockedBy === null : blockedBy !== null), JSON.stringify({ passable, blockedBy }));
+      ok(`亭 ${s.id} 几何无墙体（四面开敞 → 通行不需"墙上门洞"）`, !partsOf(pav, 0).has('wall'), [...partsOf(pav, 0)].join(','));
+      eq(`亭 ${s.id} 无"墙上门洞"读数（无墙 ⇒ doorWidth=0，不是"不可进入"）`, pmeta.doorWidth, 0, 1e-9);
+      continue;
+    }
     withDoor += 1;
     const object = kit[s.kind]({ ...s, lod: 'near', quality: 'medium' });
     const op = object.userData.kit.metrics.opening;
@@ -995,7 +1028,8 @@ function probeDoorChannel(object, { samples = 201 } = {}) {
   }
   ok('layout 中带 door 的槽位都获得开口', withDoor >= 18, `实际 ${withDoor}`);
   eq('全部带 door 的槽位净宽 ≥ 玩家净宽（0.7m）', tooNarrow.length, 0, tooNarrow.slice(0, 5).join(','));
-  notes.push(`门洞解耦：layout 带 door 槽位 ${withDoor} 个全部获得开口，净宽最小 ${Math.min(...clearWidths).toFixed(2)}m（门槛 ${playerClear}m）`);
+  ok(`亭（pavilion）按 t103 语义全部带门且无"墙上门洞"（${pavilionDoorSlots.length} 座，逐座已断言）`, pavilionDoorSlots.every((v) => v.includes('doorWidth=0') && v.includes('hasDoor=true') && v.includes('blocks=exceptDoor')), pavilionDoorSlots.slice(0, 3).join(' | '));
+  notes.push(`门洞解耦：layout 带 door 槽位 ${withDoor} 个全部获得开口，净宽最小 ${Math.min(...clearWidths).toFixed(2)}m（门槛 ${playerClear}m）；另有 ${pavilionDoorSlots.length} 个亭带 door 数据但不适用（doorWidth=0，符合能力边界）`);
 }
 
 /* ================================================================== 15 合批阴影标志守恒（t25 回归守卫） */
@@ -1599,6 +1633,23 @@ startSection('20 正面门洞几何能力：殿/配殿按布局 door 真正开�
   // t70 落地后（LAYOUT 1.1.3）：布局给 53 个槽位派生了 door（含全部 14 hall + 23 sideHall）——
   // 这里对**全量**逐槽位核对"几何真洞 + 净宽 = min(layout.door.width, bodyW−2)"，并报告 clamp 冲突。
   const allDoorSlots = layout.SLOTS.filter((x) => x.door && x.door.width > 0.2 && !['pavilion', 'cornerTower'].includes(x.kind));
+  const pavilionSlots = layout.SLOTS.filter((x) => x.door && x.door.width > 0.2 && x.kind === 'pavilion');
+  // t114 同步（t103）：亭不是"不适用门洞"，而是"四面开敞 ⇒ 可通行 + 无墙故无墙上门洞"。
+  const pavObstacle = (x) => layout.OBSTACLES.find((o) => o.buildingId === x.id) ?? null;
+  ok(`亭（${pavilionSlots.length} 座）数据侧全部带门（hasDoor=true + blocks=exceptDoor）`,
+    pavilionSlots.every((x) => x.hasDoor === true && pavObstacle(x)?.blocks === 'exceptDoor'),
+    pavilionSlots.map((x) => `${x.id}:${x.hasDoor}/${pavObstacle(x)?.blocks}`).slice(0, 3).join(' | '));
+  const blockedPavilions = pavilionSlots.filter((x) => pavObstacle(x)?.door?.passable === false);
+  ok('亭的 passable/blockedBy 自洽（false ⇒ 有 blockedBy 原因）',
+    pavilionSlots.every((x) => { const d = pavObstacle(x)?.door ?? {}; return typeof d.passable === 'boolean' && (d.passable === true ? (d.blockedBy ?? null) === null : Boolean(d.blockedBy)); }),
+    JSON.stringify(blockedPavilions.map((x) => `${x.id}:${pavObstacle(x)?.door?.blockedBy}`)));
+  notes.push(`亭（t103 口径）：${pavilionSlots.length} 座全部 hasDoor=true + blocks=exceptDoor；其中 ${pavilionSlots.length - blockedPavilions.length} 座 door.passable=true，${blockedPavilions.length} 座被水景阻断（${blockedPavilions.map((x) => x.id + '←' + pavObstacle(x)?.door?.blockedBy).join(',')}）；几何侧 10 座全部无墙 ⇒ doorWidth=0（无"墙上门洞"，但可开敞通行）`);
+  ok(`亭（${pavilionSlots.length} 座）几何全部无墙体（通行不依赖墙上门洞）`,
+    pavilionSlots.every((x) => !partsOf(kit.pavilion({ ...x, lod: 'near', quality: 'medium' }), 0).has('wall')),
+    pavilionSlots.map((x) => x.id).join(','));
+  ok(`亭（${pavilionSlots.length} 座）doorWidth 均为 0（无墙的几何事实，不代表不可进入）`,
+    pavilionSlots.every((x) => kit.pavilion({ ...x, lod: 'near', quality: 'medium' }).userData.kit.metrics.doorWidth === 0),
+    pavilionSlots.map((x) => x.id).join(','));
   const kindCount = allDoorSlots.reduce((m, x) => { m[x.kind] = (m[x.kind] ?? 0) + 1; return m; }, {});
   ok(`布局派生 door 覆盖 hall+sideHall 等多类（共 ${allDoorSlots.length} 槽）`, allDoorSlots.length >= 40, JSON.stringify(kindCount));
   const clampConflicts = [];
@@ -1619,13 +1670,15 @@ startSection('20 正面门洞几何能力：殿/配殿按布局 door 真正开�
 
   // 能力边界：亭（无墙全开敞）与角楼（骑墙，无正立面门）不在"正面门洞"能力内
   const pav = kit.pavilion({ ...slot('B-pavilion-gate-west'), lod: 'near', quality: 'medium' });
-  ok('边界：亭（pavilion）无墙体 → 不适用"正面门洞"（四面开敞）', !partsOf(pav, 0).has('wall') && pav.userData.kit.metrics.doorWidth === 0);
+  ok('边界：亭（pavilion）四面开敞无墙 → 无"墙上门洞"读数（doorWidth=0；按 t103 数据侧为可通行，见 §14 逐座断言）', !partsOf(pav, 0).has('wall') && pav.userData.kit.metrics.doorWidth === 0);
   const tower = kit.cornerTower({ ...slot('F-tower-corner-nw'), lod: 'near', quality: 'medium' });
   eq('边界：角楼（cornerTower）无正立面门洞（骑墙建筑，入口由城墙门洞承担）', tower.userData.kit.metrics.doorWidth, 0, 1e-9);
-  notes.push(`门洞能力边界：hall/sideHall/gateHall/courtyardGate 支持（door 数据驱动，净宽=min(声明, bodyW−2)）；pavilion 四面开敞无墙、cornerTower 骑墙无正立面门，均不适用`);
+  notes.push(`门洞能力边界：hall/sideHall/gateHall/courtyardGate 支持（door 数据驱动，净宽=min(声明, bodyW−2)）；pavilion 四面开敞无墙 ⇒ 无"墙上门洞"读数但按 t103 数据侧可通行；cornerTower 骑墙、入口由城墙门洞承担（自身正立面不开门）`);
 
-  // 布局口径一致：全 18 个带 door 的槽位逐项核对（净宽同式 + 门在 facing 侧 + axis 与 facing 一致）
-  const withDoor = layout.SLOTS.filter((x) => x.door && x.door.width > 0.2);
+  // 布局口径一致：全部带 door 的槽位逐项核对（净宽同式 + 门在 facing 侧 + axis 与 facing 一致）
+  // t70 后布局把 door 也派生给了 **pavilion（四面开敞无墙，不适用门洞）**，故这里同样排除亭：
+  // 亭的"不适用"已由上面两条边界断言单独负责。
+  const withDoor = layout.SLOTS.filter((x) => x.door && x.door.width > 0.2 && x.kind !== 'pavilion');
   let widthMismatch = [];
   let facingMismatch = [];
   let axisConflict = [];
